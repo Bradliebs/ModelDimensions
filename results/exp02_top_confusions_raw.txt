@@ -1,0 +1,253 @@
+TOP CONFUSION PAIRS (highest semantic similarity)
+================================================================================
+These are off-diagonal firings: cell i fires for query j != i.
+Sorted by cosine similarity of the two items' embeddings.
+If these look semantically related, the 'failures' are features.
+================================================================================
+
+# 1  sim=+1.0000  cell=1751  query=1745
+     cell item  : IBM adds four-way 550 server to new i5 product line IBM Corp. bolstered the new eServer i5 server lineup with the i5 550, a new system based on the Power 5 chip that can run multip
+     query item : IBM adds four-way 550 server to new i5 product line IBM Corp. bolstered the new eServer i5 server lineup with the i5 550, a new system based on the Power 5 chip that can run multip
+
+# 2  sim=+1.0000  cell=1745  query=1751
+     cell item  : IBM adds four-way 550 server to new i5 product line IBM Corp. bolstered the new eServer i5 server lineup with the i5 550, a new system based on the Power 5 chip that can run multip
+     query item : IBM adds four-way 550 server to new i5 product line IBM Corp. bolstered the new eServer i5 server lineup with the i5 550, a new system based on the Power 5 chip that can run multip
+
+# 3  sim=+1.0000  cell=674  query=790
+     cell item  : Government Spending Up Sharply Locally  Federal procurement spending in the Washington area rose last year at its highest rate since the 1980s, according to a study to be released 
+     query item : Government Spending Up Sharply Locally Federal procurement spending in the Washington area rose last year at its highest rate since the 1980s, according to a study to be released t
+
+# 4  sim=+1.0000  cell=790  query=674
+     cell item  : Government Spending Up Sharply Locally Federal procurement spending in the Washington area rose last year at its highest rate since the 1980s, according to a study to be released t
+     query item : Government Spending Up Sharply Locally  Federal procurement spending in the Washington area rose last year at its highest rate since the 1980s, according to a study to be released 
+
+# 5  sim=+1.0000  cell=1568  query=1552
+     cell item  : Sharon Allows 1,000 More Settler Homes in West Bank  JERUSALEM (Reuters) - Prime Minister Ariel Sharon approved  tenders to build 1,000 more Israeli settler homes in the  occupied 
+     query item : Sharon Allows 1,000 More Settler Homes in West Bank JERUSALEM (Reuters) - Prime Minister Ariel Sharon approved tenders to build 1,000 more Israeli settler homes in the occupied Wes
+
+# 6  sim=+1.0000  cell=1397  query=1495
+     cell item  : Housing Starts Rebound Sharply in July  WASHINGTON (Reuters) - Housing starts rebounded sharply in  July, making up almost all the ground lost in a June slump by  posting their lar
+     query item : Housing Starts Rebound Sharply in July WASHINGTON (Reuters) - Housing starts rebounded sharply in July, making up almost all the ground lost in a June slump by posting their larges
+
+# 7  sim=+1.0000  cell=1495  query=1397
+     cell item  : Housing Starts Rebound Sharply in July WASHINGTON (Reuters) - Housing starts rebounded sharply in July, making up almost all the ground lost in a June slump by posting their larges
+     query item : Housing Starts Rebound Sharply in July  WASHINGTON (Reuters) - Housing starts rebounded sharply in  July, making up almost all the ground lost in a June slump by  posting their lar
+
+# 8  sim=+1.0000  cell=1552  query=1568
+     cell item  : Sharon Allows 1,000 More Settler Homes in West Bank JERUSALEM (Reuters) - Prime Minister Ariel Sharon approved tenders to build 1,000 more Israeli settler homes in the occupied Wes
+     query item : Sharon Allows 1,000 More Settler Homes in West Bank  JERUSALEM (Reuters) - Prime Minister Ariel Sharon approved  tenders to build 1,000 more Israeli settler homes in the  occupied 
+
+# 9  sim=+1.0000  cell=1592  query=1617
+     cell item  : Medical Examiner Finds No Injuries on Thanou-Source  ATHENS (Reuters) - A medical examiner has found that Greek  sprinter Katerina Thanou, who was in hospital with fellow  athlete 
+     query item : Medical Examiner Finds No Injuries on Thanou-Source ATHENS (Reuters) - A medical examiner has found that Greek sprinter Katerina Thanou, who was in hospital with fellow athlete Cos
+
+#10  sim=+1.0000  cell=1617  query=1592
+     cell item  : Medical Examiner Finds No Injuries on Thanou-Source ATHENS (Reuters) - A medical examiner has found that Greek sprinter Katerina Thanou, who was in hospital with fellow athlete Cos
+     query item : Medical Examiner Finds No Injuries on Thanou-Source  ATHENS (Reuters) - A medical examiner has found that Greek  sprinter Katerina Thanou, who was in hospital with fellow  athlete 
+
+#11  sim=+1.0000  cell=1935  query=1965
+     cell item  : Blast in Gaza Home of Hamas Man Kills 4 - Medics  GAZA (Reuters) - An explosion tore through the home of a  senior Hamas militant in Gaza on Wednesday, killing at least  four peopl
+     query item : Blast in Gaza Home of Hamas Man Kills 4 - Medics GAZA (Reuters) - An explosion tore through the home of a senior Hamas militant in Gaza on Wednesday, killing at least four people a
+
+#12  sim=+1.0000  cell=1965  query=1935
+     cell item  : Blast in Gaza Home of Hamas Man Kills 4 - Medics GAZA (Reuters) - An explosion tore through the home of a senior Hamas militant in Gaza on Wednesday, killing at least four people a
+     query item : Blast in Gaza Home of Hamas Man Kills 4 - Medics  GAZA (Reuters) - An explosion tore through the home of a  senior Hamas militant in Gaza on Wednesday, killing at least  four peopl
+
+#13  sim=+1.0000  cell=537  query=533
+     cell item  : Phelps, Thorpe Advance in 200 Freestyle ATHENS, Greece - Michael Phelps took care of qualifying for the Olympic 200-meter freestyle semifinals Sunday, and then found out he had bee
+     query item : Phelps, Thorpe Advance in 200 Freestyle ATHENS, Greece - Michael Phelps took care of qualifying for the Olympic 200-meter freestyle semifinals Sunday, and then found out he had bee
+
+#14  sim=+1.0000  cell=533  query=537
+     cell item  : Phelps, Thorpe Advance in 200 Freestyle ATHENS, Greece - Michael Phelps took care of qualifying for the Olympic 200-meter freestyle semifinals Sunday, and then found out he had bee
+     query item : Phelps, Thorpe Advance in 200 Freestyle ATHENS, Greece - Michael Phelps took care of qualifying for the Olympic 200-meter freestyle semifinals Sunday, and then found out he had bee
+
+#15  sim=+1.0000  cell=1686  query=1673
+     cell item  : Microsoft readies Host Integration Server 2004 In a continued effort to compete with IBM Corp. and its WebSphere offerings, Microsoft Corp. on Tuesday announced imminent availabili
+     query item : Microsoft readies Host Integration Server 2004 In a continued effort to compete with IBM Corp. and its WebSphere offerings, Microsoft Corp. on Tuesday announced imminent availabili
+
+#16  sim=+1.0000  cell=1673  query=1686
+     cell item  : Microsoft readies Host Integration Server 2004 In a continued effort to compete with IBM Corp. and its WebSphere offerings, Microsoft Corp. on Tuesday announced imminent availabili
+     query item : Microsoft readies Host Integration Server 2004 In a continued effort to compete with IBM Corp. and its WebSphere offerings, Microsoft Corp. on Tuesday announced imminent availabili
+
+#17  sim=+0.9999  cell=1864  query=1846
+     cell item  : Sharon Allows 1,000 More Settler Homes in West Bank  JERUSALEM (Reuters) - Prime Minister Ariel Sharon, facing a  party mutiny over his plan to quit the Gaza Strip, has approved  1
+     query item : Sharon Allows 1,000 More Settler Homes in West Bank  JERUSALEM (Reuters) - Prime Minister Ariel Sharon, facing a  party mutiny over his plan to quit the Gaza Strip, has approved  1
+
+#18  sim=+0.9999  cell=1846  query=1864
+     cell item  : Sharon Allows 1,000 More Settler Homes in West Bank  JERUSALEM (Reuters) - Prime Minister Ariel Sharon, facing a  party mutiny over his plan to quit the Gaza Strip, has approved  1
+     query item : Sharon Allows 1,000 More Settler Homes in West Bank  JERUSALEM (Reuters) - Prime Minister Ariel Sharon, facing a  party mutiny over his plan to quit the Gaza Strip, has approved  1
+
+#19  sim=+0.9994  cell=1025  query=1070
+     cell item  : Congolese Massacre Victims in Burundi Mourned  GATUMBA, Burundi (Reuters) - Mourners covered their faces  to block the smell of disinfectant and death Monday as they  buried more t
+     query item : Congolese Massacre Victims in Burundi Mourned  GATUMBA, Burundi (Reuters) - Mourners covered their faces  to block the smell of disinfectant and death on Monday as they  buried mor
+
+#20  sim=+0.9994  cell=1070  query=1025
+     cell item  : Congolese Massacre Victims in Burundi Mourned  GATUMBA, Burundi (Reuters) - Mourners covered their faces  to block the smell of disinfectant and death on Monday as they  buried mor
+     query item : Congolese Massacre Victims in Burundi Mourned  GATUMBA, Burundi (Reuters) - Mourners covered their faces  to block the smell of disinfectant and death Monday as they  buried more t
+
+#21  sim=+0.9992  cell=818  query=735
+     cell item  : Israel Turns Up Heat on Palestinian Hunger Strike  JERUSALEM (Reuters) - Israel declared psychological war on  hunger-striking Palestinian prisoners Monday, saying it would  barbec
+     query item : Israel Turns Up Heat on Palestinian Hunger Strike  JERUSALEM (Reuters) - Israel declared psychological war on  hunger-striking Palestinian prisoners on Monday, saying it  would bar
+
+#22  sim=+0.9992  cell=735  query=818
+     cell item  : Israel Turns Up Heat on Palestinian Hunger Strike  JERUSALEM (Reuters) - Israel declared psychological war on  hunger-striking Palestinian prisoners on Monday, saying it  would bar
+     query item : Israel Turns Up Heat on Palestinian Hunger Strike  JERUSALEM (Reuters) - Israel declared psychological war on  hunger-striking Palestinian prisoners Monday, saying it would  barbec
+
+#23  sim=+0.9989  cell=546  query=10
+     cell item  : Oil and Economy Cloud Stocks' Outlook  NEW YORK (Reuters) - Soaring crude prices plus worries  about the economy and the outlook for earnings are expected to  hang over the stock m
+     query item : Oil and Economy Cloud Stocks' Outlook  NEW YORK (Reuters) - Soaring crude prices plus worries  about the economy and the outlook for earnings are expected to  hang over the stock m
+
+#24  sim=+0.9989  cell=10  query=546
+     cell item  : Oil and Economy Cloud Stocks' Outlook  NEW YORK (Reuters) - Soaring crude prices plus worries  about the economy and the outlook for earnings are expected to  hang over the stock m
+     query item : Oil and Economy Cloud Stocks' Outlook  NEW YORK (Reuters) - Soaring crude prices plus worries  about the economy and the outlook for earnings are expected to  hang over the stock m
+
+#25  sim=+0.9985  cell=711  query=685
+     cell item  : F.B.I. Goes Knocking for Political Troublemakers The F.B.I. has been questioning demonstrators in an effort to forestall violent protests at the Republican convention.
+     query item : F.B.I. Goes Knocking for Political Troublemakers The F.B.I. has been questioning demonstrators in an effort to forestall violent protests at the Republican National Convention.
+
+#26  sim=+0.9985  cell=685  query=711
+     cell item  : F.B.I. Goes Knocking for Political Troublemakers The F.B.I. has been questioning demonstrators in an effort to forestall violent protests at the Republican National Convention.
+     query item : F.B.I. Goes Knocking for Political Troublemakers The F.B.I. has been questioning demonstrators in an effort to forestall violent protests at the Republican convention.
+
+#27  sim=+0.9983  cell=1977  query=1938
+     cell item  : Thrilling Relay Win Gets Phelps Third Gold ATHENS, Greece - Now this was a duel in the pool. With Michael Phelps leading off Tuesday night, the United States bested its top rival i
+     query item : Thrilling Relay Win Gets Phelps Third Gold ATHENS, Greece - Now this was a duel in the pool. With Michael Phelps leading off Tuesday night, the United States bested its rival from 
+
+#28  sim=+0.9983  cell=1938  query=1977
+     cell item  : Thrilling Relay Win Gets Phelps Third Gold ATHENS, Greece - Now this was a duel in the pool. With Michael Phelps leading off Tuesday night, the United States bested its rival from 
+     query item : Thrilling Relay Win Gets Phelps Third Gold ATHENS, Greece - Now this was a duel in the pool. With Michael Phelps leading off Tuesday night, the United States bested its top rival i
+
+#29  sim=+0.9982  cell=2  query=543
+     cell item  : Oil and Economy Cloud Stocks' Outlook (Reuters) Reuters - Soaring crude prices plus worries\about the economy and the outlook for earnings are expected to\hang over the stock marke
+     query item : Oil and Economy Cloud Stocks' Outlook (Reuters) Reuters - Soaring crude prices plus worries\about the economy and the outlook for earnings are expected to\hang over the stock marke
+
+#30  sim=+0.9982  cell=543  query=2
+     cell item  : Oil and Economy Cloud Stocks' Outlook (Reuters) Reuters - Soaring crude prices plus worries\about the economy and the outlook for earnings are expected to\hang over the stock marke
+     query item : Oil and Economy Cloud Stocks' Outlook (Reuters) Reuters - Soaring crude prices plus worries\about the economy and the outlook for earnings are expected to\hang over the stock marke
+
+
+================================================================================
+BOTTOM CONFUSION PAIRS (lowest semantic similarity)
+These are confusions that aren't explained by semantic similarity.
+If these dominate, the architecture has a real noise problem.
+================================================================================
+
+# 1  sim=+0.9505  cell=945  query=946
+     cell item  : Intelsat to Be Bought for  #36;5 Billion (Reuters) Reuters - Intelsat Ltd., the world's\second-largest satellite operator, said on Monday it agreed to\be bought by a consortium of 
+     query item : Intelsat to Be Bought for \$5 Billion  NEW YORK (Reuters) - Intelsat Ltd., the world's  second-largest satellite operator, said on Monday it agreed to  be bought by a consortium of
+
+# 2  sim=+0.9505  cell=946  query=945
+     cell item  : Intelsat to Be Bought for \$5 Billion  NEW YORK (Reuters) - Intelsat Ltd., the world's  second-largest satellite operator, said on Monday it agreed to  be bought by a consortium of
+     query item : Intelsat to Be Bought for  #36;5 Billion (Reuters) Reuters - Intelsat Ltd., the world's\second-largest satellite operator, said on Monday it agreed to\be bought by a consortium of 
+
+# 3  sim=+0.9505  cell=1665  query=1637
+     cell item  : Oil Up on Rosy U.S. Economic Data  LONDON (Reuters) - Oil prices rose close to a record high  on Tuesday on U.S. economic data showing that inflationary  pressure was held in check
+     query item : Oil Up on Rosy U.S. Economic Data  LONDON (Reuters) - Oil prices rose on Tuesday on cheery  economic data showing that inflationary pressure was held in  check in July and ahead of
+
+# 4  sim=+0.9505  cell=1637  query=1665
+     cell item  : Oil Up on Rosy U.S. Economic Data  LONDON (Reuters) - Oil prices rose on Tuesday on cheery  economic data showing that inflationary pressure was held in  check in July and ahead of
+     query item : Oil Up on Rosy U.S. Economic Data  LONDON (Reuters) - Oil prices rose close to a record high  on Tuesday on U.S. economic data showing that inflationary  pressure was held in check
+
+# 5  sim=+0.9509  cell=1749  query=1646
+     cell item  : US Army to withhold portion of Halliburton payments The billing dispute between the US Army and Houston-based Halliburton Co. continues as the Army on Tuesday said it would withhol
+     query item : Army to Withhold Some Payments From Halliburton The U.S. Army plans to withhold payment on 15 percent of future invoices of Halliburton's logistics deal in Iraq due to an ongoing b
+
+# 6  sim=+0.9509  cell=1646  query=1749
+     cell item  : Army to Withhold Some Payments From Halliburton The U.S. Army plans to withhold payment on 15 percent of future invoices of Halliburton's logistics deal in Iraq due to an ongoing b
+     query item : US Army to withhold portion of Halliburton payments The billing dispute between the US Army and Houston-based Halliburton Co. continues as the Army on Tuesday said it would withhol
+
+# 7  sim=+0.9515  cell=1826  query=1786
+     cell item  : Advertisers Go Digital to Track Ads (Reuters) Reuters - Top marketers are going digital to\track the delivery of commercials into U.S. homes with a system\some advocates say will r
+     query item : U.S. Advertisers Go Digital to Track Ads  NEW YORK (Reuters) - Top marketers are going digital to  track the delivery of commercials into U.S. homes with a system  some advocates s
+
+# 8  sim=+0.9515  cell=1786  query=1826
+     cell item  : U.S. Advertisers Go Digital to Track Ads  NEW YORK (Reuters) - Top marketers are going digital to  track the delivery of commercials into U.S. homes with a system  some advocates s
+     query item : Advertisers Go Digital to Track Ads (Reuters) Reuters - Top marketers are going digital to\track the delivery of commercials into U.S. homes with a system\some advocates say will r
+
+# 9  sim=+0.9518  cell=931  query=929
+     cell item  : Nanotech Research Spending Seen Reaching \$8.6 Bln  SAN FRANCISCO (Reuters) - Worldwide research and  development spending in the emerging field of nanotechnology  should rise abou
+     query item : Nanotech Research Spending Seen Reaching  #36;8.6 Bln (Reuters) Reuters - Worldwide research and\development spending in the emerging field of nanotechnology\should rise about 10 p
+
+#10  sim=+0.9518  cell=929  query=931
+     cell item  : Nanotech Research Spending Seen Reaching  #36;8.6 Bln (Reuters) Reuters - Worldwide research and\development spending in the emerging field of nanotechnology\should rise about 10 p
+     query item : Nanotech Research Spending Seen Reaching \$8.6 Bln  SAN FRANCISCO (Reuters) - Worldwide research and  development spending in the emerging field of nanotechnology  should rise abou
+
+#11  sim=+0.9521  cell=1806  query=1644
+     cell item  : Illinois Helps Residents Import Prescription Drugs  CHICAGO (Reuters) - Illinois residents will soon be able to  buy lower-cost prescription drugs from Canada, the United  Kingdom 
+     query item : Illinois Helps Residents Import Drugs (Reuters) Reuters - Illinois residents will soon gain\access to lower-cost prescription drugs from Canada, the United\Kingdom and Ireland, sid
+
+#12  sim=+0.9521  cell=1644  query=1806
+     cell item  : Illinois Helps Residents Import Drugs (Reuters) Reuters - Illinois residents will soon gain\access to lower-cost prescription drugs from Canada, the United\Kingdom and Ireland, sid
+     query item : Illinois Helps Residents Import Prescription Drugs  CHICAGO (Reuters) - Illinois residents will soon be able to  buy lower-cost prescription drugs from Canada, the United  Kingdom 
+
+#13  sim=+0.9521  cell=888  query=823
+     cell item  : Lowe's Net Trails Views, But Shares Rise  ATLANTA (Reuters) - Lowe's Cos. &lt;LOW.N&gt;, the No. 2 home  improvement retailer behind Home Depot Inc., on Monday reported  an 18 perc
+     query item : Lowe's Profit Rises But Trails Estimates  ATLANTA (Reuters) - Lowe's Cos. &lt;LOW.N&gt;, the No. 2 home  improvement retailer behind Home Depot Inc., on Monday reported  an 18 perc
+
+#14  sim=+0.9521  cell=823  query=888
+     cell item  : Lowe's Profit Rises But Trails Estimates  ATLANTA (Reuters) - Lowe's Cos. &lt;LOW.N&gt;, the No. 2 home  improvement retailer behind Home Depot Inc., on Monday reported  an 18 perc
+     query item : Lowe's Net Trails Views, But Shares Rise  ATLANTA (Reuters) - Lowe's Cos. &lt;LOW.N&gt;, the No. 2 home  improvement retailer behind Home Depot Inc., on Monday reported  an 18 perc
+
+#15  sim=+0.9524  cell=913  query=900
+     cell item  : Haas, Cink Selected for Ryder Cup Team MILWAUKEE - Jay Haas became the second-oldest player to be on the Ryder Cup team, joining Stewart Cink as the two captain's picks Monday for 
+     query item : Haas, Cink Join Ryder Cup Team Jay Haas became the second-oldest player to be on the Ryder Cup team, joining Stewart Cink as the two captain's picks Monday for a U.S. team that wil
+
+#16  sim=+0.9524  cell=900  query=913
+     cell item  : Haas, Cink Join Ryder Cup Team Jay Haas became the second-oldest player to be on the Ryder Cup team, joining Stewart Cink as the two captain's picks Monday for a U.S. team that wil
+     query item : Haas, Cink Selected for Ryder Cup Team MILWAUKEE - Jay Haas became the second-oldest player to be on the Ryder Cup team, joining Stewart Cink as the two captain's picks Monday for 
+
+#17  sim=+0.9529  cell=1298  query=1348
+     cell item  : Motorola Expects Strong Sales Growth  SINGAPORE (Reuters) - Motorola Inc., the world's  second-largest mobile phone maker, said on Tuesday it expects  to sustain strong sales growt
+     query item : Motorola Expects Strong Sales Growth Motorola Inc., the world's\second-largest mobile phone maker, said on Tuesday it expects\to sustain strong sales growth in the second half of 2
+
+#18  sim=+0.9529  cell=1348  query=1298
+     cell item  : Motorola Expects Strong Sales Growth Motorola Inc., the world's\second-largest mobile phone maker, said on Tuesday it expects\to sustain strong sales growth in the second half of 2
+     query item : Motorola Expects Strong Sales Growth  SINGAPORE (Reuters) - Motorola Inc., the world's  second-largest mobile phone maker, said on Tuesday it expects  to sustain strong sales growt
+
+#19  sim=+0.9532  cell=1371  query=1373
+     cell item  : J.C. Penney Posts Second-Quarter Profit (Reuters) Reuters - Department store operator J.C. Penney\Co. Inc. (JCP.N) on Tuesday posted a second-quarter profit,\reversing a year-earli
+     query item : J.C. Penney Posts Second-Quarter Profit  NEW YORK (Reuters) - Department store operator J.C. Penney  Co. Inc. &lt;A HREF="http://www.investor.reuters.com/FullQuote.aspx?ticker=JCP.
+
+#20  sim=+0.9532  cell=1373  query=1371
+     cell item  : J.C. Penney Posts Second-Quarter Profit  NEW YORK (Reuters) - Department store operator J.C. Penney  Co. Inc. &lt;A HREF="http://www.investor.reuters.com/FullQuote.aspx?ticker=JCP.
+     query item : J.C. Penney Posts Second-Quarter Profit (Reuters) Reuters - Department store operator J.C. Penney\Co. Inc. (JCP.N) on Tuesday posted a second-quarter profit,\reversing a year-earli
+
+#21  sim=+0.9536  cell=1603  query=1604
+     cell item  : Hurricane Charley Tears Into Outback (Reuters) Reuters - Outback Steakhouse Inc. (OSI.N) on\Tuesday said it lost about 130 operating days and up to  #36;2\million in revenue becaus
+     query item : Hurricane Charley Tears Into Outback  NEW YORK (Reuters) - Outback Steakhouse Inc. &lt;A HREF="http://www.investor.reuters.com/FullQuote.aspx?ticker=OSI.N target=/stocks/quickinfo/
+
+#22  sim=+0.9536  cell=1604  query=1603
+     cell item  : Hurricane Charley Tears Into Outback  NEW YORK (Reuters) - Outback Steakhouse Inc. &lt;A HREF="http://www.investor.reuters.com/FullQuote.aspx?ticker=OSI.N target=/stocks/quickinfo/
+     query item : Hurricane Charley Tears Into Outback (Reuters) Reuters - Outback Steakhouse Inc. (OSI.N) on\Tuesday said it lost about 130 operating days and up to  #36;2\million in revenue becaus
+
+#23  sim=+0.9544  cell=1219  query=1228
+     cell item  : A Texan's Race for the House That Could Lead to the F.C.C. A Republican running for Congress has received heavy donations from industry because of expectations over posts she may r
+     query item : A Texan's Race Could Lead to the F.C.C. A Republican running for Congress has received heavy donations from industry because of expectations over posts she may receive if she loses
+
+#24  sim=+0.9544  cell=1228  query=1219
+     cell item  : A Texan's Race Could Lead to the F.C.C. A Republican running for Congress has received heavy donations from industry because of expectations over posts she may receive if she loses
+     query item : A Texan's Race for the House That Could Lead to the F.C.C. A Republican running for Congress has received heavy donations from industry because of expectations over posts she may r
+
+#25  sim=+0.9544  cell=1850  query=1637
+     cell item  : Oil Up on Rosy U.S. Economic Data  LONDON (Reuters) - Oil prices rose to another record high  on Tuesday on U.S. economic data showing inflationary pressure  was held in check in J
+     query item : Oil Up on Rosy U.S. Economic Data  LONDON (Reuters) - Oil prices rose on Tuesday on cheery  economic data showing that inflationary pressure was held in  check in July and ahead of
+
+#26  sim=+0.9544  cell=1637  query=1850
+     cell item  : Oil Up on Rosy U.S. Economic Data  LONDON (Reuters) - Oil prices rose on Tuesday on cheery  economic data showing that inflationary pressure was held in  check in July and ahead of
+     query item : Oil Up on Rosy U.S. Economic Data  LONDON (Reuters) - Oil prices rose to another record high  on Tuesday on U.S. economic data showing inflationary pressure  was held in check in J
+
+#27  sim=+0.9544  cell=726  query=850
+     cell item  : Suspicious Powder Found at U.S. Embassy in Malaysia  KUALA LUMPUR (Reuters) - Suspicious white powder has been  found in an envelope that arrived at the U.S. embassy in  Malaysia a
+     query item : Suspicious Powder Found at U.S. Embassy in Malaysia  KUALA LUMPUR, Malaysia (Reuters) - An envelope containing  suspicious white powder and threats against Americans was  delivered
+
+#28  sim=+0.9544  cell=850  query=726
+     cell item  : Suspicious Powder Found at U.S. Embassy in Malaysia  KUALA LUMPUR, Malaysia (Reuters) - An envelope containing  suspicious white powder and threats against Americans was  delivered
+     query item : Suspicious Powder Found at U.S. Embassy in Malaysia  KUALA LUMPUR (Reuters) - Suspicious white powder has been  found in an envelope that arrived at the U.S. embassy in  Malaysia a
+
+#29  sim=+0.9547  cell=569  query=505
+     cell item  : Mortars Mark Opening of Iraqi Political Conference (Reuters) Reuters - Insurgents fired mortars at a meeting\where Iraqi leaders met to pick an interim national assembly\Sunday, ki
+     query item : Mortars Mark Opening of Iraqi Political Conference  BAGHDAD (Reuters) - Insurgents fired mortars at a meeting  where Iraqi leaders met to pick an interim national assembly  Sunday,
+
+#30  sim=+0.9547  cell=505  query=569
+     cell item  : Mortars Mark Opening of Iraqi Political Conference  BAGHDAD (Reuters) - Insurgents fired mortars at a meeting  where Iraqi leaders met to pick an interim national assembly  Sunday,
+     query item : Mortars Mark Opening of Iraqi Political Conference (Reuters) Reuters - Insurgents fired mortars at a meeting\where Iraqi leaders met to pick an interim national assembly\Sunday, ki

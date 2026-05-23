@@ -1,0 +1,59 @@
+{
+  "corpus": "wikitext",
+  "n_train": 1500,
+  "n_test": 500,
+  "epsilon": 0.05,
+  "variants": {
+    "raw": {
+      "variant": "raw",
+      "n_train": 1500,
+      "n_test": 500,
+      "epsilon": 0.05,
+      "train_silence_rate": 0.0,
+      "train_one_or_more_rate": 1.0,
+      "test_silence_rate": 0.994,
+      "test_any_fired_rate": 0.006,
+      "test_mean_fires_per_query": 0.016,
+      "test_max_fires_per_query": 4,
+      "test_margin_mean": -0.3660789728164673,
+      "test_margin_median": -0.363424152135849,
+      "train_margin_mean": 0.05000004917383194,
+      "train_margin_median": 0.050000011920928955,
+      "verdict": "PERFECT_REJECTION"
+    },
+    "ball_scaled": {
+      "variant": "ball_scaled",
+      "n_train": 1500,
+      "n_test": 500,
+      "epsilon": 0.05,
+      "train_silence_rate": 0.0,
+      "train_one_or_more_rate": 1.0,
+      "test_silence_rate": 0.994,
+      "test_any_fired_rate": 0.006,
+      "test_mean_fires_per_query": 0.016,
+      "test_max_fires_per_query": 4,
+      "test_margin_mean": -0.3660789728164673,
+      "test_margin_median": -0.3634241223335266,
+      "train_margin_mean": 0.05000003054738045,
+      "train_margin_median": 0.050000011920928955,
+      "verdict": "PERFECT_REJECTION"
+    },
+    "whitened_scaled": {
+      "variant": "whitened_scaled",
+      "n_train": 1500,
+      "n_test": 500,
+      "epsilon": 0.05,
+      "train_silence_rate": 0.0,
+      "train_one_or_more_rate": 1.0,
+      "test_silence_rate": 0.998,
+      "test_any_fired_rate": 0.002,
+      "test_mean_fires_per_query": 0.002,
+      "test_max_fires_per_query": 1,
+      "test_margin_mean": -0.35983285307884216,
+      "test_margin_median": -0.3777569532394409,
+      "train_margin_mean": 0.050000011920928955,
+      "train_margin_median": 0.050000011920928955,
+      "verdict": "PERFECT_REJECTION"
+    }
+  }
+}

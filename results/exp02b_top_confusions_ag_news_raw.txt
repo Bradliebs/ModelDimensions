@@ -1,0 +1,173 @@
+TOP CONFUSION PAIRS (highest semantic similarity)
+================================================================================
+These are off-diagonal firings: cell i fires for query j != i.
+Sorted by cosine similarity of the two items' embeddings.
+If these look semantically related, the 'failures' are features.
+================================================================================
+
+# 1  sim=+1.0000  cell=501  query=1793
+     cell item  : Oil Sets Record as New Violence Flares in Iraq  LONDON (Reuters) - Oil prices struck a fresh record on  Thursday, spurred higher by renewed violence in Iraq and fresh  evidence tha
+     query item : Oil Sets Record as New Violence Flares in Iraq LONDON (Reuters) - Oil prices struck a fresh record on Thursday, spurred higher by renewed violence in Iraq and fresh evidence that s
+
+# 2  sim=+1.0000  cell=1793  query=501
+     cell item  : Oil Sets Record as New Violence Flares in Iraq LONDON (Reuters) - Oil prices struck a fresh record on Thursday, spurred higher by renewed violence in Iraq and fresh evidence that s
+     query item : Oil Sets Record as New Violence Flares in Iraq  LONDON (Reuters) - Oil prices struck a fresh record on  Thursday, spurred higher by renewed violence in Iraq and fresh  evidence tha
+
+# 3  sim=+1.0000  cell=1791  query=1490
+     cell item  : Blast in Gaza Home of Hamas Man Kills 4 - Medics GAZA (Reuters) - An explosion tore through the home of a senior Hamas militant in Gaza on Wednesday, killing at least four people a
+     query item : Blast in Gaza Home of Hamas Man Kills 4 - Medics  GAZA (Reuters) - An explosion tore through the home of a  senior Hamas militant in Gaza on Wednesday, killing at least  four peopl
+
+# 4  sim=+1.0000  cell=132  query=1482
+     cell item  : Housing Starts Rebound Sharply in July  WASHINGTON (Reuters) - Housing starts rebounded sharply in  July, making up almost all the ground lost in a June slump by  posting their lar
+     query item : Housing Starts Rebound Sharply in July WASHINGTON (Reuters) - Housing starts rebounded sharply in July, making up almost all the ground lost in a June slump by posting their larges
+
+# 5  sim=+1.0000  cell=1490  query=1791
+     cell item  : Blast in Gaza Home of Hamas Man Kills 4 - Medics  GAZA (Reuters) - An explosion tore through the home of a  senior Hamas militant in Gaza on Wednesday, killing at least  four peopl
+     query item : Blast in Gaza Home of Hamas Man Kills 4 - Medics GAZA (Reuters) - An explosion tore through the home of a senior Hamas militant in Gaza on Wednesday, killing at least four people a
+
+# 6  sim=+1.0000  cell=1522  query=1926
+     cell item  : Fall Season Looks Solid for Retailers, but Holidays Could Be Another Story Against a background of lackluster retail sales in June and July, analysts and merchants still predict a 
+     query item : Fall Season Looks Solid for Retailers, But Holidays Could Be Another Story Against a background of lackluster retail sales in June and July, analysts and merchants still predict a 
+
+# 7  sim=+1.0000  cell=1426  query=1473
+     cell item  : Doping Casts Shadow Over Olympics -- Again ATHENS (Reuters) - Five weightlifters were banned from the Olympics after failing drugs tests, officials said on Thursday, as doping scan
+     query item : Doping Casts Shadow Over Olympics -- Again  ATHENS (Reuters) - Five weightlifters were banned from the  Olympics after failing drugs tests, officials said on Thursday,  as doping s
+
+# 8  sim=+1.0000  cell=1482  query=132
+     cell item  : Housing Starts Rebound Sharply in July WASHINGTON (Reuters) - Housing starts rebounded sharply in July, making up almost all the ground lost in a June slump by posting their larges
+     query item : Housing Starts Rebound Sharply in July  WASHINGTON (Reuters) - Housing starts rebounded sharply in  July, making up almost all the ground lost in a June slump by  posting their lar
+
+# 9  sim=+1.0000  cell=1473  query=1426
+     cell item  : Doping Casts Shadow Over Olympics -- Again  ATHENS (Reuters) - Five weightlifters were banned from the  Olympics after failing drugs tests, officials said on Thursday,  as doping s
+     query item : Doping Casts Shadow Over Olympics -- Again ATHENS (Reuters) - Five weightlifters were banned from the Olympics after failing drugs tests, officials said on Thursday, as doping scan
+
+#10  sim=+1.0000  cell=1926  query=1522
+     cell item  : Fall Season Looks Solid for Retailers, But Holidays Could Be Another Story Against a background of lackluster retail sales in June and July, analysts and merchants still predict a 
+     query item : Fall Season Looks Solid for Retailers, but Holidays Could Be Another Story Against a background of lackluster retail sales in June and July, analysts and merchants still predict a 
+
+#11  sim=+0.9999  cell=85  query=1019
+     cell item  : Sharon Allows 1,000 More Settler Homes in West Bank  JERUSALEM (Reuters) - Prime Minister Ariel Sharon, facing a  party mutiny over his plan to quit the Gaza Strip, has approved  1
+     query item : Sharon Allows 1,000 More Settler Homes in West Bank  JERUSALEM (Reuters) - Prime Minister Ariel Sharon, facing a  party mutiny over his plan to quit the Gaza Strip, has approved  1
+
+#12  sim=+0.9999  cell=1019  query=85
+     cell item  : Sharon Allows 1,000 More Settler Homes in West Bank  JERUSALEM (Reuters) - Prime Minister Ariel Sharon, facing a  party mutiny over his plan to quit the Gaza Strip, has approved  1
+     query item : Sharon Allows 1,000 More Settler Homes in West Bank  JERUSALEM (Reuters) - Prime Minister Ariel Sharon, facing a  party mutiny over his plan to quit the Gaza Strip, has approved  1
+
+#13  sim=+0.9994  cell=907  query=419
+     cell item  : Congolese Massacre Victims in Burundi Mourned  GATUMBA, Burundi (Reuters) - Mourners covered their faces  to block the smell of disinfectant and death on Monday as they  buried mor
+     query item : Congolese Massacre Victims in Burundi Mourned  GATUMBA, Burundi (Reuters) - Mourners covered their faces  to block the smell of disinfectant and death Monday as they  buried more t
+
+#14  sim=+0.9994  cell=419  query=907
+     cell item  : Congolese Massacre Victims in Burundi Mourned  GATUMBA, Burundi (Reuters) - Mourners covered their faces  to block the smell of disinfectant and death Monday as they  buried more t
+     query item : Congolese Massacre Victims in Burundi Mourned  GATUMBA, Burundi (Reuters) - Mourners covered their faces  to block the smell of disinfectant and death on Monday as they  buried mor
+
+#15  sim=+0.9985  cell=444  query=1048
+     cell item  : ING to Withdraw \$5 Bln from Janus Funds NEW YORK (Reuters) - ING US Financial Services said late on Tuesday it will withdraw about \$5 billion from Janus Capital Group Inc. funds 
+     query item : ING to Withdraw \$5 Bln from Janus Funds  NEW YORK (Reuters) - ING U.S. Financial Services said late  on Tuesday it will withdraw about \$5 billion from Janus Capital  Group Inc. f
+
+#16  sim=+0.9985  cell=1048  query=444
+     cell item  : ING to Withdraw \$5 Bln from Janus Funds  NEW YORK (Reuters) - ING U.S. Financial Services said late  on Tuesday it will withdraw about \$5 billion from Janus Capital  Group Inc. f
+     query item : ING to Withdraw \$5 Bln from Janus Funds NEW YORK (Reuters) - ING US Financial Services said late on Tuesday it will withdraw about \$5 billion from Janus Capital Group Inc. funds 
+
+#17  sim=+0.9985  cell=1845  query=1917
+     cell item  : F.B.I. Goes Knocking for Political Troublemakers The F.B.I. has been questioning demonstrators in an effort to forestall violent protests at the Republican convention.
+     query item : F.B.I. Goes Knocking for Political Troublemakers The F.B.I. has been questioning demonstrators in an effort to forestall violent protests at the Republican National Convention.
+
+#18  sim=+0.9985  cell=1917  query=1845
+     cell item  : F.B.I. Goes Knocking for Political Troublemakers The F.B.I. has been questioning demonstrators in an effort to forestall violent protests at the Republican National Convention.
+     query item : F.B.I. Goes Knocking for Political Troublemakers The F.B.I. has been questioning demonstrators in an effort to forestall violent protests at the Republican convention.
+
+#19  sim=+0.9975  cell=1752  query=949
+     cell item  : Twins Collect Rare Victory Over Yankees (AP) AP - Brad Radke pitched seven solid innings, Corey Koskie drove in three runs and the Minnesota Twins beat the New York Yankees in the 
+     query item : Twins Collect Rare Victory Over Yankees MINNEAPOLIS (AP) -- Brad Radke pitched seven solid innings, Corey Koskie drove in three runs and the Minnesota Twins beat the New York Yanke
+
+#20  sim=+0.9975  cell=949  query=1752
+     cell item  : Twins Collect Rare Victory Over Yankees MINNEAPOLIS (AP) -- Brad Radke pitched seven solid innings, Corey Koskie drove in three runs and the Minnesota Twins beat the New York Yanke
+     query item : Twins Collect Rare Victory Over Yankees (AP) AP - Brad Radke pitched seven solid innings, Corey Koskie drove in three runs and the Minnesota Twins beat the New York Yankees in the 
+
+
+================================================================================
+BOTTOM CONFUSION PAIRS (lowest semantic similarity)
+These are confusions that aren't explained by semantic similarity.
+If these dominate, the architecture has a real noise problem.
+================================================================================
+
+# 1  sim=+0.9505  cell=447  query=1757
+     cell item  : Intelsat to Be Bought for \$5 Billion  NEW YORK (Reuters) - Intelsat Ltd., the world's  second-largest satellite operator, said on Monday it agreed to  be bought by a consortium of
+     query item : Intelsat to Be Bought for  #36;5 Billion (Reuters) Reuters - Intelsat Ltd., the world's\second-largest satellite operator, said on Monday it agreed to\be bought by a consortium of 
+
+# 2  sim=+0.9505  cell=1757  query=447
+     cell item  : Intelsat to Be Bought for  #36;5 Billion (Reuters) Reuters - Intelsat Ltd., the world's\second-largest satellite operator, said on Monday it agreed to\be bought by a consortium of 
+     query item : Intelsat to Be Bought for \$5 Billion  NEW YORK (Reuters) - Intelsat Ltd., the world's  second-largest satellite operator, said on Monday it agreed to  be bought by a consortium of
+
+# 3  sim=+0.9505  cell=1213  query=388
+     cell item  : Oil Up on Rosy U.S. Economic Data  LONDON (Reuters) - Oil prices rose close to a record high  on Tuesday on U.S. economic data showing that inflationary  pressure was held in check
+     query item : Oil Up on Rosy U.S. Economic Data  LONDON (Reuters) - Oil prices rose on Tuesday on cheery  economic data showing that inflationary pressure was held in  check in July and ahead of
+
+# 4  sim=+0.9505  cell=388  query=1213
+     cell item  : Oil Up on Rosy U.S. Economic Data  LONDON (Reuters) - Oil prices rose on Tuesday on cheery  economic data showing that inflationary pressure was held in  check in July and ahead of
+     query item : Oil Up on Rosy U.S. Economic Data  LONDON (Reuters) - Oil prices rose close to a record high  on Tuesday on U.S. economic data showing that inflationary  pressure was held in check
+
+# 5  sim=+0.9518  cell=1674  query=1637
+     cell item  : Nanotech Research Spending Seen Reaching  #36;8.6 Bln (Reuters) Reuters - Worldwide research and\development spending in the emerging field of nanotechnology\should rise about 10 p
+     query item : Nanotech Research Spending Seen Reaching \$8.6 Bln  SAN FRANCISCO (Reuters) - Worldwide research and  development spending in the emerging field of nanotechnology  should rise abou
+
+# 6  sim=+0.9518  cell=1637  query=1674
+     cell item  : Nanotech Research Spending Seen Reaching \$8.6 Bln  SAN FRANCISCO (Reuters) - Worldwide research and  development spending in the emerging field of nanotechnology  should rise abou
+     query item : Nanotech Research Spending Seen Reaching  #36;8.6 Bln (Reuters) Reuters - Worldwide research and\development spending in the emerging field of nanotechnology\should rise about 10 p
+
+# 7  sim=+0.9521  cell=713  query=1778
+     cell item  : Illinois Helps Residents Import Drugs (Reuters) Reuters - Illinois residents will soon gain\access to lower-cost prescription drugs from Canada, the United\Kingdom and Ireland, sid
+     query item : Illinois Helps Residents Import Prescription Drugs  CHICAGO (Reuters) - Illinois residents will soon be able to  buy lower-cost prescription drugs from Canada, the United  Kingdom 
+
+# 8  sim=+0.9521  cell=1778  query=713
+     cell item  : Illinois Helps Residents Import Prescription Drugs  CHICAGO (Reuters) - Illinois residents will soon be able to  buy lower-cost prescription drugs from Canada, the United  Kingdom 
+     query item : Illinois Helps Residents Import Drugs (Reuters) Reuters - Illinois residents will soon gain\access to lower-cost prescription drugs from Canada, the United\Kingdom and Ireland, sid
+
+# 9  sim=+0.9521  cell=1555  query=112
+     cell item  : Lowe's Net Trails Views, But Shares Rise  ATLANTA (Reuters) - Lowe's Cos. &lt;LOW.N&gt;, the No. 2 home  improvement retailer behind Home Depot Inc., on Monday reported  an 18 perc
+     query item : Lowe's Profit Rises But Trails Estimates  ATLANTA (Reuters) - Lowe's Cos. &lt;LOW.N&gt;, the No. 2 home  improvement retailer behind Home Depot Inc., on Monday reported  an 18 perc
+
+#10  sim=+0.9521  cell=112  query=1555
+     cell item  : Lowe's Profit Rises But Trails Estimates  ATLANTA (Reuters) - Lowe's Cos. &lt;LOW.N&gt;, the No. 2 home  improvement retailer behind Home Depot Inc., on Monday reported  an 18 perc
+     query item : Lowe's Net Trails Views, But Shares Rise  ATLANTA (Reuters) - Lowe's Cos. &lt;LOW.N&gt;, the No. 2 home  improvement retailer behind Home Depot Inc., on Monday reported  an 18 perc
+
+#11  sim=+0.9523  cell=581  query=1315
+     cell item  : Parmalat sues ex-auditors MILAN (Reuters) - Parmalat is suing its former auditors Deloitte  amp; Touche and Grant Thornton, claiming damages of  quot;at least \$10 billion quot; an
+     query item : Parmalat sues ex-auditors Deloitte, Grant Thornton MILAN, Aug 18 (Reuters) - Parmalat sued its former auditors Deloitte  amp; Touche and Grant Thornton on Wednesday, broadening a l
+
+#12  sim=+0.9523  cell=1315  query=581
+     cell item  : Parmalat sues ex-auditors Deloitte, Grant Thornton MILAN, Aug 18 (Reuters) - Parmalat sued its former auditors Deloitte  amp; Touche and Grant Thornton on Wednesday, broadening a l
+     query item : Parmalat sues ex-auditors MILAN (Reuters) - Parmalat is suing its former auditors Deloitte  amp; Touche and Grant Thornton, claiming damages of  quot;at least \$10 billion quot; an
+
+#13  sim=+0.9529  cell=1315  query=1294
+     cell item  : Parmalat sues ex-auditors Deloitte, Grant Thornton MILAN, Aug 18 (Reuters) - Parmalat sued its former auditors Deloitte  amp; Touche and Grant Thornton on Wednesday, broadening a l
+     query item : Parmalat Sues Ex-Auditors in Chicago  MILAN (Reuters) - Parmalat sued its former auditors  Deloitte   Touche and Grant Thornton on Wednesday, broadening a  legal battle to claw bac
+
+#14  sim=+0.9529  cell=1294  query=1315
+     cell item  : Parmalat Sues Ex-Auditors in Chicago  MILAN (Reuters) - Parmalat sued its former auditors  Deloitte   Touche and Grant Thornton on Wednesday, broadening a  legal battle to claw bac
+     query item : Parmalat sues ex-auditors Deloitte, Grant Thornton MILAN, Aug 18 (Reuters) - Parmalat sued its former auditors Deloitte  amp; Touche and Grant Thornton on Wednesday, broadening a l
+
+#15  sim=+0.9536  cell=1439  query=278
+     cell item  : Hurricane Charley Tears Into Outback (Reuters) Reuters - Outback Steakhouse Inc. (OSI.N) on\Tuesday said it lost about 130 operating days and up to  #36;2\million in revenue becaus
+     query item : Hurricane Charley Tears Into Outback  NEW YORK (Reuters) - Outback Steakhouse Inc. &lt;A HREF="http://www.investor.reuters.com/FullQuote.aspx?ticker=OSI.N target=/stocks/quickinfo/
+
+#16  sim=+0.9536  cell=278  query=1439
+     cell item  : Hurricane Charley Tears Into Outback  NEW YORK (Reuters) - Outback Steakhouse Inc. &lt;A HREF="http://www.investor.reuters.com/FullQuote.aspx?ticker=OSI.N target=/stocks/quickinfo/
+     query item : Hurricane Charley Tears Into Outback (Reuters) Reuters - Outback Steakhouse Inc. (OSI.N) on\Tuesday said it lost about 130 operating days and up to  #36;2\million in revenue becaus
+
+#17  sim=+0.9544  cell=388  query=888
+     cell item  : Oil Up on Rosy U.S. Economic Data  LONDON (Reuters) - Oil prices rose on Tuesday on cheery  economic data showing that inflationary pressure was held in  check in July and ahead of
+     query item : Oil Up on Rosy U.S. Economic Data  LONDON (Reuters) - Oil prices rose to another record high  on Tuesday on U.S. economic data showing inflationary pressure  was held in check in J
+
+#18  sim=+0.9544  cell=888  query=388
+     cell item  : Oil Up on Rosy U.S. Economic Data  LONDON (Reuters) - Oil prices rose to another record high  on Tuesday on U.S. economic data showing inflationary pressure  was held in check in J
+     query item : Oil Up on Rosy U.S. Economic Data  LONDON (Reuters) - Oil prices rose on Tuesday on cheery  economic data showing that inflationary pressure was held in  check in July and ahead of
+
+#19  sim=+0.9544  cell=1699  query=1828
+     cell item  : Suspicious Powder Found at U.S. Embassy in Malaysia  KUALA LUMPUR, Malaysia (Reuters) - An envelope containing  suspicious white powder and threats against Americans was  delivered
+     query item : Suspicious Powder Found at U.S. Embassy in Malaysia  KUALA LUMPUR (Reuters) - Suspicious white powder has been  found in an envelope that arrived at the U.S. embassy in  Malaysia a
+
+#20  sim=+0.9544  cell=1828  query=1699
+     cell item  : Suspicious Powder Found at U.S. Embassy in Malaysia  KUALA LUMPUR (Reuters) - Suspicious white powder has been  found in an envelope that arrived at the U.S. embassy in  Malaysia a
+     query item : Suspicious Powder Found at U.S. Embassy in Malaysia  KUALA LUMPUR, Malaysia (Reuters) - An envelope containing  suspicious white powder and threats against Americans was  delivered

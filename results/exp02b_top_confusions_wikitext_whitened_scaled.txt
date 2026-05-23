@@ -1,0 +1,141 @@
+TOP CONFUSION PAIRS (highest semantic similarity)
+================================================================================
+These are off-diagonal firings: cell i fires for query j != i.
+Sorted by cosine similarity of the two items' embeddings.
+If these look semantically related, the 'failures' are features.
+================================================================================
+
+# 1  sim=+0.9938  cell=1034  query=1765
+     cell item  : May 9 – Colonna – 11 ; Stoppani – 6 ; Fantuzzi – 5 ; Pozzobonelli – 4 ; Ganganelli – 3
+     query item : May 8 – Colonna – 9 ; Stoppani – 6 ; Fantuzzi – 5 ; Ganganelli – 4 ; Pozzobonelli – 3
+
+# 2  sim=+0.9938  cell=1765  query=1034
+     cell item  : May 8 – Colonna – 9 ; Stoppani – 6 ; Fantuzzi – 5 ; Ganganelli – 4 ; Pozzobonelli – 3
+     query item : May 9 – Colonna – 11 ; Stoppani – 6 ; Fantuzzi – 5 ; Pozzobonelli – 4 ; Ganganelli – 3
+
+# 3  sim=+0.9909  cell=1237  query=810
+     cell item  : May 11 – Colonna – 11 ; Pozzobonelli – 6 ; Stoppani – 5 ; Ganganelli – 5 ; Fantuzzi – 3
+     query item : May 12 – Colonna – 11 ; Pozzobonelli – 6 ; Stoppani – 6 ; Ganganelli – 6 ; Fantuzzi – 5
+
+# 4  sim=+0.9909  cell=810  query=1237
+     cell item  : May 12 – Colonna – 11 ; Pozzobonelli – 6 ; Stoppani – 6 ; Ganganelli – 6 ; Fantuzzi – 5
+     query item : May 11 – Colonna – 11 ; Pozzobonelli – 6 ; Stoppani – 5 ; Ganganelli – 5 ; Fantuzzi – 3
+
+# 5  sim=+0.9876  cell=1034  query=1237
+     cell item  : May 9 – Colonna – 11 ; Stoppani – 6 ; Fantuzzi – 5 ; Pozzobonelli – 4 ; Ganganelli – 3
+     query item : May 11 – Colonna – 11 ; Pozzobonelli – 6 ; Stoppani – 5 ; Ganganelli – 5 ; Fantuzzi – 3
+
+# 6  sim=+0.9876  cell=1237  query=1034
+     cell item  : May 11 – Colonna – 11 ; Pozzobonelli – 6 ; Stoppani – 5 ; Ganganelli – 5 ; Fantuzzi – 3
+     query item : May 9 – Colonna – 11 ; Stoppani – 6 ; Fantuzzi – 5 ; Pozzobonelli – 4 ; Ganganelli – 3
+
+# 7  sim=+0.9846  cell=1462  query=540
+     cell item  : Brackets around club names denote the player joined that club after his York contract expired .
+     query item : Brackets around club names denote the player 's contract with that club had expired before he joined York .
+
+# 8  sim=+0.9846  cell=540  query=1462
+     cell item  : Brackets around club names denote the player 's contract with that club had expired before he joined York .
+     query item : Brackets around club names denote the player joined that club after his York contract expired .
+
+# 9  sim=+0.9817  cell=1034  query=810
+     cell item  : May 9 – Colonna – 11 ; Stoppani – 6 ; Fantuzzi – 5 ; Pozzobonelli – 4 ; Ganganelli – 3
+     query item : May 12 – Colonna – 11 ; Pozzobonelli – 6 ; Stoppani – 6 ; Ganganelli – 6 ; Fantuzzi – 5
+
+#10  sim=+0.9816  cell=810  query=1000
+     cell item  : May 12 – Colonna – 11 ; Pozzobonelli – 6 ; Stoppani – 6 ; Ganganelli – 6 ; Fantuzzi – 5
+     query item : May 17 – Colonna – 12 ; Pozzobonelli – 12 ; Ganganelli – 10 ; Stoppani – 5 ; Fantuzzi – 1
+
+#11  sim=+0.9814  cell=1765  query=1237
+     cell item  : May 8 – Colonna – 9 ; Stoppani – 6 ; Fantuzzi – 5 ; Ganganelli – 4 ; Pozzobonelli – 3
+     query item : May 11 – Colonna – 11 ; Pozzobonelli – 6 ; Stoppani – 5 ; Ganganelli – 5 ; Fantuzzi – 3
+
+#12  sim=+0.9814  cell=1237  query=1765
+     cell item  : May 11 – Colonna – 11 ; Pozzobonelli – 6 ; Stoppani – 5 ; Ganganelli – 5 ; Fantuzzi – 3
+     query item : May 8 – Colonna – 9 ; Stoppani – 6 ; Fantuzzi – 5 ; Ganganelli – 4 ; Pozzobonelli – 3
+
+#13  sim=+0.9786  cell=1765  query=810
+     cell item  : May 8 – Colonna – 9 ; Stoppani – 6 ; Fantuzzi – 5 ; Ganganelli – 4 ; Pozzobonelli – 3
+     query item : May 12 – Colonna – 11 ; Pozzobonelli – 6 ; Stoppani – 6 ; Ganganelli – 6 ; Fantuzzi – 5
+
+#14  sim=+0.9783  cell=1000  query=1381
+     cell item  : May 17 – Colonna – 12 ; Pozzobonelli – 12 ; Ganganelli – 10 ; Stoppani – 5 ; Fantuzzi – 1
+     query item : May 18 – Ganganelli – 19 ; Colonna – 13 ; Pozzobonelli – 11 ; Stoppani – 6 ; Fantuzzi – 1
+
+#15  sim=+0.9783  cell=1381  query=1000
+     cell item  : May 18 – Ganganelli – 19 ; Colonna – 13 ; Pozzobonelli – 11 ; Stoppani – 6 ; Fantuzzi – 1
+     query item : May 17 – Colonna – 12 ; Pozzobonelli – 12 ; Ganganelli – 10 ; Stoppani – 5 ; Fantuzzi – 1
+
+#16  sim=+0.9777  cell=72  query=920
+     cell item  : April 28 – Fantuzzi – 9 ; Colonna – 9 ; Pozzobonelli – 7 ; Stoppani – 6 ; Ganganelli – 4
+     query item : April 30 – Colonna – 11 ; Fantuzzi – 8 ; Stoppani – 5 ; Pozzobonelli – 4 ; Ganganelli – 4
+
+
+================================================================================
+BOTTOM CONFUSION PAIRS (lowest semantic similarity)
+These are confusions that aren't explained by semantic similarity.
+If these dominate, the architecture has a real noise problem.
+================================================================================
+
+# 1  sim=+0.9777  cell=72  query=920
+     cell item  : April 28 – Fantuzzi – 9 ; Colonna – 9 ; Pozzobonelli – 7 ; Stoppani – 6 ; Ganganelli – 4
+     query item : April 30 – Colonna – 11 ; Fantuzzi – 8 ; Stoppani – 5 ; Pozzobonelli – 4 ; Ganganelli – 4
+
+# 2  sim=+0.9783  cell=1000  query=1381
+     cell item  : May 17 – Colonna – 12 ; Pozzobonelli – 12 ; Ganganelli – 10 ; Stoppani – 5 ; Fantuzzi – 1
+     query item : May 18 – Ganganelli – 19 ; Colonna – 13 ; Pozzobonelli – 11 ; Stoppani – 6 ; Fantuzzi – 1
+
+# 3  sim=+0.9783  cell=1381  query=1000
+     cell item  : May 18 – Ganganelli – 19 ; Colonna – 13 ; Pozzobonelli – 11 ; Stoppani – 6 ; Fantuzzi – 1
+     query item : May 17 – Colonna – 12 ; Pozzobonelli – 12 ; Ganganelli – 10 ; Stoppani – 5 ; Fantuzzi – 1
+
+# 4  sim=+0.9786  cell=1765  query=810
+     cell item  : May 8 – Colonna – 9 ; Stoppani – 6 ; Fantuzzi – 5 ; Ganganelli – 4 ; Pozzobonelli – 3
+     query item : May 12 – Colonna – 11 ; Pozzobonelli – 6 ; Stoppani – 6 ; Ganganelli – 6 ; Fantuzzi – 5
+
+# 5  sim=+0.9814  cell=1237  query=1765
+     cell item  : May 11 – Colonna – 11 ; Pozzobonelli – 6 ; Stoppani – 5 ; Ganganelli – 5 ; Fantuzzi – 3
+     query item : May 8 – Colonna – 9 ; Stoppani – 6 ; Fantuzzi – 5 ; Ganganelli – 4 ; Pozzobonelli – 3
+
+# 6  sim=+0.9814  cell=1765  query=1237
+     cell item  : May 8 – Colonna – 9 ; Stoppani – 6 ; Fantuzzi – 5 ; Ganganelli – 4 ; Pozzobonelli – 3
+     query item : May 11 – Colonna – 11 ; Pozzobonelli – 6 ; Stoppani – 5 ; Ganganelli – 5 ; Fantuzzi – 3
+
+# 7  sim=+0.9816  cell=810  query=1000
+     cell item  : May 12 – Colonna – 11 ; Pozzobonelli – 6 ; Stoppani – 6 ; Ganganelli – 6 ; Fantuzzi – 5
+     query item : May 17 – Colonna – 12 ; Pozzobonelli – 12 ; Ganganelli – 10 ; Stoppani – 5 ; Fantuzzi – 1
+
+# 8  sim=+0.9817  cell=1034  query=810
+     cell item  : May 9 – Colonna – 11 ; Stoppani – 6 ; Fantuzzi – 5 ; Pozzobonelli – 4 ; Ganganelli – 3
+     query item : May 12 – Colonna – 11 ; Pozzobonelli – 6 ; Stoppani – 6 ; Ganganelli – 6 ; Fantuzzi – 5
+
+# 9  sim=+0.9846  cell=1462  query=540
+     cell item  : Brackets around club names denote the player joined that club after his York contract expired .
+     query item : Brackets around club names denote the player 's contract with that club had expired before he joined York .
+
+#10  sim=+0.9846  cell=540  query=1462
+     cell item  : Brackets around club names denote the player 's contract with that club had expired before he joined York .
+     query item : Brackets around club names denote the player joined that club after his York contract expired .
+
+#11  sim=+0.9876  cell=1034  query=1237
+     cell item  : May 9 – Colonna – 11 ; Stoppani – 6 ; Fantuzzi – 5 ; Pozzobonelli – 4 ; Ganganelli – 3
+     query item : May 11 – Colonna – 11 ; Pozzobonelli – 6 ; Stoppani – 5 ; Ganganelli – 5 ; Fantuzzi – 3
+
+#12  sim=+0.9876  cell=1237  query=1034
+     cell item  : May 11 – Colonna – 11 ; Pozzobonelli – 6 ; Stoppani – 5 ; Ganganelli – 5 ; Fantuzzi – 3
+     query item : May 9 – Colonna – 11 ; Stoppani – 6 ; Fantuzzi – 5 ; Pozzobonelli – 4 ; Ganganelli – 3
+
+#13  sim=+0.9909  cell=1237  query=810
+     cell item  : May 11 – Colonna – 11 ; Pozzobonelli – 6 ; Stoppani – 5 ; Ganganelli – 5 ; Fantuzzi – 3
+     query item : May 12 – Colonna – 11 ; Pozzobonelli – 6 ; Stoppani – 6 ; Ganganelli – 6 ; Fantuzzi – 5
+
+#14  sim=+0.9909  cell=810  query=1237
+     cell item  : May 12 – Colonna – 11 ; Pozzobonelli – 6 ; Stoppani – 6 ; Ganganelli – 6 ; Fantuzzi – 5
+     query item : May 11 – Colonna – 11 ; Pozzobonelli – 6 ; Stoppani – 5 ; Ganganelli – 5 ; Fantuzzi – 3
+
+#15  sim=+0.9938  cell=1034  query=1765
+     cell item  : May 9 – Colonna – 11 ; Stoppani – 6 ; Fantuzzi – 5 ; Pozzobonelli – 4 ; Ganganelli – 3
+     query item : May 8 – Colonna – 9 ; Stoppani – 6 ; Fantuzzi – 5 ; Ganganelli – 4 ; Pozzobonelli – 3
+
+#16  sim=+0.9938  cell=1765  query=1034
+     cell item  : May 8 – Colonna – 9 ; Stoppani – 6 ; Fantuzzi – 5 ; Ganganelli – 4 ; Pozzobonelli – 3
+     query item : May 9 – Colonna – 11 ; Stoppani – 6 ; Fantuzzi – 5 ; Pozzobonelli – 4 ; Ganganelli – 3

@@ -1,0 +1,777 @@
+{
+  "isotropy": {
+    "uniform_ball": {
+      "raw": {
+        "n": 2000,
+        "dim": 384,
+        "mean_norm": 0.9974684119224548,
+        "std_norm": 0.002600219799205661,
+        "mean_pairwise_cosine": 0.00021117406140547246,
+        "std_pairwise_cosine": 0.05090319365262985,
+        "abs_mean_pairwise_cosine": 0.040674444288015366,
+        "participation_ratio": 322.35577392578125,
+        "effective_dim_fraction": 0.8394681612650553
+      },
+      "ball_scaled": {
+        "n": 2000,
+        "dim": 384,
+        "mean_norm": 0.9974686503410339,
+        "std_norm": 0.0026002211961895227,
+        "mean_pairwise_cosine": 0.00021117409050930291,
+        "std_pairwise_cosine": 0.050903189927339554,
+        "abs_mean_pairwise_cosine": 0.040674444288015366,
+        "participation_ratio": 322.3558044433594,
+        "effective_dim_fraction": 0.839468240737915
+      },
+      "whitened_scaled": {
+        "n": 2000,
+        "dim": 384,
+        "mean_norm": 0.9561488032341003,
+        "std_norm": 0.013793284073472023,
+        "mean_pairwise_cosine": -0.0003244154795538634,
+        "std_pairwise_cosine": 0.04578905925154686,
+        "abs_mean_pairwise_cosine": 0.036659613251686096,
+        "participation_ratio": 383.9999084472656,
+        "effective_dim_fraction": 0.9999997615814209
+      }
+    },
+    "gaussian": {
+      "raw": {
+        "n": 2000,
+        "dim": 384,
+        "mean_norm": 19.594667434692383,
+        "std_norm": 0.6980061531066895,
+        "mean_pairwise_cosine": 0.00021117400319781154,
+        "std_pairwise_cosine": 0.05090319365262985,
+        "abs_mean_pairwise_cosine": 0.040674444288015366,
+        "participation_ratio": 322.0951232910156,
+        "effective_dim_fraction": 0.8387893835703532
+      },
+      "ball_scaled": {
+        "n": 2000,
+        "dim": 384,
+        "mean_norm": 0.8913350105285645,
+        "std_norm": 0.0317513570189476,
+        "mean_pairwise_cosine": 0.00021117411961313337,
+        "std_pairwise_cosine": 0.05090319365262985,
+        "abs_mean_pairwise_cosine": 0.040674444288015366,
+        "participation_ratio": 322.0951232910156,
+        "effective_dim_fraction": 0.8387893835703532
+      },
+      "whitened_scaled": {
+        "n": 2000,
+        "dim": 384,
+        "mean_norm": 0.8906240463256836,
+        "std_norm": 0.02887294627726078,
+        "mean_pairwise_cosine": -0.0003256282361689955,
+        "std_pairwise_cosine": 0.045801691710948944,
+        "abs_mean_pairwise_cosine": 0.036669258028268814,
+        "participation_ratio": 384.0000305175781,
+        "effective_dim_fraction": 1.0000000794728596
+      }
+    },
+    "minilm": {
+      "raw": {
+        "n": 2000,
+        "dim": 384,
+        "mean_norm": 1.0,
+        "std_norm": 3.6305049633256203e-08,
+        "mean_pairwise_cosine": 0.055526506155729294,
+        "std_pairwise_cosine": 0.10044479370117188,
+        "abs_mean_pairwise_cosine": 0.08259349316358566,
+        "participation_ratio": 94.44062805175781,
+        "effective_dim_fraction": 0.24593913555145264
+      },
+      "ball_scaled": {
+        "n": 2000,
+        "dim": 384,
+        "mean_norm": 0.9999999403953552,
+        "std_norm": 7.636609211658651e-08,
+        "mean_pairwise_cosine": 0.055526502430438995,
+        "std_pairwise_cosine": 0.10044479370117188,
+        "abs_mean_pairwise_cosine": 0.08259349316358566,
+        "participation_ratio": 94.44064331054688,
+        "effective_dim_fraction": 0.24593917528788248
+      },
+      "whitened_scaled": {
+        "n": 2000,
+        "dim": 384,
+        "mean_norm": 0.7120185494422913,
+        "std_norm": 0.08890432864427567,
+        "mean_pairwise_cosine": -0.0008087592432275414,
+        "std_pairwise_cosine": 0.04674382880330086,
+        "abs_mean_pairwise_cosine": 0.03478201851248741,
+        "participation_ratio": 381.0000305175781,
+        "effective_dim_fraction": 0.9921875794728597
+      }
+    }
+  },
+  "separation": {
+    "uniform_ball::raw": [
+      {
+        "n_items": 50,
+        "dim": 384,
+        "epsilon": 0.05,
+        "threshold_scheme": "norm_minus_eps",
+        "true_positive_rate": 1.0,
+        "false_positive_rate": 0.0,
+        "perfect_selectivity_rate": 1.0,
+        "theoretical_lower_bound": 1.0,
+        "fp_rate_per_cell_mean": 0.0,
+        "fp_rate_per_cell_std": 0.0
+      },
+      {
+        "n_items": 100,
+        "dim": 384,
+        "epsilon": 0.05,
+        "threshold_scheme": "norm_minus_eps",
+        "true_positive_rate": 1.0,
+        "false_positive_rate": 0.0,
+        "perfect_selectivity_rate": 1.0,
+        "theoretical_lower_bound": 1.0,
+        "fp_rate_per_cell_mean": 0.0,
+        "fp_rate_per_cell_std": 0.0
+      },
+      {
+        "n_items": 250,
+        "dim": 384,
+        "epsilon": 0.05,
+        "threshold_scheme": "norm_minus_eps",
+        "true_positive_rate": 1.0,
+        "false_positive_rate": 0.0,
+        "perfect_selectivity_rate": 1.0,
+        "theoretical_lower_bound": 1.0,
+        "fp_rate_per_cell_mean": 0.0,
+        "fp_rate_per_cell_std": 0.0
+      },
+      {
+        "n_items": 500,
+        "dim": 384,
+        "epsilon": 0.05,
+        "threshold_scheme": "norm_minus_eps",
+        "true_positive_rate": 1.0,
+        "false_positive_rate": 0.0,
+        "perfect_selectivity_rate": 1.0,
+        "theoretical_lower_bound": 1.0,
+        "fp_rate_per_cell_mean": 0.0,
+        "fp_rate_per_cell_std": 0.0
+      },
+      {
+        "n_items": 1000,
+        "dim": 384,
+        "epsilon": 0.05,
+        "threshold_scheme": "norm_minus_eps",
+        "true_positive_rate": 1.0,
+        "false_positive_rate": 0.0,
+        "perfect_selectivity_rate": 1.0,
+        "theoretical_lower_bound": 1.0,
+        "fp_rate_per_cell_mean": 0.0,
+        "fp_rate_per_cell_std": 0.0
+      },
+      {
+        "n_items": 2000,
+        "dim": 384,
+        "epsilon": 0.05,
+        "threshold_scheme": "norm_minus_eps",
+        "true_positive_rate": 1.0,
+        "false_positive_rate": 0.0,
+        "perfect_selectivity_rate": 1.0,
+        "theoretical_lower_bound": 1.0,
+        "fp_rate_per_cell_mean": 0.0,
+        "fp_rate_per_cell_std": 0.0
+      }
+    ],
+    "uniform_ball::ball_scaled": [
+      {
+        "n_items": 50,
+        "dim": 384,
+        "epsilon": 0.05,
+        "threshold_scheme": "norm_minus_eps",
+        "true_positive_rate": 1.0,
+        "false_positive_rate": 0.0,
+        "perfect_selectivity_rate": 1.0,
+        "theoretical_lower_bound": 1.0,
+        "fp_rate_per_cell_mean": 0.0,
+        "fp_rate_per_cell_std": 0.0
+      },
+      {
+        "n_items": 100,
+        "dim": 384,
+        "epsilon": 0.05,
+        "threshold_scheme": "norm_minus_eps",
+        "true_positive_rate": 1.0,
+        "false_positive_rate": 0.0,
+        "perfect_selectivity_rate": 1.0,
+        "theoretical_lower_bound": 1.0,
+        "fp_rate_per_cell_mean": 0.0,
+        "fp_rate_per_cell_std": 0.0
+      },
+      {
+        "n_items": 250,
+        "dim": 384,
+        "epsilon": 0.05,
+        "threshold_scheme": "norm_minus_eps",
+        "true_positive_rate": 1.0,
+        "false_positive_rate": 0.0,
+        "perfect_selectivity_rate": 1.0,
+        "theoretical_lower_bound": 1.0,
+        "fp_rate_per_cell_mean": 0.0,
+        "fp_rate_per_cell_std": 0.0
+      },
+      {
+        "n_items": 500,
+        "dim": 384,
+        "epsilon": 0.05,
+        "threshold_scheme": "norm_minus_eps",
+        "true_positive_rate": 1.0,
+        "false_positive_rate": 0.0,
+        "perfect_selectivity_rate": 1.0,
+        "theoretical_lower_bound": 1.0,
+        "fp_rate_per_cell_mean": 0.0,
+        "fp_rate_per_cell_std": 0.0
+      },
+      {
+        "n_items": 1000,
+        "dim": 384,
+        "epsilon": 0.05,
+        "threshold_scheme": "norm_minus_eps",
+        "true_positive_rate": 1.0,
+        "false_positive_rate": 0.0,
+        "perfect_selectivity_rate": 1.0,
+        "theoretical_lower_bound": 1.0,
+        "fp_rate_per_cell_mean": 0.0,
+        "fp_rate_per_cell_std": 0.0
+      },
+      {
+        "n_items": 2000,
+        "dim": 384,
+        "epsilon": 0.05,
+        "threshold_scheme": "norm_minus_eps",
+        "true_positive_rate": 1.0,
+        "false_positive_rate": 0.0,
+        "perfect_selectivity_rate": 1.0,
+        "theoretical_lower_bound": 1.0,
+        "fp_rate_per_cell_mean": 0.0,
+        "fp_rate_per_cell_std": 0.0
+      }
+    ],
+    "uniform_ball::whitened_scaled": [
+      {
+        "n_items": 50,
+        "dim": 384,
+        "epsilon": 0.05,
+        "threshold_scheme": "norm_minus_eps",
+        "true_positive_rate": 1.0,
+        "false_positive_rate": 0.0,
+        "perfect_selectivity_rate": 1.0,
+        "theoretical_lower_bound": 1.0,
+        "fp_rate_per_cell_mean": 0.0,
+        "fp_rate_per_cell_std": 0.0
+      },
+      {
+        "n_items": 100,
+        "dim": 384,
+        "epsilon": 0.05,
+        "threshold_scheme": "norm_minus_eps",
+        "true_positive_rate": 1.0,
+        "false_positive_rate": 0.0,
+        "perfect_selectivity_rate": 1.0,
+        "theoretical_lower_bound": 1.0,
+        "fp_rate_per_cell_mean": 0.0,
+        "fp_rate_per_cell_std": 0.0
+      },
+      {
+        "n_items": 250,
+        "dim": 384,
+        "epsilon": 0.05,
+        "threshold_scheme": "norm_minus_eps",
+        "true_positive_rate": 1.0,
+        "false_positive_rate": 0.0,
+        "perfect_selectivity_rate": 1.0,
+        "theoretical_lower_bound": 1.0,
+        "fp_rate_per_cell_mean": 0.0,
+        "fp_rate_per_cell_std": 0.0
+      },
+      {
+        "n_items": 500,
+        "dim": 384,
+        "epsilon": 0.05,
+        "threshold_scheme": "norm_minus_eps",
+        "true_positive_rate": 1.0,
+        "false_positive_rate": 0.0,
+        "perfect_selectivity_rate": 1.0,
+        "theoretical_lower_bound": 1.0,
+        "fp_rate_per_cell_mean": 0.0,
+        "fp_rate_per_cell_std": 0.0
+      },
+      {
+        "n_items": 1000,
+        "dim": 384,
+        "epsilon": 0.05,
+        "threshold_scheme": "norm_minus_eps",
+        "true_positive_rate": 1.0,
+        "false_positive_rate": 0.0,
+        "perfect_selectivity_rate": 1.0,
+        "theoretical_lower_bound": 1.0,
+        "fp_rate_per_cell_mean": 0.0,
+        "fp_rate_per_cell_std": 0.0
+      },
+      {
+        "n_items": 2000,
+        "dim": 384,
+        "epsilon": 0.05,
+        "threshold_scheme": "norm_minus_eps",
+        "true_positive_rate": 1.0,
+        "false_positive_rate": 0.0,
+        "perfect_selectivity_rate": 1.0,
+        "theoretical_lower_bound": 1.0,
+        "fp_rate_per_cell_mean": 0.0,
+        "fp_rate_per_cell_std": 0.0
+      }
+    ],
+    "gaussian::raw": [
+      {
+        "n_items": 50,
+        "dim": 384,
+        "epsilon": 0.05,
+        "threshold_scheme": "norm_minus_eps",
+        "true_positive_rate": 1.0,
+        "false_positive_rate": 0.0,
+        "perfect_selectivity_rate": 1.0,
+        "theoretical_lower_bound": 1.0,
+        "fp_rate_per_cell_mean": 0.0,
+        "fp_rate_per_cell_std": 0.0
+      },
+      {
+        "n_items": 100,
+        "dim": 384,
+        "epsilon": 0.05,
+        "threshold_scheme": "norm_minus_eps",
+        "true_positive_rate": 1.0,
+        "false_positive_rate": 0.0,
+        "perfect_selectivity_rate": 1.0,
+        "theoretical_lower_bound": 1.0,
+        "fp_rate_per_cell_mean": 0.0,
+        "fp_rate_per_cell_std": 0.0
+      },
+      {
+        "n_items": 250,
+        "dim": 384,
+        "epsilon": 0.05,
+        "threshold_scheme": "norm_minus_eps",
+        "true_positive_rate": 1.0,
+        "false_positive_rate": 0.0,
+        "perfect_selectivity_rate": 1.0,
+        "theoretical_lower_bound": 1.0,
+        "fp_rate_per_cell_mean": 0.0,
+        "fp_rate_per_cell_std": 0.0
+      },
+      {
+        "n_items": 500,
+        "dim": 384,
+        "epsilon": 0.05,
+        "threshold_scheme": "norm_minus_eps",
+        "true_positive_rate": 1.0,
+        "false_positive_rate": 0.0,
+        "perfect_selectivity_rate": 1.0,
+        "theoretical_lower_bound": 1.0,
+        "fp_rate_per_cell_mean": 0.0,
+        "fp_rate_per_cell_std": 0.0
+      },
+      {
+        "n_items": 1000,
+        "dim": 384,
+        "epsilon": 0.05,
+        "threshold_scheme": "norm_minus_eps",
+        "true_positive_rate": 1.0,
+        "false_positive_rate": 0.0,
+        "perfect_selectivity_rate": 1.0,
+        "theoretical_lower_bound": 1.0,
+        "fp_rate_per_cell_mean": 0.0,
+        "fp_rate_per_cell_std": 0.0
+      },
+      {
+        "n_items": 2000,
+        "dim": 384,
+        "epsilon": 0.05,
+        "threshold_scheme": "norm_minus_eps",
+        "true_positive_rate": 1.0,
+        "false_positive_rate": 0.0,
+        "perfect_selectivity_rate": 1.0,
+        "theoretical_lower_bound": 1.0,
+        "fp_rate_per_cell_mean": 0.0,
+        "fp_rate_per_cell_std": 0.0
+      }
+    ],
+    "gaussian::ball_scaled": [
+      {
+        "n_items": 50,
+        "dim": 384,
+        "epsilon": 0.05,
+        "threshold_scheme": "norm_minus_eps",
+        "true_positive_rate": 1.0,
+        "false_positive_rate": 0.0,
+        "perfect_selectivity_rate": 1.0,
+        "theoretical_lower_bound": 1.0,
+        "fp_rate_per_cell_mean": 0.0,
+        "fp_rate_per_cell_std": 0.0
+      },
+      {
+        "n_items": 100,
+        "dim": 384,
+        "epsilon": 0.05,
+        "threshold_scheme": "norm_minus_eps",
+        "true_positive_rate": 1.0,
+        "false_positive_rate": 0.0,
+        "perfect_selectivity_rate": 1.0,
+        "theoretical_lower_bound": 1.0,
+        "fp_rate_per_cell_mean": 0.0,
+        "fp_rate_per_cell_std": 0.0
+      },
+      {
+        "n_items": 250,
+        "dim": 384,
+        "epsilon": 0.05,
+        "threshold_scheme": "norm_minus_eps",
+        "true_positive_rate": 1.0,
+        "false_positive_rate": 0.0,
+        "perfect_selectivity_rate": 1.0,
+        "theoretical_lower_bound": 1.0,
+        "fp_rate_per_cell_mean": 0.0,
+        "fp_rate_per_cell_std": 0.0
+      },
+      {
+        "n_items": 500,
+        "dim": 384,
+        "epsilon": 0.05,
+        "threshold_scheme": "norm_minus_eps",
+        "true_positive_rate": 1.0,
+        "false_positive_rate": 0.0,
+        "perfect_selectivity_rate": 1.0,
+        "theoretical_lower_bound": 1.0,
+        "fp_rate_per_cell_mean": 0.0,
+        "fp_rate_per_cell_std": 0.0
+      },
+      {
+        "n_items": 1000,
+        "dim": 384,
+        "epsilon": 0.05,
+        "threshold_scheme": "norm_minus_eps",
+        "true_positive_rate": 1.0,
+        "false_positive_rate": 0.0,
+        "perfect_selectivity_rate": 1.0,
+        "theoretical_lower_bound": 1.0,
+        "fp_rate_per_cell_mean": 0.0,
+        "fp_rate_per_cell_std": 0.0
+      },
+      {
+        "n_items": 2000,
+        "dim": 384,
+        "epsilon": 0.05,
+        "threshold_scheme": "norm_minus_eps",
+        "true_positive_rate": 1.0,
+        "false_positive_rate": 0.0,
+        "perfect_selectivity_rate": 1.0,
+        "theoretical_lower_bound": 1.0,
+        "fp_rate_per_cell_mean": 0.0,
+        "fp_rate_per_cell_std": 0.0
+      }
+    ],
+    "gaussian::whitened_scaled": [
+      {
+        "n_items": 50,
+        "dim": 384,
+        "epsilon": 0.05,
+        "threshold_scheme": "norm_minus_eps",
+        "true_positive_rate": 1.0,
+        "false_positive_rate": 0.0,
+        "perfect_selectivity_rate": 1.0,
+        "theoretical_lower_bound": 1.0,
+        "fp_rate_per_cell_mean": 0.0,
+        "fp_rate_per_cell_std": 0.0
+      },
+      {
+        "n_items": 100,
+        "dim": 384,
+        "epsilon": 0.05,
+        "threshold_scheme": "norm_minus_eps",
+        "true_positive_rate": 1.0,
+        "false_positive_rate": 0.0,
+        "perfect_selectivity_rate": 1.0,
+        "theoretical_lower_bound": 1.0,
+        "fp_rate_per_cell_mean": 0.0,
+        "fp_rate_per_cell_std": 0.0
+      },
+      {
+        "n_items": 250,
+        "dim": 384,
+        "epsilon": 0.05,
+        "threshold_scheme": "norm_minus_eps",
+        "true_positive_rate": 1.0,
+        "false_positive_rate": 0.0,
+        "perfect_selectivity_rate": 1.0,
+        "theoretical_lower_bound": 1.0,
+        "fp_rate_per_cell_mean": 0.0,
+        "fp_rate_per_cell_std": 0.0
+      },
+      {
+        "n_items": 500,
+        "dim": 384,
+        "epsilon": 0.05,
+        "threshold_scheme": "norm_minus_eps",
+        "true_positive_rate": 1.0,
+        "false_positive_rate": 0.0,
+        "perfect_selectivity_rate": 1.0,
+        "theoretical_lower_bound": 1.0,
+        "fp_rate_per_cell_mean": 0.0,
+        "fp_rate_per_cell_std": 0.0
+      },
+      {
+        "n_items": 1000,
+        "dim": 384,
+        "epsilon": 0.05,
+        "threshold_scheme": "norm_minus_eps",
+        "true_positive_rate": 1.0,
+        "false_positive_rate": 0.0,
+        "perfect_selectivity_rate": 1.0,
+        "theoretical_lower_bound": 1.0,
+        "fp_rate_per_cell_mean": 0.0,
+        "fp_rate_per_cell_std": 0.0
+      },
+      {
+        "n_items": 2000,
+        "dim": 384,
+        "epsilon": 0.05,
+        "threshold_scheme": "norm_minus_eps",
+        "true_positive_rate": 1.0,
+        "false_positive_rate": 0.0,
+        "perfect_selectivity_rate": 1.0,
+        "theoretical_lower_bound": 1.0,
+        "fp_rate_per_cell_mean": 0.0,
+        "fp_rate_per_cell_std": 0.0
+      }
+    ],
+    "minilm::raw": [
+      {
+        "n_items": 50,
+        "dim": 384,
+        "epsilon": 0.05,
+        "threshold_scheme": "norm_minus_eps",
+        "true_positive_rate": 1.0,
+        "false_positive_rate": 0.0008163265306122449,
+        "perfect_selectivity_rate": 0.96,
+        "theoretical_lower_bound": 1.0,
+        "fp_rate_per_cell_mean": 0.0008163265306122448,
+        "fp_rate_per_cell_std": 0.003999166926992944
+      },
+      {
+        "n_items": 100,
+        "dim": 384,
+        "epsilon": 0.05,
+        "threshold_scheme": "norm_minus_eps",
+        "true_positive_rate": 1.0,
+        "false_positive_rate": 0.00020202020202020202,
+        "perfect_selectivity_rate": 0.98,
+        "theoretical_lower_bound": 1.0,
+        "fp_rate_per_cell_mean": 0.00020202020202020205,
+        "fp_rate_per_cell_std": 0.0014141414141414137
+      },
+      {
+        "n_items": 250,
+        "dim": 384,
+        "epsilon": 0.05,
+        "threshold_scheme": "norm_minus_eps",
+        "true_positive_rate": 1.0,
+        "false_positive_rate": 9.63855421686747e-05,
+        "perfect_selectivity_rate": 0.976,
+        "theoretical_lower_bound": 1.0,
+        "fp_rate_per_cell_mean": 9.63855421686747e-05,
+        "fp_rate_per_cell_std": 0.0006146546656934615
+      },
+      {
+        "n_items": 500,
+        "dim": 384,
+        "epsilon": 0.05,
+        "threshold_scheme": "norm_minus_eps",
+        "true_positive_rate": 1.0,
+        "false_positive_rate": 2.404809619238477e-05,
+        "perfect_selectivity_rate": 0.988,
+        "theoretical_lower_bound": 1.0,
+        "fp_rate_per_cell_mean": 2.4048096192384767e-05,
+        "fp_rate_per_cell_std": 0.00021820693529164245
+      },
+      {
+        "n_items": 1000,
+        "dim": 384,
+        "epsilon": 0.05,
+        "threshold_scheme": "norm_minus_eps",
+        "true_positive_rate": 1.0,
+        "false_positive_rate": 0.0001021021021021021,
+        "perfect_selectivity_rate": 0.92,
+        "theoretical_lower_bound": 1.0,
+        "fp_rate_per_cell_mean": 0.0001021021021021021,
+        "fp_rate_per_cell_std": 0.00038456681523387176
+      },
+      {
+        "n_items": 2000,
+        "dim": 384,
+        "epsilon": 0.05,
+        "threshold_scheme": "norm_minus_eps",
+        "true_positive_rate": 1.0,
+        "false_positive_rate": 6.353176588294147e-05,
+        "perfect_selectivity_rate": 0.9,
+        "theoretical_lower_bound": 1.0,
+        "fp_rate_per_cell_mean": 6.353176588294147e-05,
+        "fp_rate_per_cell_std": 0.00020678612093098689
+      }
+    ],
+    "minilm::ball_scaled": [
+      {
+        "n_items": 50,
+        "dim": 384,
+        "epsilon": 0.05,
+        "threshold_scheme": "norm_minus_eps",
+        "true_positive_rate": 1.0,
+        "false_positive_rate": 0.0008163265306122449,
+        "perfect_selectivity_rate": 0.96,
+        "theoretical_lower_bound": 1.0,
+        "fp_rate_per_cell_mean": 0.0008163265306122448,
+        "fp_rate_per_cell_std": 0.003999166926992944
+      },
+      {
+        "n_items": 100,
+        "dim": 384,
+        "epsilon": 0.05,
+        "threshold_scheme": "norm_minus_eps",
+        "true_positive_rate": 1.0,
+        "false_positive_rate": 0.00020202020202020202,
+        "perfect_selectivity_rate": 0.98,
+        "theoretical_lower_bound": 1.0,
+        "fp_rate_per_cell_mean": 0.00020202020202020205,
+        "fp_rate_per_cell_std": 0.0014141414141414137
+      },
+      {
+        "n_items": 250,
+        "dim": 384,
+        "epsilon": 0.05,
+        "threshold_scheme": "norm_minus_eps",
+        "true_positive_rate": 1.0,
+        "false_positive_rate": 9.63855421686747e-05,
+        "perfect_selectivity_rate": 0.976,
+        "theoretical_lower_bound": 1.0,
+        "fp_rate_per_cell_mean": 9.63855421686747e-05,
+        "fp_rate_per_cell_std": 0.0006146546656934615
+      },
+      {
+        "n_items": 500,
+        "dim": 384,
+        "epsilon": 0.05,
+        "threshold_scheme": "norm_minus_eps",
+        "true_positive_rate": 1.0,
+        "false_positive_rate": 2.404809619238477e-05,
+        "perfect_selectivity_rate": 0.988,
+        "theoretical_lower_bound": 1.0,
+        "fp_rate_per_cell_mean": 2.4048096192384767e-05,
+        "fp_rate_per_cell_std": 0.00021820693529164245
+      },
+      {
+        "n_items": 1000,
+        "dim": 384,
+        "epsilon": 0.05,
+        "threshold_scheme": "norm_minus_eps",
+        "true_positive_rate": 1.0,
+        "false_positive_rate": 0.0001021021021021021,
+        "perfect_selectivity_rate": 0.92,
+        "theoretical_lower_bound": 1.0,
+        "fp_rate_per_cell_mean": 0.0001021021021021021,
+        "fp_rate_per_cell_std": 0.00038456681523387176
+      },
+      {
+        "n_items": 2000,
+        "dim": 384,
+        "epsilon": 0.05,
+        "threshold_scheme": "norm_minus_eps",
+        "true_positive_rate": 1.0,
+        "false_positive_rate": 6.353176588294147e-05,
+        "perfect_selectivity_rate": 0.9,
+        "theoretical_lower_bound": 1.0,
+        "fp_rate_per_cell_mean": 6.353176588294147e-05,
+        "fp_rate_per_cell_std": 0.00020678612093098689
+      }
+    ],
+    "minilm::whitened_scaled": [
+      {
+        "n_items": 50,
+        "dim": 384,
+        "epsilon": 0.05,
+        "threshold_scheme": "norm_minus_eps",
+        "true_positive_rate": 1.0,
+        "false_positive_rate": 0.0,
+        "perfect_selectivity_rate": 1.0,
+        "theoretical_lower_bound": 1.0,
+        "fp_rate_per_cell_mean": 0.0,
+        "fp_rate_per_cell_std": 0.0
+      },
+      {
+        "n_items": 100,
+        "dim": 384,
+        "epsilon": 0.05,
+        "threshold_scheme": "norm_minus_eps",
+        "true_positive_rate": 1.0,
+        "false_positive_rate": 0.0,
+        "perfect_selectivity_rate": 1.0,
+        "theoretical_lower_bound": 1.0,
+        "fp_rate_per_cell_mean": 0.0,
+        "fp_rate_per_cell_std": 0.0
+      },
+      {
+        "n_items": 250,
+        "dim": 384,
+        "epsilon": 0.05,
+        "threshold_scheme": "norm_minus_eps",
+        "true_positive_rate": 1.0,
+        "false_positive_rate": 6.42570281124498e-05,
+        "perfect_selectivity_rate": 0.984,
+        "theoretical_lower_bound": 1.0,
+        "fp_rate_per_cell_mean": 6.425702811244979e-05,
+        "fp_rate_per_cell_std": 0.0005039160527343976
+      },
+      {
+        "n_items": 500,
+        "dim": 384,
+        "epsilon": 0.05,
+        "threshold_scheme": "norm_minus_eps",
+        "true_positive_rate": 1.0,
+        "false_positive_rate": 2.8056112224448898e-05,
+        "perfect_selectivity_rate": 0.986,
+        "theoretical_lower_bound": 1.0,
+        "fp_rate_per_cell_mean": 2.8056112224448894e-05,
+        "fp_rate_per_cell_std": 0.00023545175379117463
+      },
+      {
+        "n_items": 1000,
+        "dim": 384,
+        "epsilon": 0.05,
+        "threshold_scheme": "norm_minus_eps",
+        "true_positive_rate": 1.0,
+        "false_positive_rate": 5.605605605605606e-05,
+        "perfect_selectivity_rate": 0.949,
+        "theoretical_lower_bound": 1.0,
+        "fp_rate_per_cell_mean": 5.605605605605606e-05,
+        "fp_rate_per_cell_std": 0.00025097792102846556
+      },
+      {
+        "n_items": 2000,
+        "dim": 384,
+        "epsilon": 0.05,
+        "threshold_scheme": "norm_minus_eps",
+        "true_positive_rate": 1.0,
+        "false_positive_rate": 3.601800900450225e-05,
+        "perfect_selectivity_rate": 0.936,
+        "theoretical_lower_bound": 1.0,
+        "fp_rate_per_cell_mean": 3.601800900450225e-05,
+        "fp_rate_per_cell_std": 0.0001439608264020406
+      }
+    ]
+  }
+}

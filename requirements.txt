@@ -1,0 +1,17 @@
+# Core
+torch>=2.0
+numpy>=1.24
+scipy>=1.10
+
+# Encoders
+sentence-transformers>=2.2
+transformers>=4.30
+
+# Data + plots
+datasets>=2.10
+matplotlib>=3.7
+seaborn>=0.12
+tqdm>=4.65
+
+# Dev
+pytest>=7.0

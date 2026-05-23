@@ -1,0 +1,102 @@
+{
+  "params": {
+    "n_trials": 50,
+    "m_values": [
+      2,
+      3,
+      5,
+      8
+    ],
+    "n_pool": 1500,
+    "n_distractors": 500,
+    "theta": 0.3,
+    "eps": 0.05,
+    "alpha": 1.0,
+    "dt": 0.05,
+    "n_steps": 300
+  },
+  "synthetic": {
+    "2": {
+      "m": 2,
+      "n_trials": 50,
+      "success_rate": 1.0,
+      "mean_alignment_to_mean": 1.0000000047683715,
+      "trials_all_items_fired": 1.0,
+      "trials_with_any_false_fire": 0.0,
+      "mean_false_fires_per_trial": 0.0,
+      "theoretical_theta_star": 0.6009477236426197
+    },
+    "3": {
+      "m": 3,
+      "n_trials": 50,
+      "success_rate": 1.0,
+      "mean_alignment_to_mean": 1.000000010728836,
+      "trials_all_items_fired": 1.0,
+      "trials_with_any_false_fire": 0.0,
+      "mean_false_fires_per_trial": 0.0,
+      "theoretical_theta_star": 0.43836657656891503
+    },
+    "5": {
+      "m": 5,
+      "n_trials": 50,
+      "success_rate": 1.0,
+      "mean_alignment_to_mean": 1.0000000131130218,
+      "trials_all_items_fired": 1.0,
+      "trials_with_any_false_fire": 0.0,
+      "mean_false_fires_per_trial": 0.0,
+      "theoretical_theta_star": 0.2690956863540364
+    },
+    "8": {
+      "m": 8,
+      "n_trials": 50,
+      "success_rate": 0.28,
+      "mean_alignment_to_mean": 0.9999999940395355,
+      "trials_all_items_fired": 0.28,
+      "trials_with_any_false_fire": 0.0,
+      "mean_false_fires_per_trial": 0.0,
+      "theoretical_theta_star": 0.14525032514353217
+    }
+  },
+  "real": {
+    "2": {
+      "m": 2,
+      "n_trials": 50,
+      "success_rate": 1.0,
+      "mean_alignment_to_mean": 0.999999920129776,
+      "trials_all_items_fired": 1.0,
+      "trials_with_any_false_fire": 0.0,
+      "mean_false_fires_per_trial": 0.0,
+      "theoretical_theta_star": 0.6009477236426197
+    },
+    "3": {
+      "m": 3,
+      "n_trials": 50,
+      "success_rate": 0.92,
+      "mean_alignment_to_mean": 1.0000000023841857,
+      "trials_all_items_fired": 0.92,
+      "trials_with_any_false_fire": 0.0,
+      "mean_false_fires_per_trial": 0.0,
+      "theoretical_theta_star": 0.43836657656891503
+    },
+    "5": {
+      "m": 5,
+      "n_trials": 50,
+      "success_rate": 0.02,
+      "mean_alignment_to_mean": 1.0000000035762786,
+      "trials_all_items_fired": 0.02,
+      "trials_with_any_false_fire": 0.0,
+      "mean_false_fires_per_trial": 0.0,
+      "theoretical_theta_star": 0.2690956863540364
+    },
+    "8": {
+      "m": 8,
+      "n_trials": 50,
+      "success_rate": 0.0,
+      "mean_alignment_to_mean": 0.9999999988079071,
+      "trials_all_items_fired": 0.0,
+      "trials_with_any_false_fire": 0.0,
+      "mean_false_fires_per_trial": 0.0,
+      "theoretical_theta_star": 0.14525032514353217
+    }
+  }
+}

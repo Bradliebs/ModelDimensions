@@ -1,0 +1,253 @@
+TOP CONFUSION PAIRS (highest semantic similarity)
+================================================================================
+These are off-diagonal firings: cell i fires for query j != i.
+Sorted by cosine similarity of the two items' embeddings.
+If these look semantically related, the 'failures' are features.
+================================================================================
+
+# 1  sim=+1.0000  cell=1745  query=1751
+     cell item  : IBM adds four-way 550 server to new i5 product line IBM Corp. bolstered the new eServer i5 server lineup with the i5 550, a new system based on the Power 5 chip that can run multip
+     query item : IBM adds four-way 550 server to new i5 product line IBM Corp. bolstered the new eServer i5 server lineup with the i5 550, a new system based on the Power 5 chip that can run multip
+
+# 2  sim=+1.0000  cell=1751  query=1745
+     cell item  : IBM adds four-way 550 server to new i5 product line IBM Corp. bolstered the new eServer i5 server lineup with the i5 550, a new system based on the Power 5 chip that can run multip
+     query item : IBM adds four-way 550 server to new i5 product line IBM Corp. bolstered the new eServer i5 server lineup with the i5 550, a new system based on the Power 5 chip that can run multip
+
+# 3  sim=+1.0000  cell=674  query=790
+     cell item  : Government Spending Up Sharply Locally  Federal procurement spending in the Washington area rose last year at its highest rate since the 1980s, according to a study to be released 
+     query item : Government Spending Up Sharply Locally Federal procurement spending in the Washington area rose last year at its highest rate since the 1980s, according to a study to be released t
+
+# 4  sim=+1.0000  cell=790  query=674
+     cell item  : Government Spending Up Sharply Locally Federal procurement spending in the Washington area rose last year at its highest rate since the 1980s, according to a study to be released t
+     query item : Government Spending Up Sharply Locally  Federal procurement spending in the Washington area rose last year at its highest rate since the 1980s, according to a study to be released 
+
+# 5  sim=+1.0000  cell=1592  query=1617
+     cell item  : Medical Examiner Finds No Injuries on Thanou-Source  ATHENS (Reuters) - A medical examiner has found that Greek  sprinter Katerina Thanou, who was in hospital with fellow  athlete 
+     query item : Medical Examiner Finds No Injuries on Thanou-Source ATHENS (Reuters) - A medical examiner has found that Greek sprinter Katerina Thanou, who was in hospital with fellow athlete Cos
+
+# 6  sim=+1.0000  cell=1397  query=1495
+     cell item  : Housing Starts Rebound Sharply in July  WASHINGTON (Reuters) - Housing starts rebounded sharply in  July, making up almost all the ground lost in a June slump by  posting their lar
+     query item : Housing Starts Rebound Sharply in July WASHINGTON (Reuters) - Housing starts rebounded sharply in July, making up almost all the ground lost in a June slump by posting their larges
+
+# 7  sim=+1.0000  cell=1495  query=1397
+     cell item  : Housing Starts Rebound Sharply in July WASHINGTON (Reuters) - Housing starts rebounded sharply in July, making up almost all the ground lost in a June slump by posting their larges
+     query item : Housing Starts Rebound Sharply in July  WASHINGTON (Reuters) - Housing starts rebounded sharply in  July, making up almost all the ground lost in a June slump by  posting their lar
+
+# 8  sim=+1.0000  cell=1552  query=1568
+     cell item  : Sharon Allows 1,000 More Settler Homes in West Bank JERUSALEM (Reuters) - Prime Minister Ariel Sharon approved tenders to build 1,000 more Israeli settler homes in the occupied Wes
+     query item : Sharon Allows 1,000 More Settler Homes in West Bank  JERUSALEM (Reuters) - Prime Minister Ariel Sharon approved  tenders to build 1,000 more Israeli settler homes in the  occupied 
+
+# 9  sim=+1.0000  cell=1617  query=1592
+     cell item  : Medical Examiner Finds No Injuries on Thanou-Source ATHENS (Reuters) - A medical examiner has found that Greek sprinter Katerina Thanou, who was in hospital with fellow athlete Cos
+     query item : Medical Examiner Finds No Injuries on Thanou-Source  ATHENS (Reuters) - A medical examiner has found that Greek  sprinter Katerina Thanou, who was in hospital with fellow  athlete 
+
+#10  sim=+1.0000  cell=1568  query=1552
+     cell item  : Sharon Allows 1,000 More Settler Homes in West Bank  JERUSALEM (Reuters) - Prime Minister Ariel Sharon approved  tenders to build 1,000 more Israeli settler homes in the  occupied 
+     query item : Sharon Allows 1,000 More Settler Homes in West Bank JERUSALEM (Reuters) - Prime Minister Ariel Sharon approved tenders to build 1,000 more Israeli settler homes in the occupied Wes
+
+#11  sim=+1.0000  cell=1935  query=1965
+     cell item  : Blast in Gaza Home of Hamas Man Kills 4 - Medics  GAZA (Reuters) - An explosion tore through the home of a  senior Hamas militant in Gaza on Wednesday, killing at least  four peopl
+     query item : Blast in Gaza Home of Hamas Man Kills 4 - Medics GAZA (Reuters) - An explosion tore through the home of a senior Hamas militant in Gaza on Wednesday, killing at least four people a
+
+#12  sim=+1.0000  cell=1965  query=1935
+     cell item  : Blast in Gaza Home of Hamas Man Kills 4 - Medics GAZA (Reuters) - An explosion tore through the home of a senior Hamas militant in Gaza on Wednesday, killing at least four people a
+     query item : Blast in Gaza Home of Hamas Man Kills 4 - Medics  GAZA (Reuters) - An explosion tore through the home of a  senior Hamas militant in Gaza on Wednesday, killing at least  four peopl
+
+#13  sim=+1.0000  cell=533  query=537
+     cell item  : Phelps, Thorpe Advance in 200 Freestyle ATHENS, Greece - Michael Phelps took care of qualifying for the Olympic 200-meter freestyle semifinals Sunday, and then found out he had bee
+     query item : Phelps, Thorpe Advance in 200 Freestyle ATHENS, Greece - Michael Phelps took care of qualifying for the Olympic 200-meter freestyle semifinals Sunday, and then found out he had bee
+
+#14  sim=+1.0000  cell=537  query=533
+     cell item  : Phelps, Thorpe Advance in 200 Freestyle ATHENS, Greece - Michael Phelps took care of qualifying for the Olympic 200-meter freestyle semifinals Sunday, and then found out he had bee
+     query item : Phelps, Thorpe Advance in 200 Freestyle ATHENS, Greece - Michael Phelps took care of qualifying for the Olympic 200-meter freestyle semifinals Sunday, and then found out he had bee
+
+#15  sim=+1.0000  cell=1686  query=1673
+     cell item  : Microsoft readies Host Integration Server 2004 In a continued effort to compete with IBM Corp. and its WebSphere offerings, Microsoft Corp. on Tuesday announced imminent availabili
+     query item : Microsoft readies Host Integration Server 2004 In a continued effort to compete with IBM Corp. and its WebSphere offerings, Microsoft Corp. on Tuesday announced imminent availabili
+
+#16  sim=+1.0000  cell=1673  query=1686
+     cell item  : Microsoft readies Host Integration Server 2004 In a continued effort to compete with IBM Corp. and its WebSphere offerings, Microsoft Corp. on Tuesday announced imminent availabili
+     query item : Microsoft readies Host Integration Server 2004 In a continued effort to compete with IBM Corp. and its WebSphere offerings, Microsoft Corp. on Tuesday announced imminent availabili
+
+#17  sim=+0.9999  cell=1864  query=1846
+     cell item  : Sharon Allows 1,000 More Settler Homes in West Bank  JERUSALEM (Reuters) - Prime Minister Ariel Sharon, facing a  party mutiny over his plan to quit the Gaza Strip, has approved  1
+     query item : Sharon Allows 1,000 More Settler Homes in West Bank  JERUSALEM (Reuters) - Prime Minister Ariel Sharon, facing a  party mutiny over his plan to quit the Gaza Strip, has approved  1
+
+#18  sim=+0.9999  cell=1846  query=1864
+     cell item  : Sharon Allows 1,000 More Settler Homes in West Bank  JERUSALEM (Reuters) - Prime Minister Ariel Sharon, facing a  party mutiny over his plan to quit the Gaza Strip, has approved  1
+     query item : Sharon Allows 1,000 More Settler Homes in West Bank  JERUSALEM (Reuters) - Prime Minister Ariel Sharon, facing a  party mutiny over his plan to quit the Gaza Strip, has approved  1
+
+#19  sim=+0.9994  cell=1025  query=1070
+     cell item  : Congolese Massacre Victims in Burundi Mourned  GATUMBA, Burundi (Reuters) - Mourners covered their faces  to block the smell of disinfectant and death Monday as they  buried more t
+     query item : Congolese Massacre Victims in Burundi Mourned  GATUMBA, Burundi (Reuters) - Mourners covered their faces  to block the smell of disinfectant and death on Monday as they  buried mor
+
+#20  sim=+0.9994  cell=1070  query=1025
+     cell item  : Congolese Massacre Victims in Burundi Mourned  GATUMBA, Burundi (Reuters) - Mourners covered their faces  to block the smell of disinfectant and death on Monday as they  buried mor
+     query item : Congolese Massacre Victims in Burundi Mourned  GATUMBA, Burundi (Reuters) - Mourners covered their faces  to block the smell of disinfectant and death Monday as they  buried more t
+
+#21  sim=+0.9992  cell=735  query=818
+     cell item  : Israel Turns Up Heat on Palestinian Hunger Strike  JERUSALEM (Reuters) - Israel declared psychological war on  hunger-striking Palestinian prisoners on Monday, saying it  would bar
+     query item : Israel Turns Up Heat on Palestinian Hunger Strike  JERUSALEM (Reuters) - Israel declared psychological war on  hunger-striking Palestinian prisoners Monday, saying it would  barbec
+
+#22  sim=+0.9992  cell=818  query=735
+     cell item  : Israel Turns Up Heat on Palestinian Hunger Strike  JERUSALEM (Reuters) - Israel declared psychological war on  hunger-striking Palestinian prisoners Monday, saying it would  barbec
+     query item : Israel Turns Up Heat on Palestinian Hunger Strike  JERUSALEM (Reuters) - Israel declared psychological war on  hunger-striking Palestinian prisoners on Monday, saying it  would bar
+
+#23  sim=+0.9989  cell=546  query=10
+     cell item  : Oil and Economy Cloud Stocks' Outlook  NEW YORK (Reuters) - Soaring crude prices plus worries  about the economy and the outlook for earnings are expected to  hang over the stock m
+     query item : Oil and Economy Cloud Stocks' Outlook  NEW YORK (Reuters) - Soaring crude prices plus worries  about the economy and the outlook for earnings are expected to  hang over the stock m
+
+#24  sim=+0.9989  cell=10  query=546
+     cell item  : Oil and Economy Cloud Stocks' Outlook  NEW YORK (Reuters) - Soaring crude prices plus worries  about the economy and the outlook for earnings are expected to  hang over the stock m
+     query item : Oil and Economy Cloud Stocks' Outlook  NEW YORK (Reuters) - Soaring crude prices plus worries  about the economy and the outlook for earnings are expected to  hang over the stock m
+
+#25  sim=+0.9985  cell=711  query=685
+     cell item  : F.B.I. Goes Knocking for Political Troublemakers The F.B.I. has been questioning demonstrators in an effort to forestall violent protests at the Republican convention.
+     query item : F.B.I. Goes Knocking for Political Troublemakers The F.B.I. has been questioning demonstrators in an effort to forestall violent protests at the Republican National Convention.
+
+#26  sim=+0.9985  cell=685  query=711
+     cell item  : F.B.I. Goes Knocking for Political Troublemakers The F.B.I. has been questioning demonstrators in an effort to forestall violent protests at the Republican National Convention.
+     query item : F.B.I. Goes Knocking for Political Troublemakers The F.B.I. has been questioning demonstrators in an effort to forestall violent protests at the Republican convention.
+
+#27  sim=+0.9983  cell=1977  query=1938
+     cell item  : Thrilling Relay Win Gets Phelps Third Gold ATHENS, Greece - Now this was a duel in the pool. With Michael Phelps leading off Tuesday night, the United States bested its top rival i
+     query item : Thrilling Relay Win Gets Phelps Third Gold ATHENS, Greece - Now this was a duel in the pool. With Michael Phelps leading off Tuesday night, the United States bested its rival from 
+
+#28  sim=+0.9983  cell=1938  query=1977
+     cell item  : Thrilling Relay Win Gets Phelps Third Gold ATHENS, Greece - Now this was a duel in the pool. With Michael Phelps leading off Tuesday night, the United States bested its rival from 
+     query item : Thrilling Relay Win Gets Phelps Third Gold ATHENS, Greece - Now this was a duel in the pool. With Michael Phelps leading off Tuesday night, the United States bested its top rival i
+
+#29  sim=+0.9982  cell=2  query=543
+     cell item  : Oil and Economy Cloud Stocks' Outlook (Reuters) Reuters - Soaring crude prices plus worries\about the economy and the outlook for earnings are expected to\hang over the stock marke
+     query item : Oil and Economy Cloud Stocks' Outlook (Reuters) Reuters - Soaring crude prices plus worries\about the economy and the outlook for earnings are expected to\hang over the stock marke
+
+#30  sim=+0.9982  cell=543  query=2
+     cell item  : Oil and Economy Cloud Stocks' Outlook (Reuters) Reuters - Soaring crude prices plus worries\about the economy and the outlook for earnings are expected to\hang over the stock marke
+     query item : Oil and Economy Cloud Stocks' Outlook (Reuters) Reuters - Soaring crude prices plus worries\about the economy and the outlook for earnings are expected to\hang over the stock marke
+
+
+================================================================================
+BOTTOM CONFUSION PAIRS (lowest semantic similarity)
+These are confusions that aren't explained by semantic similarity.
+If these dominate, the architecture has a real noise problem.
+================================================================================
+
+# 1  sim=+0.8550  cell=875  query=937
+     cell item  : EU Extends Microsoft-Time Warner Review (AP) AP - European antitrust regulators said Monday they have extended their review of a deal between Microsoft Corp. and Time Warner Inc. t
+     query item : E.U. Extends Review of Anti-Piracy Software Deal European antitrust regulators said Monday they have extended their review of a deal between Microsoft Corp. and Time Warner Inc. to
+
+# 2  sim=+0.8691  cell=91  query=266
+     cell item  : Building Dedicated to Columbia Astronauts (AP) AP - A former dormitory converted to classrooms at the Pensacola Naval Air Station was dedicated Friday to two Columbia astronauts wh
+     query item : Building Dedicated to Space Shuttle Columbia Astronauts By BILL KACZOR    PENSACOLA, Fla. (AP) -- A former dormitory converted to classrooms at the Pensacola Naval Air Station was 
+
+# 3  sim=+0.8805  cell=118  query=296
+     cell item  : Scientists Probe Pacific for Dead Zone (AP) AP - His hand on a toggle switch and his eyes on a computer screen, Oregon State University graduate student Anthony Kirincich uses an a
+     query item : Scientists Probe Pacific Ocean for Dead Zones His hand on a toggle switch and his eyes on a computer screen, Oregon State University graduate student Anthony Kirincich uses an arra
+
+# 4  sim=+0.8849  cell=90  query=554
+     cell item  : Science, Politics Collide in Election Year (AP) AP - With more than 4,000 scientists, including 48 Nobel Prize winners, having signed a statement opposing the Bush administration's
+     query item : Science and President Bush Collide in Election Year With more than 4,000 scientists, including 48 Nobel Prize winners, having signed a statement opposing the Bush administration's 
+
+# 5  sim=+0.9058  cell=1235  query=1366
+     cell item  : Rival Targets Apple's ITunes Customers (AP) AP - For more than a year, Apple Computers Inc. enjoyed singular success selling songs exclusively to users of its iPod portable music p
+     query item : Rival Targets Apple's ITunes Customers For more than a year, Apple Computers Inc. enjoyed singular success selling songs exclusively to users of its iPod portable music player. Now
+
+# 6  sim=+0.9240  cell=131  query=281
+     cell item  : Japanese Lunar Probe Facing Delays (AP) AP - A lunar orbiter that Japan had planned to launch this year could face further delays, possibly until next year or later, because of a f
+     query item : Japanese Lunar Probe Mission Facing Delays TOKYO (AP) -- A lunar orbiter that Japan had planned to launch this year could face further delays, possibly until next year or later, be
+
+# 7  sim=+0.9270  cell=1399  query=1511
+     cell item  : Researchers Develop Method to Find Algae (AP) AP - Marine researchers are hoping to prevent tides of destructive algae from killing fish and fouling beaches through early detection
+     query item : Researchers Develop Method to Find Algae HOUSTON - Marine researchers are hoping to prevent tides of destructive algae from killing fish and fouling beaches through early detection
+
+# 8  sim=+0.9435  cell=542  query=545
+     cell item  : Art Looks Like Fine Investment for Funds (Reuters) Reuters - Some mutual funds invest in stocks;\others invest in bonds. Now a new breed of funds is offering\the chance to own fine
+     query item : Art Looks Like Fine Investment for Funds  NEW YORK (Reuters) - Some mutual funds invest in stocks;  others invest in bonds. Now a new breed of funds is offering  the chance to own 
+
+# 9  sim=+0.9446  cell=1789  query=1805
+     cell item  : Holiday Pals Berlusconi, Blair Cement Ties (AP) AP - With a bandanna on his head and a grin on his cheeks, Italy's flamboyant Premier Silvio Berlusconi has been playing vacation ho
+     query item : Holiday Pals Berlusconi, Blair Cement Ties With a bandanna on his head and a grin on his cheeks, Italy #39;s flamboyant Premier Silvio Berlusconi has been playing vacation host to 
+
+#10  sim=+0.9459  cell=1305  query=857
+     cell item  : Czech hockey coach Hlinka dies after car crash Ivan Hlinka, a former Pittsburgh Penguins coach who led the Czech Republic to a gold medal at the 1998 Nagano Olympics, died yesterda
+     query item : Czech Coach Hlinka Dies in Car Accident (AP) AP - Czech Republic national ice hockey team coach, and former Pittsburgh Penguins coach, Ivan Hlinka died Monday after sustaining seri
+
+#11  sim=+0.9484  cell=1126  query=1904
+     cell item  : IBM seeks dismissal in second part of SCO case SAN FRANCISCO - IBM Corp. is seeking dismissal of a second major component of the lawsuit filed against it last year by Unix vendor T
+     query item : IBM seeks dismissal in second part of SCO case In documents filed Friday with the U.S. District Court for the District of Utah, IBM sought the dismissal of a major component of the
+
+#12  sim=+0.9529  cell=1298  query=1348
+     cell item  : Motorola Expects Strong Sales Growth  SINGAPORE (Reuters) - Motorola Inc., the world's  second-largest mobile phone maker, said on Tuesday it expects  to sustain strong sales growt
+     query item : Motorola Expects Strong Sales Growth Motorola Inc., the world's\second-largest mobile phone maker, said on Tuesday it expects\to sustain strong sales growth in the second half of 2
+
+#13  sim=+0.9547  cell=569  query=505
+     cell item  : Mortars Mark Opening of Iraqi Political Conference (Reuters) Reuters - Insurgents fired mortars at a meeting\where Iraqi leaders met to pick an interim national assembly\Sunday, ki
+     query item : Mortars Mark Opening of Iraqi Political Conference  BAGHDAD (Reuters) - Insurgents fired mortars at a meeting  where Iraqi leaders met to pick an interim national assembly  Sunday,
+
+#14  sim=+0.9555  cell=1007  query=1016
+     cell item  : Venezuela's Chavez Wins Recall Referendum  CARACAS, Venezuela (Reuters) - Venezuela's left-wing  President Hugo Chavez won a recall referendum on his divisive  rule in a vote backe
+     query item : Venezuela's Chavez Wins Recall Referendum (Reuters) Reuters - Venezuela's left-wing\President Hugo Chavez won a recall referendum on his divisive\rule in a vote backed on Monday by
+
+#15  sim=+0.9568  cell=537  query=448
+     cell item  : Phelps, Thorpe Advance in 200 Freestyle ATHENS, Greece - Michael Phelps took care of qualifying for the Olympic 200-meter freestyle semifinals Sunday, and then found out he had bee
+     query item : Phelps, Thorpe Advance in 200 Freestyle (AP) AP - Michael Phelps took care of qualifying for the Olympic 200-meter freestyle semifinals Sunday, and then found out he had been added
+
+#16  sim=+0.9568  cell=533  query=448
+     cell item  : Phelps, Thorpe Advance in 200 Freestyle ATHENS, Greece - Michael Phelps took care of qualifying for the Olympic 200-meter freestyle semifinals Sunday, and then found out he had bee
+     query item : Phelps, Thorpe Advance in 200 Freestyle (AP) AP - Michael Phelps took care of qualifying for the Olympic 200-meter freestyle semifinals Sunday, and then found out he had been added
+
+#17  sim=+0.9585  cell=1785  query=1826
+     cell item  : Advertisers Go Digital to Track Ads  NEW YORK (Reuters) - Top marketers are going digital to  track the delivery of commercials into U.S. homes with a system  some advocates say wi
+     query item : Advertisers Go Digital to Track Ads (Reuters) Reuters - Top marketers are going digital to\track the delivery of commercials into U.S. homes with a system\some advocates say will r
+
+#18  sim=+0.9588  cell=1397  query=1403
+     cell item  : Housing Starts Rebound Sharply in July  WASHINGTON (Reuters) - Housing starts rebounded sharply in  July, making up almost all the ground lost in a June slump by  posting their lar
+     query item : Housing Starts Rebound Sharply in July (Reuters) Reuters - Housing starts rebounded sharply in\July, making up almost all the ground lost in a June slump by\posting their largest m
+
+#19  sim=+0.9588  cell=1495  query=1403
+     cell item  : Housing Starts Rebound Sharply in July WASHINGTON (Reuters) - Housing starts rebounded sharply in July, making up almost all the ground lost in a June slump by posting their larges
+     query item : Housing Starts Rebound Sharply in July (Reuters) Reuters - Housing starts rebounded sharply in\July, making up almost all the ground lost in a June slump by\posting their largest m
+
+#20  sim=+0.9596  cell=884  query=893
+     cell item  : KMart Posts Profit; Cash Pile Grows  CHICAGO (Reuters) - Kmart Holding Corp. &lt;KMRT.O&gt; on Monday  reported its third consecutive quarterly profit despite  slumping sales as it
+     query item : KMart Posts Profit; Cash Pile Grows (Reuters) Reuters - Kmart Holding Corp. (KMRT.O) on Monday\reported its third consecutive quarterly profit despite\slumping sales as it cut jobs
+
+#21  sim=+0.9668  cell=1743  query=1444
+     cell item  : Last Call for Investors to Bid on Google (Reuters) Reuters - Time is running out for prospective\investors to submit their offers to buy shares of Google Inc.\(GOOG.O), the Web's N
+     query item : Last Call for Investors to Bid on Google (Reuters) Reuters - Time is running out for prospective\investors to submit their offers to buy shares of Google Inc,\the Web's No. 1 searc
+
+#22  sim=+0.9674  cell=1439  query=1344
+     cell item  : Warming threatens California wine California will become hotter and drier by the end of the century, threatening its valuable wine and dairy industries, US experts say.
+     query item : Warming threatens California wine California is to get hotter and drier by the end of the century, threatening its valuable wine industry.
+
+#23  sim=+0.9687  cell=576  query=568
+     cell item  : Nearly 10 Million Afghans to Embrace Democracy  KABUL (Reuters) - Thousands of U.S. troops in Afghanistan  may have failed to catch Osama bin Laden but they are credited  with enco
+     query item : Nearly 10 Million Afghans to Embrace Democracy (Reuters) Reuters - Thousands of U.S. troops in Afghanistan\may have failed to catch Osama bin Laden but they are credited\with encou
+
+#24  sim=+0.9688  cell=1216  query=1218
+     cell item  : Nikkei Rises by Midday  TOKYO (Reuters) - Gains in banks and exporters helped lift  Tokyo's Nikkei average 0.84 percent by midday on Tuesday as a  fall in crude oil prices and a re
+     query item : Nikkei Rises by Midday (Reuters) Reuters - Gains in banks and exporters helped lift\Tokyo's Nikkei average 0.84 percent by midday on Tuesday as a\fall in crude oil prices and a reb
+
+#25  sim=+0.9689  cell=1400  query=1438
+     cell item  : U.S. Brokers Cease-fire in Western Afghanistan  KABUL (Reuters) - The United States has brokered a  cease-fire between a renegade Afghan militia leader and the  embattled governor 
+     query item : U.S. Brokers Cease-fire in Western Afghanistan (Reuters) Reuters - The United States has brokered a\cease-fire between a renegade Afghan militia leader and the\embattled governor o
+
+#26  sim=+0.9690  cell=1638  query=1806
+     cell item  : Illinois Helps Residents Import Drugs  CHICAGO (Reuters) - Illinois residents will soon gain  access to lower-cost prescription drugs from Canada, the United  Kingdom and Ireland, 
+     query item : Illinois Helps Residents Import Prescription Drugs  CHICAGO (Reuters) - Illinois residents will soon be able to  buy lower-cost prescription drugs from Canada, the United  Kingdom 
+
+#27  sim=+0.9713  cell=638  query=639
+     cell item  : Rwanda Troops Start AU Mission in Darfur (Reuters) Reuters - Rwandan troops arrived in\Darfur Sunday as the first foreign force there, mandated to\protect observers monitoring a sh
+     query item : Rwanda Troops Start AU Mission in Darfur  EL FASHER, Sudan (Reuters) - Rwandan troops arrived in  Darfur Sunday as the first foreign force there, mandated to  protect observers mon
+
+#28  sim=+0.9730  cell=1342  query=1333
+     cell item  : Dollar Mired Near Lows Before U.S. Data (Reuters) Reuters - The dollar hovered near a one-month low\against the euro on Tuesday as investors awaited U.S. inflation\data later in th
+     query item : Dollar Mired Near Lows Before U.S. Data  LONDON (Reuters) - The dollar hovered near a one-month low  against the euro on Tuesday as investors awaited U.S. inflation  data later in 
+
+#29  sim=+0.9730  cell=1333  query=1342
+     cell item  : Dollar Mired Near Lows Before U.S. Data  LONDON (Reuters) - The dollar hovered near a one-month low  against the euro on Tuesday as investors awaited U.S. inflation  data later in 
+     query item : Dollar Mired Near Lows Before U.S. Data (Reuters) Reuters - The dollar hovered near a one-month low\against the euro on Tuesday as investors awaited U.S. inflation\data later in th
+
+#30  sim=+0.9733  cell=837  query=839
+     cell item  : Darfur Displaced Return to 'Live in Fear' of Militia (Reuters) Reuters - Villagers returning to their\homes in Sudan's Darfur region are living in fear of the Arab\militiamen who i
+     query item : Darfur Displaced Return to 'Live in Fear' of Militia  KHARTOUM, Sudan (Reuters) - Villagers returning to their  homes in Sudan's Darfur region are living in fear of the Arab  milit
