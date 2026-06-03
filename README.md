@@ -275,6 +275,61 @@ Pieces:
 python -m pytest evals/test_workbench_service.py -q   # workbench tests, offline
 ```
 
+## Importing Notes
+
+v1.2 adds **ingestion with a human approval queue**. You can import a Markdown or
+text note, and the workbench extracts *candidate* memories from it — but nothing
+is written to memory until you approve it. Extraction is deterministic and
+offline (rule-based, **no LLM**): headings become context tags, bullet points
+become candidate facts, and lines mentioning a decision, result, limitation,
+next step, or similar keyword are prioritised.
+
+The key safety property: **imported notes never write memory silently.** A
+candidate only becomes a real memory when a human approves it, and approved
+candidates are written through the same frozen v1.0 `add_memory` path. Rejected
+candidates are kept in the queue (so the review is auditable) but are never
+written, and so can never be retrieved or cited.
+
+CLI commands:
+
+```text
+import <path>            extract candidate memories from a note (queued, not written)
+proposals                show pending candidates awaiting review
+approve <proposal_id>    approve a candidate so write-approved will store it
+reject <proposal_id>     reject a candidate (it is never written)
+edit <proposal_id> <text>  edit a candidate's text before approving
+write-approved           write only approved candidates into the ledger
+queue-export [path]      write the proposal queue JSONL
+```
+
+Typical flow:
+
+```text
+workbench> import demos/seed_ingestion_note.md
+  imported 10 candidate(s) ... (queued as pending; nothing written yet)
+workbench> proposals
+  prop-xxxxxxxx  [decision] (conf 0.80, L11)  Decision: keep the v1.0 geometry frozen ...
+  ...
+workbench> approve prop-xxxxxxxx
+workbench> reject prop-yyyyyyyy
+workbench> write-approved
+  wrote mem-0001: "Decision: keep the v1.0 geometry frozen ..."
+workbench> query keep the v1.0 geometry frozen   # now grounded; rejected never appears
+```
+
+Pieces:
+
+| File | Purpose |
+|---|---|
+| `src/agent/note_ingestion.py` | Deterministic, rule-based candidate extraction |
+| `src/agent/memory_proposals.py` | Proposal data model (status, kind, provenance) |
+| `src/agent/proposal_queue.py` | JSONL approval queue (pending/approved/rejected/edited) |
+| `demos/seed_ingestion_note.md` | Example note for the import workflow |
+
+```bash
+python -m pytest evals/test_ingestion_approval.py -q   # ingestion tests, offline
+```
+
 ## License
 
 To be decided.

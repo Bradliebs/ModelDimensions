@@ -30,7 +30,9 @@ sys.path.insert(0, str(ROOT / "src"))
 from agent.workbench_service import QueryAudit, WorkbenchService  # noqa: E402
 
 _DEFAULT_LEDGER = ROOT / "demos" / "workbench_ledger.jsonl"
+_DEFAULT_QUEUE = ROOT / "demos" / "workbench_proposals.jsonl"
 _SEED_FILE = ROOT / "demos" / "seed_concept_cells_project.jsonl"
+_INGEST_NOTE = ROOT / "demos" / "seed_ingestion_note.md"
 
 # The canonical Friday -> Monday example: a stored fact and a one-word near-miss.
 _FRIDAY_FACT = "the supplier delivery is on Friday afternoon"
@@ -69,6 +71,13 @@ Commands:
   query <text>          retrieve -> verify -> ground (shows the audit trail)
   delete <memory_id>    delete a memory (it can no longer be cited)
   ledger                show the memory ledger (active / deleted)
+  import <path>         extract candidate memories from a note (queued, not written)
+  proposals             show pending candidate memories awaiting review
+  approve <proposal_id> approve a candidate so write-approved will store it
+  reject <proposal_id>  reject a candidate (it is never written)
+  edit <proposal_id> <text>  edit a candidate's text before approving
+  write-approved        write only approved candidates into the ledger
+  queue-export [path]   write the proposal queue JSONL
   demo                  run the Friday -> Monday near-miss example
   export [path]         write the ledger JSONL (defaults to the active ledger)
   help                  show this help
@@ -88,6 +97,23 @@ def _print_ledger(service: WorkbenchService) -> None:
         if tags:
             line += f"   (tags: {tags})"
         print(line)
+
+
+def _print_proposals(service: WorkbenchService) -> None:
+    rows = service.list_proposals(status="pending")
+    if not rows:
+        print("  (no pending proposals — import a note first)")
+        return
+    for p in rows:
+        tags = ",".join(p.tags) if p.tags else ""
+        loc = f"L{p.source_line_start}" if p.source_line_start else "?"
+        line = (f"  {p.proposal_id}  [{p.kind.value}] "
+                f"(conf {p.confidence:.2f}, {loc})  {p.canonical_text}")
+        if tags:
+            line += f"   (tags: {tags})"
+        print(line)
+        if p.reason:
+            print(f"      why: {p.reason}")
 
 
 def _run_demo() -> None:
@@ -152,6 +178,53 @@ def _repl(service: WorkbenchService) -> None:
             print(f"  deleted {arg}: {str(ok).lower()}")
         elif cmd == "ledger":
             _print_ledger(service)
+        elif cmd == "import":
+            if not arg:
+                print("  usage: import <path>")
+                continue
+            try:
+                batch = service.import_notes(arg)
+            except FileNotFoundError:
+                print(f"  no such file: {arg}")
+                continue
+            print(f"  imported {len(batch)} candidate(s) from {arg} "
+                  "(queued as pending; nothing written yet)")
+        elif cmd == "proposals":
+            _print_proposals(service)
+        elif cmd == "approve":
+            if not arg:
+                print("  usage: approve <proposal_id>")
+                continue
+            ok = service.approve_proposal(arg)
+            print(f"  approved {arg}: {str(ok).lower()}")
+        elif cmd == "reject":
+            if not arg:
+                print("  usage: reject <proposal_id>")
+                continue
+            ok = service.reject_proposal(arg)
+            print(f"  rejected {arg}: {str(ok).lower()}")
+        elif cmd == "edit":
+            edit_parts = arg.split(maxsplit=1)
+            if len(edit_parts) < 2:
+                print("  usage: edit <proposal_id> <new text>")
+                continue
+            ok = service.edit_proposal(edit_parts[0], edit_parts[1].strip())
+            print(f"  edited {edit_parts[0]}: {str(ok).lower()}")
+        elif cmd in {"write-approved", "write_approved"}:
+            written = service.write_approved_proposals()
+            if not written:
+                print("  no approved candidates to write")
+            else:
+                for entry in written:
+                    print(f"  wrote {entry.memory_id}: "
+                          f"\"{entry.canonical_text}\"")
+        elif cmd in {"queue-export", "queue_export"}:
+            target = Path(arg) if arg else service.proposals.path
+            if target is None:
+                print("  no queue path set; usage: queue-export <path>")
+                continue
+            service.proposals.export_to(target)
+            print(f"  exported proposal queue to {target}")
         elif cmd == "demo":
             _run_demo()
         elif cmd == "export":
@@ -183,7 +256,11 @@ def main(argv: list[str] | None = None) -> int:
         _run_demo()
         return 0
 
-    service = WorkbenchService(ledger_path=args.ledger, fresh=True)
+    service = WorkbenchService(
+        ledger_path=args.ledger,
+        fresh=True,
+        queue_path=str(Path(args.ledger).with_name("workbench_proposals.jsonl")),
+    )
     if args.seed and _SEED_FILE.exists():
         service.seed_from(_SEED_FILE)
 

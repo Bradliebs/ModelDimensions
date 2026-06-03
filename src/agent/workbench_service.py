@@ -27,7 +27,10 @@ from agent.candidate_retrieval import (
     retrieve_candidates,
 )
 from agent.memory_ledger import MemoryLedger
+from agent.memory_proposals import ProposalBatch
+from agent.note_ingestion import extract_candidate_memories, load_text_file
 from agent.orchestrator import DeterministicEncoder, EncoderProtocol, MemoryBank
+from agent.proposal_queue import ProposalQueue
 from agent.verifier import verify_candidate
 from slm.schemas import VerificationVerdict, VerifiedMemoryCandidate
 
@@ -91,7 +94,8 @@ class WorkbenchService:
 
     def __init__(self, ledger_path: Optional[str | Path] = None,
                  encoder: Optional[EncoderProtocol] = None,
-                 k: int = _K, fresh: bool = False):
+                 k: int = _K, fresh: bool = False,
+                 queue_path: Optional[str | Path] = None):
         self.bank = MemoryBank(
             encoder or DeterministicEncoder(dim=64),
             epsilon=_EPSILON,
@@ -103,6 +107,11 @@ class WorkbenchService:
         # aligned; the workbench app uses it because each launch rebuilds the
         # bank from scratch.
         self.ledger = MemoryLedger(ledger_path, load_existing=not fresh)
+        # The proposal queue is the v1.2 ingestion holding area: candidate
+        # memories live here until a human approves them. It follows the same
+        # ``fresh`` rule as the ledger so a relaunch does not double-apply a
+        # queue whose approved memories were already written.
+        self.proposals = ProposalQueue(queue_path, load_existing=not fresh)
         self.k = k
 
     # -- write --
@@ -166,11 +175,69 @@ class WorkbenchService:
         marked = self.ledger.mark_deleted(memory_id)
         return removed or marked
 
+    # -- ingestion / approval queue (v1.2) --
+
+    def import_notes(self, path: str | Path) -> ProposalBatch:
+        """Import a note, extract candidate memories, and queue them.
+
+        Extraction is deterministic and offline (no LLM). The returned batch
+        contains every candidate; the proposals are queued as ``pending`` and
+        nothing is written to the bank until a human approves them.
+        """
+        source_file = str(path)
+        text = load_text_file(path)
+        batch = extract_candidate_memories(text, source_file)
+        self.proposals.add_batch(batch)
+        return batch
+
+    def list_proposals(self, status: Optional[str] = "pending"):
+        """List queued proposals, filtered by status (``None`` for all)."""
+        return self.proposals.list(status)
+
+    def approve_proposal(self, proposal_id: str) -> bool:
+        """Approve a proposal so it will be written by ``write_approved``."""
+        return self.proposals.approve(proposal_id)
+
+    def reject_proposal(self, proposal_id: str) -> bool:
+        """Reject a proposal so it is never written to the bank."""
+        return self.proposals.reject(proposal_id)
+
+    def edit_proposal(self, proposal_id: str, new_text: str) -> bool:
+        """Edit a proposal's text (status becomes ``edited``, audit preserved)."""
+        return self.proposals.edit(proposal_id, new_text)
+
+    def write_approved_proposals(self) -> List:
+        """Write every approved, not-yet-written proposal into the bank/ledger.
+
+        Approved proposals reuse the frozen :meth:`add_memory` path, so the bank
+        and ledger stay aligned and the verifier/grounding policy is unchanged.
+        Rejected proposals are skipped entirely. Each written proposal is marked
+        so a second call cannot create duplicate memories. Returns the created
+        ledger entries.
+        """
+        written = []
+        for proposal in self.proposals.approved_unwritten():
+            tags = list(proposal.tags)
+            if proposal.kind.value not in tags:
+                tags.append(proposal.kind.value)
+            entry = self.add_memory(
+                proposal.canonical_text,
+                source=proposal.source_file,
+                tags=tags,
+            )
+            self.proposals.mark_written(proposal.proposal_id)
+            written.append(entry)
+        return written
+
     # -- inspect / export --
 
     def export_ledger(self) -> List[dict]:
         """Return the full ledger (active and deleted) as plain dicts."""
         return self.ledger.export()
+
+    def export_proposals(self) -> List[dict]:
+        """Return the whole proposal queue as plain dicts."""
+        return self.proposals.export()
 
     def seed_from(self, seed_path: str | Path) -> List[str]:
         """Load seed memories from a JSONL file, writing each into the bank.
