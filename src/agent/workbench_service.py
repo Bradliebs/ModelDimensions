@@ -31,10 +31,19 @@ from agent.memory_lifecycle import (
     LifecycleVerdict,
     analyse_proposal_against_ledger,
 )
+from agent.knowledge_library import KnowledgeLibrary
+from agent.knowledge_retrieval import KnowledgeCandidate, retrieve_knowledge
+from agent.knowledge_sources import (
+    KnowledgeDomain,
+    KnowledgeSource,
+    SourceAuthority,
+    TRUSTED_AUTHORITIES,
+)
 from agent.memory_proposals import ProposalBatch
 from agent.note_ingestion import extract_candidate_memories, load_text_file
 from agent.orchestrator import DeterministicEncoder, EncoderProtocol, MemoryBank
 from agent.proposal_queue import ProposalQueue
+from agent.query_planner import QueryRoute, plan_query
 from agent.verifier import verify_candidate
 from slm.schemas import VerificationVerdict, VerifiedMemoryCandidate
 
@@ -93,15 +102,93 @@ def _overall_verdict(views: List[CandidateView]) -> str:
     return "ambiguous"
 
 
+@dataclass
+class KnowledgeAudit:
+    """The audit trail for a knowledge-only query.
+
+    Imported knowledge is never project memory, so this result is kept apart
+    from :class:`QueryAudit`: it reports which chunks were retrieved, the domain,
+    whether the answer is restricted to informational use (medical/legal), and
+    any provenance cautions (low authority, unknown coding version).
+    """
+
+    query: str
+    knowledge_used: bool
+    domain: Optional[str]
+    informational_only: bool
+    candidates: List[dict] = field(default_factory=list)
+    cited_source_ids: List[str] = field(default_factory=list)
+    cautions: List[str] = field(default_factory=list)
+    response_text: str = ""
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+
+@dataclass
+class CombinedAudit:
+    """A query answered from memory and/or knowledge, kept clearly separated.
+
+    ``memory_used`` is true only when a *project memory* was grounded;
+    ``knowledge_used`` is true only when an *imported knowledge* chunk was
+    retrieved; ``model_prior_used`` is true when neither grounded source could
+    answer, so any reply would be the model's own ungrounded prior.
+    """
+
+    query: str
+    route: str
+    memory_used: bool
+    knowledge_used: bool
+    model_prior_used: bool
+    memory: Optional[dict] = None
+    knowledge: Optional[dict] = None
+    cautions: List[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+
+def _domain_cautions(domain: Optional[str],
+                     candidates: List[KnowledgeCandidate]) -> List[str]:
+    """Build the query-time safety cautions for a knowledge answer.
+
+    Medical/legal answers are always flagged informational only; medical answers
+    add a no-diagnosis/no-prescription note. Low-authority sources (community /
+    unknown) are warned about. Coding answers warn when the cited source has no
+    recorded version.
+    """
+    cautions: List[str] = []
+    if domain == KnowledgeDomain.MEDICAL.value:
+        cautions.append(
+            "Informational only: not medical advice, not a diagnosis, and not a "
+            "prescription. Consult a qualified professional.")
+    elif domain == KnowledgeDomain.LEGAL.value:
+        cautions.append(
+            "Informational only: not legal advice. Consult a qualified "
+            "professional.")
+
+    seen_low: set[str] = set()
+    for cand in candidates:
+        authority = SourceAuthority(cand.authority)
+        if authority not in TRUSTED_AUTHORITIES and cand.source_name not in seen_low:
+            seen_low.add(cand.source_name)
+            cautions.append(
+                f"Source '{cand.source_name}' has {authority.value} authority; "
+                "verify before relying on it.")
+    return cautions
+
+
 class WorkbenchService:
     """Owns one memory bank + ledger and exposes the workbench operations."""
 
     def __init__(self, ledger_path: Optional[str | Path] = None,
                  encoder: Optional[EncoderProtocol] = None,
                  k: int = _K, fresh: bool = False,
-                 queue_path: Optional[str | Path] = None):
+                 queue_path: Optional[str | Path] = None,
+                 knowledge_path: Optional[str | Path] = None):
+        self.encoder = encoder or DeterministicEncoder(dim=64)
         self.bank = MemoryBank(
-            encoder or DeterministicEncoder(dim=64),
+            self.encoder,
             epsilon=_EPSILON,
             radius=_RADIUS,
         )
@@ -116,6 +203,11 @@ class WorkbenchService:
         # ``fresh`` rule as the ledger so a relaunch does not double-apply a
         # queue whose approved memories were already written.
         self.proposals = ProposalQueue(queue_path, load_existing=not fresh)
+        # The knowledge library is the v1.3 import store: external sources and
+        # their chunks live here, fully separate from the memory bank/ledger so
+        # imported knowledge can never be mistaken for a project decision. It
+        # follows the same ``fresh`` rule as the ledger and queue.
+        self.knowledge = KnowledgeLibrary(knowledge_path, load_existing=not fresh)
         self.k = k
 
     # -- write --
@@ -178,6 +270,170 @@ class WorkbenchService:
         removed = self.bank.delete(memory_id)
         marked = self.ledger.mark_deleted(memory_id)
         return removed or marked
+
+    # -- knowledge import / query (v1.3) --
+
+    def import_knowledge(self, path: str | Path, *,
+                         domain: str | KnowledgeDomain,
+                         authority: str | SourceAuthority,
+                         source_name: str,
+                         version: Optional[str] = None) -> KnowledgeSource:
+        """Import an external document into the knowledge library.
+
+        The document is chunked and stored with its provenance; **nothing** is
+        written to the memory bank or ledger. Returns the created
+        :class:`KnowledgeSource`.
+        """
+        dom = domain if isinstance(domain, KnowledgeDomain) else KnowledgeDomain(domain)
+        auth = (authority if isinstance(authority, SourceAuthority)
+                else SourceAuthority(authority))
+        return self.knowledge.import_text_file(
+            path, domain=dom, authority=auth,
+            source_name=source_name, version=version,
+        )
+
+    def list_knowledge_sources(self) -> List[dict]:
+        """Return active knowledge sources as plain dicts for display/export."""
+        rows: List[dict] = []
+        for src in self.knowledge.list_sources(active_only=True):
+            rows.append({
+                "source_id": src.source_id,
+                "source_name": src.source_name,
+                "domain": src.domain.value,
+                "authority": src.authority.value,
+                "version": src.version,
+                "path_or_url": src.path_or_url,
+                "chunks": len(self.knowledge.list_chunks(source_id=src.source_id)),
+            })
+        return rows
+
+    def delete_knowledge_source(self, source_id: str) -> bool:
+        """Deactivate a knowledge source so its chunks can no longer be cited."""
+        return self.knowledge.delete_source(source_id)
+
+    def query_knowledge(self, query_text: str) -> KnowledgeAudit:
+        """Retrieve imported knowledge chunks for ``query_text``.
+
+        Only the knowledge library is consulted; no project memory is touched,
+        so ``memory_used`` is irrelevant here. Domain safety rules are applied:
+        medical/legal answers are flagged informational only, low-authority and
+        unknown-version sources are cautioned.
+        """
+        plan = plan_query(query_text)
+        active_chunks = self.knowledge.list_chunks(active_only=True)
+        candidates = retrieve_knowledge(
+            self.encoder, active_chunks, query_text, self.k)
+
+        domain = plan.domain.value if plan.domain else (
+            candidates[0].domain if candidates else None)
+        informational = domain in {
+            KnowledgeDomain.MEDICAL.value, KnowledgeDomain.LEGAL.value}
+
+        cautions = _domain_cautions(domain, candidates)
+        cautions.extend(self._coding_version_cautions(candidates))
+
+        cited: List[str] = []
+        cand_dicts: List[dict] = []
+        for cand in candidates:
+            if cand.source_id not in cited:
+                cited.append(cand.source_id)
+            cand_dicts.append({
+                "source_id": cand.source_id,
+                "chunk_id": cand.chunk_id,
+                "source_name": cand.source_name,
+                "domain": cand.domain,
+                "authority": cand.authority,
+                "activation": cand.activation,
+                "rank": cand.rank,
+                "section": cand.source_section,
+                "text": cand.chunk_text,
+            })
+
+        if candidates:
+            lines = [f"- ({c.source_name}) {c.chunk_text}" for c in candidates]
+            response = "From imported knowledge:\n" + "\n".join(lines)
+        else:
+            response = "Knowledge is silent: no imported source matched."
+
+        return KnowledgeAudit(
+            query=query_text,
+            knowledge_used=bool(candidates),
+            domain=domain,
+            informational_only=informational,
+            candidates=cand_dicts,
+            cited_source_ids=cited,
+            cautions=cautions,
+            response_text=response,
+        )
+
+    def _coding_version_cautions(
+            self, candidates: List[KnowledgeCandidate]) -> List[str]:
+        """Warn when a cited coding source has no recorded version."""
+        cautions: List[str] = []
+        warned: set[str] = set()
+        for cand in candidates:
+            if cand.domain != KnowledgeDomain.CODING.value:
+                continue
+            src = self.knowledge.get_source(cand.source_id)
+            if src is None or cand.source_name in warned:
+                continue
+            warned.add(cand.source_name)
+            if src.version:
+                cautions.append(
+                    f"Coding source '{src.source_name}' is version {src.version}.")
+            else:
+                cautions.append(
+                    f"Coding source '{src.source_name}' has no recorded "
+                    "version; behaviour may differ across versions.")
+        return cautions
+
+    def query_all(self, query_text: str) -> CombinedAudit:
+        """Answer a query from memory and/or knowledge, kept clearly separated.
+
+        The planner decides where to look. Memory and knowledge are queried
+        through their own independent paths, so a knowledge chunk can never be
+        cited as a project decision and a memory can never be returned as an
+        external reference. ``model_prior_used`` is set when neither grounded
+        source could answer.
+        """
+        plan = plan_query(query_text)
+
+        memory_audit: Optional[QueryAudit] = None
+        knowledge_audit: Optional[KnowledgeAudit] = None
+
+        want_memory = plan.route in {
+            QueryRoute.MEMORY_ONLY, QueryRoute.BOTH}
+        want_knowledge = plan.route in {
+            QueryRoute.KNOWLEDGE_ONLY, QueryRoute.BOTH}
+
+        if want_memory:
+            memory_audit = self.query_memory(query_text)
+        if want_knowledge:
+            knowledge_audit = self.query_knowledge(query_text)
+
+        memory_used = bool(memory_audit and memory_audit.memory_used)
+        knowledge_used = bool(knowledge_audit and knowledge_audit.knowledge_used)
+        model_prior_used = not memory_used and not knowledge_used
+
+        cautions = list(knowledge_audit.cautions) if knowledge_audit else []
+        if model_prior_used:
+            cautions.append(
+                "Neither project memory nor imported knowledge answered; any "
+                "reply would be the model's ungrounded prior.")
+
+        route = (QueryRoute.GENERAL_MODEL_NOT_GROUNDED.value
+                 if model_prior_used else plan.route.value)
+
+        return CombinedAudit(
+            query=query_text,
+            route=route,
+            memory_used=memory_used,
+            knowledge_used=knowledge_used,
+            model_prior_used=model_prior_used,
+            memory=memory_audit.to_dict() if memory_audit else None,
+            knowledge=knowledge_audit.to_dict() if knowledge_audit else None,
+            cautions=cautions,
+        )
 
     # -- ingestion / approval queue (v1.2) --
 

@@ -19,3 +19,6 @@ demos/workbench_ledger.jsonl
 
 # Workbench runtime proposal queue (generated; the seed note is tracked)
 demos/workbench_proposals.jsonl
+
+# Workbench runtime knowledge library (generated; the seed doc is tracked)
+demos/workbench_knowledge.jsonl

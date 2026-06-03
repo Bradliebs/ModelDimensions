@@ -63,6 +63,82 @@ def _format_audit(audit: QueryAudit) -> str:
     return "\n".join(lines)
 
 
+def _parse_flags(arg: str) -> tuple[str, dict]:
+    """Split ``<positional> --flag value ...`` into (positional, {flag: value}).
+
+    Used by ``import-knowledge`` to read ``--domain``/``--authority``/``--name``/
+    ``--version``. The positional is everything before the first ``--`` flag.
+    """
+    tokens = arg.split()
+    positional: list[str] = []
+    flags: dict[str, str] = {}
+    i = 0
+    while i < len(tokens):
+        tok = tokens[i]
+        if tok.startswith("--"):
+            key = tok[2:]
+            value_parts: list[str] = []
+            i += 1
+            while i < len(tokens) and not tokens[i].startswith("--"):
+                value_parts.append(tokens[i])
+                i += 1
+            flags[key] = " ".join(value_parts)
+        else:
+            positional.append(tok)
+            i += 1
+    return " ".join(positional), flags
+
+
+def _format_knowledge(audit) -> str:
+    lines = [
+        f'Knowledge query: "{audit.query}"',
+        f"  knowledge_used      = {str(audit.knowledge_used).lower()}",
+        f"  domain              = {audit.domain or '-'}",
+        f"  informational_only  = {str(audit.informational_only).lower()}",
+    ]
+    for cand in audit.candidates:
+        section = f" [{cand['section']}]" if cand.get("section") else ""
+        lines.append(
+            f"    - {cand['source_name']}{section} "
+            f"(rank {cand['rank']}, activation {cand['activation']:.4f}, "
+            f"{cand['authority']})"
+        )
+    if audit.cited_source_ids:
+        lines.append(f"  cited_source_ids    = {', '.join(audit.cited_source_ids)}")
+    for caution in audit.cautions:
+        lines.append(f"  ! {caution}")
+    lines.append("  response:")
+    for row in audit.response_text.splitlines():
+        lines.append(f"    {row}")
+    return "\n".join(lines)
+
+
+def _format_combined(audit) -> str:
+    lines = [
+        f'Query: "{audit.query}"',
+        f"  route               = {audit.route}",
+        f"  memory_used         = {str(audit.memory_used).lower()}",
+        f"  knowledge_used      = {str(audit.knowledge_used).lower()}",
+        f"  model_prior_used    = {str(audit.model_prior_used).lower()}",
+    ]
+    if audit.memory:
+        lines.append("  -- project memory --")
+        for cid in audit.memory.get("cited_memory_ids") or []:
+            lines.append(f"    cited memory: {cid}")
+        if not (audit.memory.get("cited_memory_ids")):
+            lines.append("    (memory silent)")
+    if audit.knowledge:
+        lines.append("  -- imported knowledge --")
+        for cand in audit.knowledge.get("candidates") or []:
+            lines.append(f"    knowledge: {cand['source_name']} "
+                         f"({cand['authority']})")
+        if not (audit.knowledge.get("candidates")):
+            lines.append("    (knowledge silent)")
+    for caution in audit.cautions:
+        lines.append(f"  ! {caution}")
+    return "\n".join(lines)
+
+
 # ---------- CLI ----------
 
 _HELP = """\
@@ -84,6 +160,11 @@ Commands:
   write-approved        write only approved candidates into the ledger
   queue-export [path]   write the proposal queue JSONL
   show-memory <memory_id>  show a memory and its supersession history
+  import-knowledge <path> --domain <d> --authority <a> --name <n> [--version <v>]
+                        import an external doc into the knowledge library
+  sources               list imported knowledge sources
+  query-knowledge <text>  query imported knowledge only (with domain cautions)
+  query-all <text>      query memory and knowledge, kept clearly separated
   demo                  run the Friday -> Monday near-miss example
   export [path]         write the ledger JSONL (defaults to the active ledger)
   help                  show this help
@@ -300,6 +381,51 @@ def _repl(service: WorkbenchService) -> None:
                 print("  usage: show-memory <memory_id>")
                 continue
             _show_memory(service, arg)
+        elif cmd in {"import-knowledge", "import_knowledge"}:
+            positional, flags = _parse_flags(arg)
+            if not positional or "domain" not in flags or \
+                    "authority" not in flags or "name" not in flags:
+                print("  usage: import-knowledge <path> --domain <d> "
+                      "--authority <a> --name <n> [--version <v>]")
+                continue
+            try:
+                source = service.import_knowledge(
+                    positional,
+                    domain=flags["domain"],
+                    authority=flags["authority"],
+                    source_name=flags["name"],
+                    version=flags.get("version"),
+                )
+            except FileNotFoundError:
+                print(f"  no such file: {positional}")
+                continue
+            except ValueError as exc:
+                print(f"  invalid domain/authority: {exc}")
+                continue
+            n_chunks = len(service.knowledge.list_chunks(
+                source_id=source.source_id))
+            print(f"  imported '{source.source_name}' as {source.source_id} "
+                  f"({n_chunks} chunk(s)); not written as project memory")
+        elif cmd == "sources":
+            rows = service.list_knowledge_sources()
+            if not rows:
+                print("  (no imported knowledge sources)")
+            else:
+                for row in rows:
+                    ver = row.get("version") or "-"
+                    print(f"  {row['source_id']}  {row['source_name']}  "
+                          f"[{row['domain']}/{row['authority']}] "
+                          f"v={ver}  chunks={row['chunks']}")
+        elif cmd in {"query-knowledge", "query_knowledge"}:
+            if not arg:
+                print("  usage: query-knowledge <text>")
+                continue
+            print(_format_knowledge(service.query_knowledge(arg)))
+        elif cmd in {"query-all", "query_all"}:
+            if not arg:
+                print("  usage: query-all <text>")
+                continue
+            print(_format_combined(service.query_all(arg)))
         elif cmd == "demo":
             _run_demo()
         elif cmd == "export":
@@ -335,6 +461,7 @@ def main(argv: list[str] | None = None) -> int:
         ledger_path=args.ledger,
         fresh=True,
         queue_path=str(Path(args.ledger).with_name("workbench_proposals.jsonl")),
+        knowledge_path=str(Path(args.ledger).with_name("workbench_knowledge.jsonl")),
     )
     if args.seed and _SEED_FILE.exists():
         service.seed_from(_SEED_FILE)

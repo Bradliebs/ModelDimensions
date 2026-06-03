@@ -406,6 +406,82 @@ Pieces:
 python -m pytest evals/test_memory_lifecycle.py -q    # lifecycle tests, offline
 ```
 
+## Knowledge Import
+
+Project **memory** and external **knowledge** are deliberately separate. A memory
+is something you decided or recorded through the workbench — it can be cited as a
+project decision. Knowledge is reference material you imported from an outside
+source (docs, a manual, a reference page) — it is informational, carries its own
+provenance, and is **never** treated as a project decision. The two live in
+different stores (the concept-cell bank/ledger for memory, the knowledge library
+for imported sources) and are queried through independent paths, so a knowledge
+chunk can never masquerade as a memory and a memory can never be returned as an
+external reference.
+
+Each imported source records a **domain** and an **authority**:
+
+- **Domains**: `coding`, `medical`, `legal`, `microsoft`, `general`,
+  `project_docs`.
+- **Authority**: `official` (the vendor/standard itself), `reputable` (a
+  well-regarded secondary source), `community`, or `unknown`. Community and
+  unknown sources are flagged at query time so you know to verify.
+
+Domain safety rules are applied at query time:
+
+- **Medical** and **legal** answers are always marked *informational only* —
+  never a diagnosis, prescription, or legal-advice claim — and always carry their
+  source metadata.
+- **Coding** answers include the source's version when known, and warn when the
+  version is unknown (behaviour can differ across versions).
+
+### Commands
+
+```text
+import-knowledge <path> --domain <d> --authority <a> --name <n> [--version <v>]
+sources
+query-knowledge <text>
+query-all <text>
+```
+
+### Example
+
+```text
+workbench> import-knowledge demos/seed_coding_knowledge.md --domain coding --authority official --name "Concept Cells Notes" --version 1.0
+  imported 'Concept Cells Notes' as src-... (8 chunk(s)); not written as project memory
+
+workbench> sources
+  src-...  Concept Cells Notes  [coding/official] v=1.0  chunks=8
+
+workbench> query-knowledge how do I validate with Pydantic
+  knowledge_used      = true
+  domain              = coding
+  informational_only  = false
+  ! Coding source 'Concept Cells Notes' is version 1.0.
+
+workbench> query-all what did we decide about the supplier delivery
+  route               = memory_only
+  memory_used         = true
+  knowledge_used      = false
+```
+
+`query-all` routes the query (a decision/agreement phrasing goes to memory, a
+documentation phrasing goes to knowledge, a medical phrasing goes to knowledge
+with a caution, anything ambiguous checks both) and labels each side separately.
+When neither memory nor knowledge can answer, `model_prior_used` is set so it is
+clear any reply would be the model's ungrounded prior.
+
+| File | What it adds |
+|---|---|
+| `src/agent/knowledge_sources.py` | Source / document / chunk model with domain + authority |
+| `src/agent/knowledge_library.py` | JSONL-backed import store (separate from the ledger) |
+| `src/agent/knowledge_retrieval.py` | Chunk retrieval, parallel to candidate retrieval |
+| `src/agent/query_planner.py` | Rule-based memory / knowledge / both routing |
+| `demos/seed_coding_knowledge.md` | Example coding doc to import |
+
+```bash
+python -m pytest evals/test_knowledge_import.py -q    # knowledge import tests, offline
+```
+
 ## License
 
 To be decided.
