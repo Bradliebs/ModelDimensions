@@ -852,6 +852,82 @@ a pack spec, but HF ingestion stays disabled during a normal build (like URL
 ingestion) and must be enabled explicitly — a starter build never samples the
 Hub.
 
+## M365 Coding Assistant Pack
+
+v2.0 ships the first **real operational assistant pack**: a single pack that
+combines Microsoft 365 governance notes with this project's own coding-stack
+notes behind one provenance-tagged, source-governed answer surface. It reuses
+the v1.8 pack builder, the v1.9 importer, and the frozen knowledge query path —
+nothing in the concept-cell core, grounding policy, or lifecycle semantics
+changes.
+
+**Purpose.** Give a working assistant a trustworthy answer surface that spans
+two domains at once: M365 governance and security (`domain: microsoft`) and the
+project's day-to-day coding stack (`domain: coding`). Every source is tagged
+`authority: reputable`, `version: local-notes-v1`, and
+`staleness_policy: review_required`, so each retrieved chunk traces back to a
+dated field note rather than an anonymous scrape or an unattributed model prior.
+
+**What it can answer.** Eight curated sources under
+`demos/m365_coding_sources/` cover Purview sensitivity labels, Endpoint DLP,
+Copilot Studio agent patterns, Power Platform DLP, and SharePoint governance on
+the Microsoft side, plus Pydantic v2, the Streamlit workbench, and the
+PowerShell launcher on the coding side. Each one records key facts, decisions
+and assumptions, known limitations, worked examples, a caution / near-miss note,
+and source/version metadata in its header.
+
+**What it cannot answer.** Anything outside those eight sources. A cross-cloud
+question (for example AWS IAM or S3) has no grounding here, so the pack rejects
+it rather than fabricating a source. There is **no live Microsoft Learn
+ingestion yet** — URL ingestion stays disabled and the network is never touched
+during a build. Refreshing a source means editing the local Markdown and
+rebuilding.
+
+**Memory, knowledge, and model prior stay separated.** The combined query path
+reports three independent flags. A question answered from a curated source sets
+`knowledge_used`; a decision-recall question (for example "what did we decide")
+routes to project memory and, against an empty ledger, falls back to
+`model_prior_used` with an explicit ungrounded caution. Imported knowledge is
+never written to the `MemoryLedger`.
+
+**How to build, evaluate, and demo.** One script builds the pack from local
+docs, runs its evaluation, and prints five example questions with their routing
+flags (it exits non-zero if any eval question fails):
+
+```powershell
+.\scripts\demo_m365_coding_assistant.ps1
+```
+
+Or drive the same steps from inside the workbench REPL:
+
+```text
+pack-build packs/starter/m365_coding_assistant.yaml
+pack-eval m365-coding-assistant demos/pack_eval_questions/m365_coding_assistant_eval.jsonl
+pack-report m365-coding-assistant
+```
+
+**How to open in the review console.** The built pack is an ordinary pack, so
+the review console can inspect its eight knowledge sources across both domains
+and confirm that imported knowledge stays separate from project memory:
+
+```powershell
+python app/review_console.py --pack-root packs\built --pack m365-coding-assistant
+```
+
+**Eval-only HF samples.** A tiny offline Hugging Face coding fixture can be
+pulled in **eval mode only** to exercise the assistant; its unknown licence is
+allowed for eval (with a warning) but would be blocked for knowledge mode, so it
+can never become trusted knowledge. HF eval samples are eval-only unless
+explicitly promoted.
+
+| File | What it adds |
+|---|---|
+| `demos/m365_coding_sources/` | Eight curated M365 + coding field-note Markdown sources with provenance headers |
+| `packs/starter/m365_coding_assistant.yaml` | The assistant pack spec (local docs, URL ingestion off, both domains) |
+| `demos/pack_eval_questions/m365_coding_assistant_eval.jsonl` | Retrieval, provenance, rejection, and separation eval questions |
+| `scripts/demo_m365_coding_assistant.ps1` | Build, evaluate, and demo the pack with memory / knowledge / model-prior flags (exits non-zero on failure) |
+| `evals/test_m365_coding_assistant_pack.py` | Spec-load, build, metadata, eval, review-console, routing-flag, memory-separation, and HF eval-only tests |
+
 ## License
 
 To be decided.

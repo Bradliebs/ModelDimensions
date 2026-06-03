@@ -1,0 +1,84 @@
+# Curated knowledge pack: M365 + coding assistant reference (v2.0 starter).
+#
+# The first real operational assistant pack. It combines Microsoft 365
+# governance notes with coding/engineering notes for this project's own stack
+# (Pydantic v2, Streamlit, PowerShell launchers). Built entirely from local
+# curated Markdown field notes under demos/m365_coding_sources/ — no web access
+# and no live Microsoft Learn ingestion. The build/demo scripts import these
+# into an isolated pack so retrieval and provenance can be validated with the
+# matching eval file
+# (demos/pack_eval_questions/m365_coding_assistant_eval.jsonl) before anyone
+# relies on it.
+#
+# Authority is "reputable" (curated local notes, not official documentation).
+# Microsoft governance sources carry domain "microsoft"; engineering sources
+# carry domain "coding". Every source carries version local-notes-v1 and a
+# review_required staleness policy as a reminder to verify against current
+# vendor guidance before relying on it.
+
+pack_name: m365-coding-assistant
+description: >-
+  First real working assistant pack: Microsoft 365 governance plus this
+  project's coding stack (Purview, Endpoint DLP, Copilot Studio, Power Platform,
+  SharePoint, Pydantic v2, Streamlit, PowerShell), built from local field notes.
+default_domain: microsoft
+default_knowledge_backend: deterministic
+allow_url_ingestion: false
+enabled: true
+
+sources:
+  - source_name: Purview Sensitivity Labels
+    path_or_url: demos/m365_coding_sources/purview_sensitivity_labels.md
+    domain: microsoft
+    authority: reputable
+    version: local-notes-v1
+    staleness_policy: review_required
+
+  - source_name: Endpoint DLP
+    path_or_url: demos/m365_coding_sources/endpoint_dlp.md
+    domain: microsoft
+    authority: reputable
+    version: local-notes-v1
+    staleness_policy: review_required
+
+  - source_name: Copilot Studio Agent Patterns
+    path_or_url: demos/m365_coding_sources/copilot_studio_patterns.md
+    domain: microsoft
+    authority: reputable
+    version: local-notes-v1
+    staleness_policy: review_required
+
+  - source_name: Power Platform DLP
+    path_or_url: demos/m365_coding_sources/power_platform_dlp.md
+    domain: microsoft
+    authority: reputable
+    version: local-notes-v1
+    staleness_policy: review_required
+
+  - source_name: SharePoint Governance
+    path_or_url: demos/m365_coding_sources/sharepoint_governance.md
+    domain: microsoft
+    authority: reputable
+    version: local-notes-v1
+    staleness_policy: review_required
+
+  - source_name: Pydantic v2 Notes
+    path_or_url: demos/m365_coding_sources/pydantic_v2_notes.md
+    domain: coding
+    authority: reputable
+    version: local-notes-v1
+    staleness_policy: review_required
+
+  - source_name: Streamlit Workbench Notes
+    path_or_url: demos/m365_coding_sources/streamlit_workbench_notes.md
+    domain: coding
+    authority: reputable
+    version: local-notes-v1
+    staleness_policy: review_required
+
+  - source_name: PowerShell Launcher Notes
+    path_or_url: demos/m365_coding_sources/powershell_launcher_notes.md
+    domain: coding
+    authority: reputable
+    version: local-notes-v1
+    staleness_policy: review_required
