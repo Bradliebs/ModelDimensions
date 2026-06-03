@@ -1,0 +1,57 @@
+{
+  "experiment": "exp13_knowledge_retrieval_quality",
+  "relevance_threshold": 0.35,
+  "deterministic": {
+    "skipped": false,
+    "backend": "deterministic",
+    "recall_at_1": 0.6667,
+    "recall_at_3": 0.6667,
+    "knowledge_used_rate": 1.0,
+    "false_retrieval_rate": 0.0,
+    "relevance_threshold": 0.35,
+    "deleted_source_citation_rate": 0.0,
+    "memory_pollution_rate": 0.0,
+    "source_metadata_present_rate": 1.0,
+    "by_category": {
+      "exact": {
+        "recall_at_1": 1.0,
+        "recall_at_3": 1.0
+      },
+      "paraphrase": {
+        "recall_at_1": 0.3333,
+        "recall_at_3": 0.3333
+      },
+      "version": {
+        "recall_at_1": 1.0,
+        "recall_at_3": 1.0
+      }
+    }
+  },
+  "semantic": {
+    "skipped": false,
+    "backend": "semantic",
+    "recall_at_1": 1.0,
+    "recall_at_3": 1.0,
+    "knowledge_used_rate": 1.0,
+    "false_retrieval_rate": 0.0,
+    "relevance_threshold": 0.35,
+    "deleted_source_citation_rate": 0.0,
+    "memory_pollution_rate": 0.0,
+    "source_metadata_present_rate": 1.0,
+    "by_category": {
+      "exact": {
+        "recall_at_1": 1.0,
+        "recall_at_3": 1.0
+      },
+      "paraphrase": {
+        "recall_at_1": 1.0,
+        "recall_at_3": 1.0
+      },
+      "version": {
+        "recall_at_1": 1.0,
+        "recall_at_3": 1.0
+      }
+    }
+  },
+  "elapsed_sec": 16.542
+}

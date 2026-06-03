@@ -39,6 +39,12 @@ from agent.knowledge_sources import (
     SourceAuthority,
     TRUSTED_AUTHORITIES,
 )
+from agent.retrieval_backends import (
+    BackendUnavailableError,
+    RetrievalBackend,
+    make_backend,
+    resolve_backend_name,
+)
 from agent.memory_proposals import ProposalBatch
 from agent.note_ingestion import extract_candidate_memories, load_text_file
 from agent.orchestrator import DeterministicEncoder, EncoderProtocol, MemoryBank
@@ -120,6 +126,7 @@ class KnowledgeAudit:
     cited_source_ids: List[str] = field(default_factory=list)
     cautions: List[str] = field(default_factory=list)
     response_text: str = ""
+    backend_name: str = "deterministic"
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -143,6 +150,7 @@ class CombinedAudit:
     memory: Optional[dict] = None
     knowledge: Optional[dict] = None
     cautions: List[str] = field(default_factory=list)
+    knowledge_backend: Optional[str] = None
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -185,7 +193,9 @@ class WorkbenchService:
                  encoder: Optional[EncoderProtocol] = None,
                  k: int = _K, fresh: bool = False,
                  queue_path: Optional[str | Path] = None,
-                 knowledge_path: Optional[str | Path] = None):
+                 knowledge_path: Optional[str | Path] = None,
+                 knowledge_backend: Optional[str] = None,
+                 semantic_embedder: Optional[EncoderProtocol] = None):
         self.encoder = encoder or DeterministicEncoder(dim=64)
         self.bank = MemoryBank(
             self.encoder,
@@ -209,6 +219,35 @@ class WorkbenchService:
         # follows the same ``fresh`` rule as the ledger and queue.
         self.knowledge = KnowledgeLibrary(knowledge_path, load_existing=not fresh)
         self.k = k
+        # The v1.4 retrieval backend ranks imported knowledge. Default is the
+        # deterministic, offline backend (tests, CI); ``semantic`` (env
+        # KNOWLEDGE_RETRIEVAL_BACKEND or the constructor arg) uses MiniLM. If a
+        # semantic backend is requested but unavailable, fall back to
+        # deterministic so the workbench never breaks on a missing model.
+        self._semantic_embedder = semantic_embedder
+        self._knowledge_backend_requested = resolve_backend_name(knowledge_backend)
+        self._knowledge_backend: RetrievalBackend = self._build_knowledge_backend()
+
+    def _build_knowledge_backend(self) -> RetrievalBackend:
+        """Build the requested knowledge backend, falling back gracefully."""
+        try:
+            return make_backend(
+                self._knowledge_backend_requested,
+                deterministic_encoder=self.encoder,
+                semantic_embedder=self._semantic_embedder,
+            )
+        except BackendUnavailableError:
+            return make_backend(
+                "deterministic", deterministic_encoder=self.encoder)
+
+    def knowledge_backend_name(self) -> str:
+        """Return the name of the **active** knowledge retrieval backend.
+
+        This is the backend actually in use, which may differ from the one
+        requested if a semantic backend was asked for but was unavailable and
+        the service fell back to deterministic.
+        """
+        return self._knowledge_backend.backend_name
 
     # -- write --
 
@@ -321,8 +360,14 @@ class WorkbenchService:
         """
         plan = plan_query(query_text)
         active_chunks = self.knowledge.list_chunks(active_only=True)
+        source_versions = {
+            src.source_id: src.version
+            for src in self.knowledge.list_sources(active_only=True)
+            if src.version
+        }
         candidates = retrieve_knowledge(
-            self.encoder, active_chunks, query_text, self.k)
+            self.encoder, active_chunks, query_text, self.k,
+            backend=self._knowledge_backend, source_versions=source_versions)
 
         domain = plan.domain.value if plan.domain else (
             candidates[0].domain if candidates else None)
@@ -343,10 +388,13 @@ class WorkbenchService:
                 "source_name": cand.source_name,
                 "domain": cand.domain,
                 "authority": cand.authority,
+                "version": cand.version,
                 "activation": cand.activation,
                 "rank": cand.rank,
                 "section": cand.source_section,
                 "text": cand.chunk_text,
+                "backend_name": cand.backend_name,
+                "is_semantic": cand.is_semantic,
             })
 
         if candidates:
@@ -364,6 +412,7 @@ class WorkbenchService:
             cited_source_ids=cited,
             cautions=cautions,
             response_text=response,
+            backend_name=self.knowledge_backend_name(),
         )
 
     def _coding_version_cautions(
@@ -433,6 +482,7 @@ class WorkbenchService:
             memory=memory_audit.to_dict() if memory_audit else None,
             knowledge=knowledge_audit.to_dict() if knowledge_audit else None,
             cautions=cautions,
+            knowledge_backend=self.knowledge_backend_name(),
         )
 
     # -- ingestion / approval queue (v1.2) --

@@ -482,6 +482,63 @@ clear any reply would be the model's ungrounded prior.
 python -m pytest evals/test_knowledge_import.py -q    # knowledge import tests, offline
 ```
 
+## Semantic Knowledge Retrieval
+
+v1.3 retrieved imported knowledge with the same content-addressed firing math the
+memory bank uses. That is perfect for CI — fast, no download, reproducible — but
+it is **not semantic**: the deterministic encoder hashes the whole string, so a
+paraphrase of a chunk is essentially an orthogonal random vector. v1.4 adds an
+optional semantic backend behind one interface so the same workbench can retrieve
+real coding/project docs *by meaning*.
+
+Two interchangeable backends (`src/agent/retrieval_backends.py`):
+
+| Backend | When | Behaviour |
+|---|---|---|
+| `deterministic` (default) | tests, CI, offline | Reproduces v1.3 retrieval exactly. Nails exact wording, ~chance on paraphrase. |
+| `semantic` (optional) | real docs | MiniLM cosine similarity. Retrieves by meaning, so paraphrases still rank the right chunk. |
+
+Selection precedence: the constructor argument wins, otherwise the
+`KNOWLEDGE_RETRIEVAL_BACKEND` environment variable, otherwise `deterministic`:
+
+```bash
+# default — offline, reproducible
+python -m app.workbench
+
+# opt into semantic retrieval (loads MiniLM lazily)
+set KNOWLEDGE_RETRIEVAL_BACKEND=semantic    # PowerShell: $env:KNOWLEDGE_RETRIEVAL_BACKEND="semantic"
+python -m app.workbench
+# then inside the REPL:
+backend
+```
+
+Honest boundaries:
+
+- **No silent downloads in tests.** The MiniLM import is lazy; importing the
+  backend module never triggers a download, so the suite stays offline.
+- **Graceful fallback.** If `semantic` is requested but the model cannot load,
+  the workbench falls back to `deterministic` and reports it — it never breaks.
+- **Retrieval is not truth.** A retrieved chunk is an external reference, never a
+  project decision. Source name / domain / authority / version stay mandatory and
+  every candidate records which backend produced it (`backend_name`).
+- **No firing gate.** Knowledge retrieval always returns top-k; relevance is the
+  reader's call against the activation and a threshold, not a hard cutoff.
+
+```bash
+python -m pytest evals/test_knowledge_retrieval_backends.py -q   # backend tests, offline
+python -m experiments.exp13_knowledge_retrieval_quality          # deterministic vs semantic
+```
+
+`exp13` imports a controlled corpus and compares both backends. With MiniLM
+available the contrast is the whole point: deterministic recall@1 ≈ 0.67 (exact
+wording only), semantic recall@1 = 1.0 (paraphrases included), both with zero
+false retrievals, zero deleted-source citations, and zero memory pollution.
+
+| File | What it adds |
+|---|---|
+| `src/agent/retrieval_backends.py` | Deterministic + semantic backends behind one Protocol |
+| `experiments/exp13_knowledge_retrieval_quality.py` | Retrieval-quality comparison, writes `results/exp13_summary.json` |
+
 ## License
 
 To be decided.

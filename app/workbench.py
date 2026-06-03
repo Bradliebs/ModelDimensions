@@ -93,6 +93,7 @@ def _format_knowledge(audit) -> str:
     lines = [
         f'Knowledge query: "{audit.query}"',
         f"  knowledge_used      = {str(audit.knowledge_used).lower()}",
+        f"  backend             = {getattr(audit, 'backend_name', 'deterministic')}",
         f"  domain              = {audit.domain or '-'}",
         f"  informational_only  = {str(audit.informational_only).lower()}",
     ]
@@ -165,6 +166,7 @@ Commands:
   sources               list imported knowledge sources
   query-knowledge <text>  query imported knowledge only (with domain cautions)
   query-all <text>      query memory and knowledge, kept clearly separated
+  backend               show the active knowledge retrieval backend
   demo                  run the Friday -> Monday near-miss example
   export [path]         write the ledger JSONL (defaults to the active ledger)
   help                  show this help
@@ -426,6 +428,15 @@ def _repl(service: WorkbenchService) -> None:
                 print("  usage: query-all <text>")
                 continue
             print(_format_combined(service.query_all(arg)))
+        elif cmd == "backend":
+            name = service.knowledge_backend_name()
+            print(f"  knowledge retrieval backend = {name}")
+            if name == "deterministic":
+                print("  (offline/test mode — reproducible, not semantic)")
+                print("  enable semantic retrieval with: "
+                      "set KNOWLEDGE_RETRIEVAL_BACKEND=semantic")
+            else:
+                print("  (semantic mode — meaning-based; retrieval is not truth)")
         elif cmd == "demo":
             _run_demo()
         elif cmd == "export":
