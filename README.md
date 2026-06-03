@@ -225,6 +225,56 @@ and adds nothing on its own; it exists to show the wiring and the override-proof
 guarantee. This is still not a production claim — it is a demonstration that a
 cheap lexical verifier catches exactly the failure mode v1.0-rc1 could not.
 
+## Using the Workbench
+
+v1.1 adds a small local **Concept Memory Workbench** on top of the frozen v1.0
+architecture. It changes no core geometry, whitening/scaling, write/query,
+Oja binding, verifier override rule, or grounding policy — it only composes the
+existing v1.0 path (`retrieve_candidates` → `verify_candidate` →
+`ground_accepted_candidates`) behind a thin service so a user can write, query,
+verify, refuse, delete, inspect, and export memories with a clear audit trail.
+
+Start it (offline; uses the project venv if present). It launches the Streamlit
+UI when Streamlit is installed, otherwise an interactive CLI:
+
+```powershell
+.\scripts\run_workbench.ps1            # seeds the project memories
+.\scripts\run_workbench.ps1 -Demo      # run the Friday -> Monday example
+.\scripts\run_workbench.ps1 -NoSeed    # start empty
+```
+
+Or directly:
+
+```bash
+python app/workbench.py            # interactive CLI REPL
+python app/workbench.py --demo     # Friday -> Monday near-miss example
+```
+
+CLI commands: `add <text>`, `query <text>`, `delete <memory_id>`, `ledger`,
+`demo`, `export [path]`, `help`, `quit`. Every query prints the audit trail —
+`candidate_retrieved`, the per-candidate `verifier_verdict`, `memory_used`, and
+`refused`.
+
+The **Friday → Monday** example is the smallest illustration of the v1.0 thesis:
+a stored "delivery is on Friday" memory is grounded for the exact query, but a
+one-word near-miss query ("…on Monday") is *retrieved as a candidate and then
+rejected by the verifier*, so it never reaches the user as memory. A deleted
+memory cannot be cited at all.
+
+Pieces:
+
+| File | Purpose |
+|---|---|
+| `app/workbench.py` | Local workbench (CLI, optional Streamlit) |
+| `src/agent/workbench_service.py` | Service over the frozen v1.0 path |
+| `src/agent/memory_ledger.py` | JSONL memory ledger (active/deleted provenance) |
+| `demos/seed_concept_cells_project.jsonl` | Seed memories for the project history |
+| `scripts/run_workbench.ps1` | Launcher (Streamlit if available, else CLI) |
+
+```bash
+python -m pytest evals/test_workbench_service.py -q   # workbench tests, offline
+```
+
 ## License
 
 To be decided.

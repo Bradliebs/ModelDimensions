@@ -13,3 +13,6 @@ __pycache__/
 # Model / HF caches
 .cache/
 hf_cache/
+
+# Workbench runtime ledger (generated session state; the seed file is tracked)
+demos/workbench_ledger.jsonl
