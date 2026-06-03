@@ -73,11 +73,17 @@ Commands:
   ledger                show the memory ledger (active / deleted)
   import <path>         extract candidate memories from a note (queued, not written)
   proposals             show pending candidate memories awaiting review
+  conflicts             show pending candidates that conflict with a memory
+  duplicates            show pending candidates that duplicate a memory
+  analyse <proposal_id> re-check a candidate against the current memories
   approve <proposal_id> approve a candidate so write-approved will store it
+  approve-new <proposal_id>  force-approve a flagged candidate as a new memory
+  approve-supersede <proposal_id> <old_memory_id>  approve and replace an old memory
   reject <proposal_id>  reject a candidate (it is never written)
   edit <proposal_id> <text>  edit a candidate's text before approving
   write-approved        write only approved candidates into the ledger
   queue-export [path]   write the proposal queue JSONL
+  show-memory <memory_id>  show a memory and its supersession history
   demo                  run the Friday -> Monday near-miss example
   export [path]         write the ledger JSONL (defaults to the active ledger)
   help                  show this help
@@ -99,10 +105,12 @@ def _print_ledger(service: WorkbenchService) -> None:
         print(line)
 
 
-def _print_proposals(service: WorkbenchService) -> None:
-    rows = service.list_proposals(status="pending")
+def _print_proposals(service: WorkbenchService, rows=None,
+                     empty_msg=None) -> None:
+    if rows is None:
+        rows = service.list_proposals(status="pending")
     if not rows:
-        print("  (no pending proposals — import a note first)")
+        print(empty_msg or "  (no pending proposals — import a note first)")
         return
     for p in rows:
         tags = ",".join(p.tags) if p.tags else ""
@@ -112,8 +120,29 @@ def _print_proposals(service: WorkbenchService) -> None:
         if tags:
             line += f"   (tags: {tags})"
         print(line)
-        if p.reason:
+        if p.lifecycle_verdict and p.lifecycle_verdict != "new":
+            against = (f" vs {p.lifecycle_candidate_id}"
+                       if p.lifecycle_candidate_id else "")
+            print(f"      lifecycle: {p.lifecycle_verdict.upper()}{against} "
+                  f"— {p.lifecycle_reason}")
+        elif p.reason:
             print(f"      why: {p.reason}")
+
+
+def _show_memory(service: WorkbenchService, memory_id: str) -> None:
+    entry = service.ledger.get(memory_id)
+    if entry is None:
+        print(f"  unknown memory: {memory_id}")
+        return
+    print(f"  {entry.memory_id}  [{entry.status}]  {entry.canonical_text}")
+    if entry.tags:
+        print(f"      tags: {', '.join(entry.tags)}")
+    if entry.supersedes:
+        print(f"      supersedes: {', '.join(entry.supersedes)}")
+    if entry.superseded_by:
+        current = service.ledger.get_current_memory(memory_id)
+        print(f"      superseded_by: {entry.superseded_by} "
+              f"(current: {current.memory_id if current else '?'})")
 
 
 def _run_demo() -> None:
@@ -191,12 +220,53 @@ def _repl(service: WorkbenchService) -> None:
                   "(queued as pending; nothing written yet)")
         elif cmd == "proposals":
             _print_proposals(service)
+        elif cmd == "conflicts":
+            _print_proposals(service, service.list_conflicts(),
+                             "  (no pending conflicts)")
+        elif cmd == "duplicates":
+            _print_proposals(service, service.list_duplicates(),
+                             "  (no pending duplicates)")
+        elif cmd == "analyse":
+            if not arg:
+                print("  usage: analyse <proposal_id>")
+                continue
+            check = service.analyse_proposal(arg)
+            if check is None:
+                print(f"  unknown proposal: {arg}")
+            else:
+                against = (f" vs {check.candidate_memory_id}"
+                           if check.candidate_memory_id else "")
+                print(f"  {arg}: {check.verdict.value.upper()}{against} "
+                      f"— {check.reason}")
         elif cmd == "approve":
             if not arg:
                 print("  usage: approve <proposal_id>")
                 continue
             ok = service.approve_proposal(arg)
-            print(f"  approved {arg}: {str(ok).lower()}")
+            if ok:
+                print(f"  approved {arg}: true")
+            else:
+                print(f"  approved {arg}: false (flagged duplicate/conflict — "
+                      "use approve-new or approve-supersede)")
+        elif cmd in {"approve-new", "approve_new"}:
+            if not arg:
+                print("  usage: approve-new <proposal_id>")
+                continue
+            ok = service.approve_proposal_as_new(arg)
+            print(f"  approved (as new) {arg}: {str(ok).lower()}")
+        elif cmd in {"approve-supersede", "approve_supersede"}:
+            sup_parts = arg.split(maxsplit=1)
+            if len(sup_parts) < 2:
+                print("  usage: approve-supersede <proposal_id> <old_memory_id>")
+                continue
+            ok = service.approve_proposal_superseding(
+                sup_parts[0], sup_parts[1].strip())
+            if ok:
+                print(f"  approved {sup_parts[0]} superseding "
+                      f"{sup_parts[1].strip()}: true")
+            else:
+                print(f"  approved-supersede {sup_parts[0]}: false "
+                      "(unknown proposal or old memory id)")
         elif cmd == "reject":
             if not arg:
                 print("  usage: reject <proposal_id>")
@@ -225,6 +295,11 @@ def _repl(service: WorkbenchService) -> None:
                 continue
             service.proposals.export_to(target)
             print(f"  exported proposal queue to {target}")
+        elif cmd in {"show-memory", "show_memory"}:
+            if not arg:
+                print("  usage: show-memory <memory_id>")
+                continue
+            _show_memory(service, arg)
         elif cmd == "demo":
             _run_demo()
         elif cmd == "export":

@@ -71,6 +71,10 @@ class MemoryProposal:
     status: ProposalStatus = ProposalStatus.PENDING
     edited_from: Optional[str] = None
     written: bool = False
+    lifecycle_verdict: Optional[str] = None
+    lifecycle_candidate_id: Optional[str] = None
+    lifecycle_reason: Optional[str] = None
+    supersedes_memory_id: Optional[str] = None
     created_at: str = field(default_factory=_utc_now_iso)
 
     def to_json(self) -> str:
@@ -97,6 +101,10 @@ class MemoryProposal:
                                            ProposalStatus.PENDING.value)),
             edited_from=data.get("edited_from"),
             written=bool(data.get("written", False)),
+            lifecycle_verdict=data.get("lifecycle_verdict"),
+            lifecycle_candidate_id=data.get("lifecycle_candidate_id"),
+            lifecycle_reason=data.get("lifecycle_reason"),
+            supersedes_memory_id=data.get("supersedes_memory_id"),
             created_at=data.get("created_at", _utc_now_iso()),
         )
 

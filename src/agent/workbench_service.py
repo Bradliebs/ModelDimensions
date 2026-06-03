@@ -27,6 +27,10 @@ from agent.candidate_retrieval import (
     retrieve_candidates,
 )
 from agent.memory_ledger import MemoryLedger
+from agent.memory_lifecycle import (
+    LifecycleVerdict,
+    analyse_proposal_against_ledger,
+)
 from agent.memory_proposals import ProposalBatch
 from agent.note_ingestion import extract_candidate_memories, load_text_file
 from agent.orchestrator import DeterministicEncoder, EncoderProtocol, MemoryBank
@@ -188,14 +192,94 @@ class WorkbenchService:
         text = load_text_file(path)
         batch = extract_candidate_memories(text, source_file)
         self.proposals.add_batch(batch)
+        # Tag each new proposal with how it relates to the existing memories
+        # (new / duplicate / conflict) so a reviewer sees it before approving.
+        for proposal in batch.proposals:
+            self._record_lifecycle(proposal)
         return batch
 
     def list_proposals(self, status: Optional[str] = "pending"):
         """List queued proposals, filtered by status (``None`` for all)."""
         return self.proposals.list(status)
 
+    # -- lifecycle analysis (v1.3) --
+
+    def _candidate_retriever(self, text: str):
+        return retrieve_candidates(self.bank, text, self.k)
+
+    def _record_lifecycle(self, proposal):
+        """Run lifecycle analysis for one proposal and store the result."""
+        check = analyse_proposal_against_ledger(
+            proposal, self.ledger,
+            candidate_retriever=self._candidate_retriever,
+        )
+        self.proposals.set_lifecycle(
+            proposal.proposal_id,
+            check.verdict.value,
+            check.candidate_memory_id,
+            check.reason,
+        )
+        return check
+
+    def analyse_proposal(self, proposal_id: str):
+        """Re-run lifecycle analysis for a queued proposal and store it.
+
+        Returns the :class:`LifecycleCheck`, or ``None`` if the id is unknown.
+        """
+        proposal = self.proposals.get(proposal_id)
+        if proposal is None:
+            return None
+        return self._record_lifecycle(proposal)
+
+    def list_conflicts(self):
+        """Pending proposals flagged as a conflict (hard or possible)."""
+        flagged = {LifecycleVerdict.CONFLICT.value,
+                   LifecycleVerdict.POSSIBLE_CONFLICT.value}
+        return [p for p in self.proposals.list_pending()
+                if p.lifecycle_verdict in flagged]
+
+    def list_duplicates(self):
+        """Pending proposals flagged as a duplicate (exact or possible)."""
+        flagged = {LifecycleVerdict.DUPLICATE.value,
+                   LifecycleVerdict.POSSIBLE_DUPLICATE.value}
+        return [p for p in self.proposals.list_pending()
+                if p.lifecycle_verdict in flagged]
+
     def approve_proposal(self, proposal_id: str) -> bool:
-        """Approve a proposal so it will be written by ``write_approved``."""
+        """Approve a proposal so it will be written by ``write_approved``.
+
+        A proposal flagged as a hard ``duplicate`` or ``conflict`` is refused
+        here: writing it needs the explicit :meth:`approve_proposal_as_new` or
+        :meth:`approve_proposal_superseding`. Soft (possible) flags are allowed.
+        """
+        proposal = self.proposals.get(proposal_id)
+        if proposal is not None and proposal.lifecycle_verdict in (
+            LifecycleVerdict.DUPLICATE.value,
+            LifecycleVerdict.CONFLICT.value,
+        ):
+            return False
+        return self.proposals.approve(proposal_id)
+
+    def approve_proposal_as_new(self, proposal_id: str) -> bool:
+        """Explicitly approve a proposal as a new memory, despite any flag.
+
+        This is the user-forced path for a duplicate or conflict: the proposal
+        is written as its own new memory and supersedes nothing.
+        """
+        self.proposals.set_supersedes(proposal_id, None)
+        return self.proposals.approve(proposal_id)
+
+    def approve_proposal_superseding(self, proposal_id: str,
+                                     old_memory_id: str) -> bool:
+        """Approve a proposal that will supersede ``old_memory_id`` when written.
+
+        The old memory must exist and be active. On write the old memory is
+        marked ``superseded`` and removed from the bank so it can no longer be
+        retrieved or grounded as the current answer.
+        """
+        if self.ledger.get(old_memory_id) is None:
+            return False
+        self.proposals.set_supersedes(proposal_id, old_memory_id)
         return self.proposals.approve(proposal_id)
 
     def reject_proposal(self, proposal_id: str) -> bool:
@@ -225,6 +309,14 @@ class WorkbenchService:
                 source=proposal.source_file,
                 tags=tags,
             )
+            # If this proposal supersedes an older memory, mark the old one
+            # superseded and remove it from the bank so it can no longer be
+            # retrieved or grounded as the current answer (the ledger keeps the
+            # superseded record and the supersession chain).
+            if proposal.supersedes_memory_id:
+                self.ledger.mark_superseded(
+                    proposal.supersedes_memory_id, entry.memory_id)
+                self.bank.delete(proposal.supersedes_memory_id)
             self.proposals.mark_written(proposal.proposal_id)
             written.append(entry)
         return written

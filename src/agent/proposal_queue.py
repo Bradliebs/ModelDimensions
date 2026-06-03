@@ -127,6 +127,28 @@ class ProposalQueue:
         self._flush()
         return True
 
+    def set_lifecycle(self, proposal_id: str, verdict: str,
+                      candidate_id: Optional[str], reason: str) -> bool:
+        """Attach lifecycle analysis (verdict / matched memory / reason)."""
+        proposal = self._proposals.get(proposal_id)
+        if proposal is None:
+            return False
+        proposal.lifecycle_verdict = verdict
+        proposal.lifecycle_candidate_id = candidate_id
+        proposal.lifecycle_reason = reason
+        self._flush()
+        return True
+
+    def set_supersedes(self, proposal_id: str,
+                       old_memory_id: Optional[str]) -> bool:
+        """Record the memory id this proposal will supersede when written."""
+        proposal = self._proposals.get(proposal_id)
+        if proposal is None:
+            return False
+        proposal.supersedes_memory_id = old_memory_id
+        self._flush()
+        return True
+
     # -- read operations --
 
     def get(self, proposal_id: str) -> Optional[MemoryProposal]:

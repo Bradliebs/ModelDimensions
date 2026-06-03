@@ -330,6 +330,82 @@ Pieces:
 python -m pytest evals/test_ingestion_approval.py -q   # ingestion tests, offline
 ```
 
+## Memory Lifecycle
+
+v1.3 adds **lifecycle management** so memory quality holds up over time. When a
+candidate is imported (or re-checked), the workbench compares it against the
+current memories and assigns a **lifecycle verdict** before you approve it:
+
+| Verdict | Meaning |
+|---|---|
+| `new` | Unrelated to any existing memory — safe to approve normally |
+| `possible_duplicate` | High lexical overlap, no contradiction — likely a restatement |
+| `duplicate` | Exact restatement of an existing memory |
+| `possible_conflict` | The verifier rejects it against a memory, lower overlap |
+| `conflict` | The verifier rejects it against a closely-related memory (a real contradiction) |
+
+Detection reuses the **frozen v1.0 verifier** for the contradiction signal (so a
+`Friday -> Monday` weekday flip is caught exactly as in the core demo) plus a
+lexical overlap measure for duplicates. No geometry, whitening, scaling, or
+grounding logic is touched.
+
+**Safety gate.** A plain `approve` **refuses** a candidate flagged `duplicate` or
+`conflict` — it returns false and writes nothing. Writing a contradiction is only
+possible through an explicit action:
+
+- `approve-new <proposal_id>` — keep the candidate as its **own new memory**,
+  alongside the existing one (supersedes nothing).
+- `approve-supersede <proposal_id> <old_memory_id>` — approve the candidate and
+  mark the old memory **superseded**. On `write-approved` the old memory is
+  recorded as `superseded` in the ledger **and removed from the bank**, so it can
+  no longer be retrieved or grounded as the current answer. The supersession
+  chain is preserved for audit (`supersedes` / `superseded_by`).
+
+This gives three distinct memory states — `active`, `superseded`, and `deleted`.
+A **superseded** memory is history: it stays in the ledger but is never the
+current grounded answer. A **deleted** memory is likewise gone from the bank and
+can never be cited.
+
+CLI commands:
+
+```text
+conflicts                  show pending candidates that conflict with a memory
+duplicates                 show pending candidates that duplicate a memory
+analyse <proposal_id>      re-check a candidate against the current memories
+approve-new <proposal_id>  force-approve a flagged candidate as a new memory
+approve-supersede <proposal_id> <old_memory_id>  approve and replace an old memory
+show-memory <memory_id>    show a memory and its supersession history
+```
+
+Typical flow (the supplier delivery date changes from Friday to Monday):
+
+```text
+workbench> import demos/seed_lifecycle_note.md
+workbench> conflicts
+  prop-xxxxxxxx  [fact] ...  the supplier delivery is on Monday afternoon
+      lifecycle: CONFLICT vs mem-0001 — verifier rejected against mem-0001
+workbench> approve prop-xxxxxxxx
+  approved prop-xxxxxxxx: false (flagged duplicate/conflict — use approve-new or approve-supersede)
+workbench> approve-supersede prop-xxxxxxxx mem-0001
+workbench> write-approved
+workbench> show-memory mem-0001
+  mem-0001  [superseded]  the supplier delivery is on Friday afternoon
+      superseded_by: mem-0002 (current: mem-0002)
+workbench> query when is the supplier delivery   # Friday memory is no longer grounded
+```
+
+Pieces:
+
+| File | Purpose |
+|---|---|
+| `src/agent/memory_lifecycle.py` | Duplicate + conflict detection (reuses the frozen verifier) |
+| `src/agent/memory_ledger.py` | `superseded` status + `supersedes` / `superseded_by` chain |
+| `demos/seed_lifecycle_note.md` | Example note with a duplicate, a date conflict, and a supersession |
+
+```bash
+python -m pytest evals/test_memory_lifecycle.py -q    # lifecycle tests, offline
+```
+
 ## License
 
 To be decided.

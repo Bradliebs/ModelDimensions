@@ -30,14 +30,17 @@ def _utc_now_iso() -> str:
 
 ACTIVE = "active"
 DELETED = "deleted"
+SUPERSEDED = "superseded"
 
 
 @dataclass
 class LedgerEntry:
     """One memory's provenance record.
 
-    ``status`` is ``"active"`` or ``"deleted"``. A deleted entry keeps its
-    ``deleted_at`` timestamp so the removal itself is auditable.
+    ``status`` is ``"active"``, ``"deleted"``, or ``"superseded"``. A deleted
+    entry keeps its ``deleted_at`` timestamp so the removal itself is auditable.
+    A superseded entry keeps ``superseded_by`` (the id that replaced it); the
+    replacing entry keeps the ids it ``supersedes`` so the history is a chain.
     """
 
     memory_id: str
@@ -47,6 +50,8 @@ class LedgerEntry:
     created_at: str = field(default_factory=_utc_now_iso)
     status: str = ACTIVE
     deleted_at: Optional[str] = None
+    supersedes: List[str] = field(default_factory=list)
+    superseded_by: Optional[str] = None
 
     def to_json(self) -> str:
         return json.dumps(asdict(self), ensure_ascii=False)
@@ -62,6 +67,8 @@ class LedgerEntry:
             created_at=data.get("created_at", _utc_now_iso()),
             status=data.get("status", ACTIVE),
             deleted_at=data.get("deleted_at"),
+            supersedes=list(data.get("supersedes", [])),
+            superseded_by=data.get("superseded_by"),
         )
 
 
@@ -108,6 +115,26 @@ class MemoryLedger:
         self._flush()
         return True
 
+    def mark_superseded(self, old_memory_id: str,
+                        new_memory_id: str) -> bool:
+        """Mark ``old_memory_id`` superseded by ``new_memory_id``.
+
+        The old entry's status becomes ``superseded`` and records
+        ``superseded_by``; the new entry records the old id in ``supersedes`` so
+        the chain is auditable in both directions. Returns True if the old entry
+        existed and was updated.
+        """
+        old = self._entries.get(old_memory_id)
+        if old is None or old.status == SUPERSEDED:
+            return False
+        old.status = SUPERSEDED
+        old.superseded_by = new_memory_id
+        new = self._entries.get(new_memory_id)
+        if new is not None and old_memory_id not in new.supersedes:
+            new.supersedes.append(old_memory_id)
+        self._flush()
+        return True
+
     # -- read operations --
 
     def get(self, memory_id: str) -> Optional[LedgerEntry]:
@@ -119,6 +146,29 @@ class MemoryLedger:
 
     def active_entries(self) -> List[LedgerEntry]:
         return [e for e in self._entries.values() if e.status == ACTIVE]
+
+    def get_active_memories(self) -> List[LedgerEntry]:
+        """All currently active memories (not deleted, not superseded)."""
+        return self.active_entries()
+
+    def get_current_memory(self, memory_id: str) -> Optional[LedgerEntry]:
+        """Follow the supersession chain to the memory that is current now.
+
+        If ``memory_id`` was superseded, walk ``superseded_by`` to the latest
+        entry. Returns the current entry, or ``None`` if the id is unknown. A
+        deleted current entry is still returned (its status says ``deleted``).
+        """
+        entry = self._entries.get(memory_id)
+        seen: set[str] = set()
+        while entry is not None and entry.superseded_by is not None:
+            if entry.superseded_by in seen:
+                break
+            seen.add(entry.superseded_by)
+            nxt = self._entries.get(entry.superseded_by)
+            if nxt is None:
+                break
+            entry = nxt
+        return entry
 
     def export(self) -> List[dict]:
         """Return the full ledger (active and deleted) as plain dicts."""
