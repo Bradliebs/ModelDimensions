@@ -798,6 +798,60 @@ a source means editing the local Markdown and rebuilding.
 | `scripts/build_m365_pack.ps1` | Build the M365 pack from local docs and run its eval (exits non-zero on failure) |
 | `evals/test_m365_pack.py` | Spec-load, build, metadata, eval, review-console, and memory-separation tests |
 
+## Hugging Face Dataset Imports
+
+Hugging Face hosts thousands of datasets, but *free to download* is not the same
+as *safe to trust*. The v1.9 importer lets a consultant pull a small, governed
+sample from a dataset into either a pack's knowledge library or its evaluation
+samples — without ever bulk-downloading or silently trusting the data.
+
+The importer is safe by construction:
+
+- **Free does not mean trusted.** Every import is gated on the dataset's
+  declared provenance before any row is written.
+- **Licence checks.** An unknown or undeclared licence is *blocked for knowledge
+  mode* and allowed only with a warning for *eval mode*. A policy of
+  `require_license` blocks unknown licences in both modes.
+- **Dataset cards.** Licence, tags, task categories, size, citation, and
+  revision are read from the dataset card. You can require a card to be present
+  before any import proceeds.
+- **Sample limits.** `sample_size` is capped at 100 rows; a larger request is
+  clamped, not honoured. The point is a governed sample, not bulk ingestion.
+- **Streaming.** Sampling streams by default, so the full dataset is never
+  materialised — only the capped sample is read.
+- **Knowledge vs eval mode.** `knowledge` mode writes through the same
+  `KnowledgeLibrary` import path as every other source (with full provenance and
+  a `review_required` staleness policy). `eval` mode writes a samples file only.
+  Neither mode ever writes to the `MemoryLedger`.
+- **Coding first.** The bundled demo imports a tiny coding sample.
+- **Medical guarded.** `medical` and `legal` domains are refused under an
+  `unknown` authority; the medical fixture ships as a guarded `.example`.
+- **No silent bulk imports.** With no local fixture and no explicit network
+  opt-in, sampling *refuses* rather than downloading. Tests run entirely offline
+  on local fixtures.
+
+Inspect a dataset's governance before importing, then import a small sample:
+
+```text
+workbench> hf-inspect demo/small-coding --card demos/hf_fixtures/dataset_card_with_license.json
+workbench> hf-import demo/small-coding --pack my-pack --mode eval --domain coding --authority reputable \
+             --card demos/hf_fixtures/dataset_card_with_license.json \
+             --fixture demos/hf_fixtures/small_coding_dataset.jsonl --sample-size 5
+```
+
+| File | What it adds |
+|---|---|
+| `src/agent/hf_metadata.py` | Offline-first dataset card / metadata access with graceful network fallback |
+| `src/agent/hf_dataset_importer.py` | The licence-aware, capped, knowledge-vs-eval HF importer |
+| `demos/hf_fixtures/` | Offline dataset-card and row fixtures (coding sample, guarded medical example) |
+| `scripts/import_hf_sample.ps1` | Disabled-safe demo that imports a tiny coding sample from local fixtures |
+| `evals/test_hf_dataset_importer.py` | Licence gating, sample cap, memory separation, and no-silent-download tests |
+
+The pack builder also recognises a `source_type: huggingface_dataset` source in
+a pack spec, but HF ingestion stays disabled during a normal build (like URL
+ingestion) and must be enabled explicitly — a starter build never samples the
+Hub.
+
 ## License
 
 To be decided.

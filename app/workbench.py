@@ -31,7 +31,7 @@ from agent.workbench_service import QueryAudit, WorkbenchService  # noqa: E402
 from agent.project_packs import PackRegistry  # noqa: E402
 from agent import pack_builder  # noqa: E402
 from agent import pack_evaluator  # noqa: E402
-
+from agent import hf_dataset_importer  # noqa: E402
 _DEFAULT_LEDGER = ROOT / "demos" / "workbench_ledger.jsonl"
 _DEFAULT_QUEUE = ROOT / "demos" / "workbench_proposals.jsonl"
 _SEED_FILE = ROOT / "demos" / "seed_concept_cells_project.jsonl"
@@ -189,6 +189,8 @@ Commands:
   pack-build <spec>     build a curated knowledge pack from a JSON/YAML spec
   pack-eval <pack> <eval-file>  validate a pack's retrieval with eval questions
   pack-report <pack>    show a pack's curated sources and chunk counts
+  hf-inspect <dataset_id>  preview a Hugging Face dataset's licence/decision
+  hf-import <dataset_id> --pack <pack>  import a small governed HF sample
   demo                  run the Friday -> Monday near-miss example
   export [path]         write the ledger JSONL (defaults to the active ledger)
   help                  show this help
@@ -669,6 +671,92 @@ def _repl(service: WorkbenchService,
             report = pack_builder.report_for_pack(
                 report_service, pack_id=pack.pack_id, pack_name=pack.name)
             _print_build_report(report)
+        elif cmd in {"hf-inspect", "hf_inspect"}:
+            if registry is None:
+                print("  packs are disabled; relaunch with --pack-root <dir>")
+                continue
+            positional, flags = _parse_flags(arg)
+            dataset_id = positional.strip()
+            if not dataset_id:
+                print("  usage: hf-inspect <dataset_id> [--card <card.json>] "
+                      "[--fixture <rows.jsonl>] [--mode knowledge|eval] "
+                      "[--domain <domain>] [--authority <authority>]")
+                continue
+            spec = hf_dataset_importer.HFDatasetSpec(
+                dataset_id=dataset_id,
+                mode=flags.get("mode") or "eval",
+                domain=flags.get("domain") or "general",
+                authority=flags.get("authority") or "unknown",
+                card_path=flags.get("card") or None,
+                local_fixture=flags.get("fixture") or None,
+            )
+            result = hf_dataset_importer.inspect_dataset(spec)
+            meta = result["metadata"]
+            decision = result["decision"]
+            print(f"  dataset      = {dataset_id}")
+            print(f"  card_present = {str(meta['card_present']).lower()}")
+            print(f"  license      = {meta['license'] or '-'} "
+                  f"(known: {str(meta['license_known']).lower()})")
+            print(f"  would_import = {str(decision['would_import']).lower()}")
+            if decision["rejected_reason"]:
+                print(f"  blocked      = {decision['rejected_reason']}")
+            for warn in decision["warnings"]:
+                print(f"  warning      = {warn}")
+        elif cmd in {"hf-import", "hf_import"}:
+            if registry is None:
+                print("  packs are disabled; relaunch with --pack-root <dir>")
+                continue
+            positional, flags = _parse_flags(arg)
+            dataset_id = positional.strip()
+            pack_name = flags.get("pack", "").strip()
+            if not dataset_id or not pack_name:
+                print("  usage: hf-import <dataset_id> --pack <pack> "
+                      "[--split <split>] [--field <field>] "
+                      "[--sample-size <n>] [--mode knowledge|eval] "
+                      "[--domain <domain>] [--authority <authority>] "
+                      "[--card <card.json>] [--fixture <rows.jsonl>]")
+                continue
+            pack = registry.get_pack(pack_name)
+            if pack is None:
+                print(f"  unknown pack: {pack_name}")
+                continue
+            fields = [flags["field"]] if flags.get("field") else ["text"]
+            try:
+                sample_size = (int(flags["sample-size"])
+                               if flags.get("sample-size") else 100)
+            except ValueError:
+                print("  --sample-size must be an integer")
+                continue
+            spec = hf_dataset_importer.HFDatasetSpec(
+                dataset_id=dataset_id,
+                split=flags.get("split") or "train",
+                text_fields=fields,
+                sample_size=sample_size,
+                mode=flags.get("mode") or "eval",
+                domain=flags.get("domain") or "general",
+                authority=flags.get("authority") or "unknown",
+                card_path=flags.get("card") or None,
+                local_fixture=flags.get("fixture") or None,
+            )
+            try:
+                report = hf_dataset_importer.import_hf_dataset_to_pack(
+                    spec, pack)
+            except RuntimeError as exc:
+                print(f"  refused: {exc}")
+                continue
+            print(f"  dataset       = {report.dataset_id}")
+            print(f"  mode          = {report.mode}")
+            print(f"  accepted      = {str(report.accepted).lower()}")
+            if not report.accepted:
+                print(f"  blocked       = {report.rejected_reason}")
+            else:
+                print(f"  imported      = {report.imported_count} rows")
+                if report.knowledge_source_id:
+                    print(f"  knowledge_src = {report.knowledge_source_id}")
+                if report.eval_output_path:
+                    print(f"  eval_samples  = {report.eval_output_path}")
+            for warn in report.warnings:
+                print(f"  warning       = {warn}")
         elif cmd == "export":
             target = Path(arg) if arg else service.ledger.path
             if target is None:

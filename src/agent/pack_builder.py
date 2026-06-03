@@ -46,6 +46,18 @@ URL_INGESTION_DISABLED_REASON = (
     "fetch remote sources"
 )
 
+# Recorded as the skip reason whenever a Hugging Face dataset source is left out
+# because HF ingestion was not explicitly enabled. Like URL ingestion, HF
+# sampling never happens during a normal (starter) build.
+HF_INGESTION_DISABLED_REASON = (
+    "Hugging Face ingestion is disabled; import HF datasets explicitly with the "
+    "hf importer (free does not mean trusted)"
+)
+
+# The ``source_type`` value that marks a source as a Hugging Face dataset sample
+# rather than a local file/directory.
+HF_SOURCE_TYPE = "huggingface_dataset"
+
 
 def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -80,10 +92,23 @@ class PackSourceSpec:
     staleness_policy: str = "static"
     include_patterns: Optional[List[str]] = None
     exclude_patterns: Optional[List[str]] = None
+    # Optional Hugging Face dataset source (v1.9). When ``source_type`` is
+    # ``"huggingface_dataset"`` the source is sampled from the Hub instead of a
+    # local file, and only when HF ingestion is explicitly enabled.
+    source_type: str = "local"
+    dataset_id: Optional[str] = None
+    split: Optional[str] = None
+    text_fields: Optional[List[str]] = None
+    sample_size: Optional[int] = None
+    mode: Optional[str] = None
 
     @property
     def is_url(self) -> bool:
         return _is_url(self.path_or_url)
+
+    @property
+    def is_hf(self) -> bool:
+        return (self.source_type or "local").lower() == HF_SOURCE_TYPE
 
     def to_dict(self) -> dict:
         return {
@@ -99,24 +124,39 @@ class PackSourceSpec:
             if self.include_patterns else None,
             "exclude_patterns": list(self.exclude_patterns)
             if self.exclude_patterns else None,
+            "source_type": self.source_type,
+            "dataset_id": self.dataset_id,
+            "split": self.split,
+            "text_fields": list(self.text_fields) if self.text_fields else None,
+            "sample_size": self.sample_size,
+            "mode": self.mode,
         }
 
     @classmethod
     def from_dict(cls, data: dict) -> "PackSourceSpec":
         if "source_name" not in data:
             raise ValueError("source spec needs a 'source_name'")
-        if "path_or_url" not in data:
+        source_type = str(data.get("source_type", "local"))
+        is_hf = source_type.lower() == HF_SOURCE_TYPE
+        if "path_or_url" not in data and not is_hf:
             raise ValueError(
                 f"source {data['source_name']!r} needs a 'path_or_url'")
+        if is_hf and "dataset_id" not in data:
+            raise ValueError(
+                f"source {data['source_name']!r} needs a 'dataset_id' for a "
+                f"{HF_SOURCE_TYPE} source")
         if "domain" not in data:
             raise ValueError(
                 f"source {data['source_name']!r} needs a 'domain'")
         if "authority" not in data:
             raise ValueError(
                 f"source {data['source_name']!r} needs an 'authority'")
+        path_or_url = str(
+            data.get("path_or_url")
+            or (f"hf://{data['dataset_id']}" if is_hf else ""))
         return cls(
             source_name=str(data["source_name"]),
-            path_or_url=str(data["path_or_url"]),
+            path_or_url=path_or_url,
             domain=str(data["domain"]),
             authority=str(data["authority"]),
             version=_opt_str(data.get("version")),
@@ -125,6 +165,13 @@ class PackSourceSpec:
             staleness_policy=str(data.get("staleness_policy", "static")),
             include_patterns=_opt_str_list(data.get("include_patterns")),
             exclude_patterns=_opt_str_list(data.get("exclude_patterns")),
+            source_type=source_type,
+            dataset_id=_opt_str(data.get("dataset_id")),
+            split=_opt_str(data.get("split")),
+            text_fields=_opt_str_list(data.get("text_fields")),
+            sample_size=(int(data["sample_size"])
+                         if data.get("sample_size") is not None else None),
+            mode=_opt_str(data.get("mode")),
         )
 
 
@@ -355,14 +402,16 @@ def _ingest_url(spec: PackSourceSpec) -> None:  # pragma: no cover - scaffold
 
 
 def build_pack(plan: PackBuildPlan, registry: PackRegistry, *,
-               allow_url_ingestion: bool = False) -> PackBuildReport:
+               allow_url_ingestion: bool = False,
+               allow_hf_ingestion: bool = False) -> PackBuildReport:
     """Build (or extend) a pack's knowledge library from a plan's sources.
 
-    Only local sources are imported. A URL source is recorded as skipped unless
-    URL ingestion is enabled both on the plan *and* by the caller, so a network
-    fetch can never happen by accident. Re-importing the same file is idempotent
-    (the source id is derived from name + path). The active pack selection is not
-    changed.
+    Only local sources are imported by default. A URL source is recorded as
+    skipped unless URL ingestion is enabled, and a Hugging Face dataset source
+    is recorded as skipped unless HF ingestion is *explicitly* enabled — so
+    neither a network fetch nor a Hub sample can happen during a normal build.
+    Re-importing the same file is idempotent (the source id is derived from
+    name + path). The active pack selection is not changed.
     """
     pack = _ensure_pack(plan, registry)
     service = WorkbenchService.from_pack(pack, registry=registry)
@@ -371,6 +420,10 @@ def build_pack(plan: PackBuildPlan, registry: PackRegistry, *,
     url_enabled = allow_url_ingestion and plan.allow_url_ingestion
 
     for spec in plan.sources:
+        if spec.is_hf:
+            _build_hf_source(spec, pack, service, report,
+                             allow_hf_ingestion=allow_hf_ingestion)
+            continue
         if spec.is_url and not url_enabled:
             report.skipped.append({
                 "source_name": spec.source_name,
@@ -421,6 +474,72 @@ def build_pack(plan: PackBuildPlan, registry: PackRegistry, *,
                 "chunks": chunks,
             })
     return report
+
+
+def _build_hf_source(spec: PackSourceSpec, pack, service: WorkbenchService,
+                     report: PackBuildReport, *,
+                     allow_hf_ingestion: bool) -> None:
+    """Handle a Hugging Face dataset source during a build (gated, opt-in).
+
+    Disabled by default: the source is recorded as skipped so a normal/starter
+    build never samples the Hub. When enabled, the dataset is imported through
+    the dedicated licence-aware importer and the outcome is recorded.
+    """
+    if not allow_hf_ingestion:
+        report.skipped.append({
+            "source_name": spec.source_name,
+            "path_or_url": spec.path_or_url,
+            "reason": HF_INGESTION_DISABLED_REASON,
+        })
+        return
+
+    # Local import keeps the importer dependency out of the default build path.
+    from agent.hf_dataset_importer import (
+        HFDatasetMode,
+        HFDatasetSpec,
+        import_hf_dataset_to_pack,
+    )
+
+    hf_spec = HFDatasetSpec(
+        dataset_id=spec.dataset_id or "",
+        split=spec.split or "train",
+        text_fields=list(spec.text_fields) if spec.text_fields else ["text"],
+        sample_size=spec.sample_size if spec.sample_size is not None else 100,
+        domain=spec.domain,
+        authority=spec.authority,
+        mode=HFDatasetMode(spec.mode) if spec.mode else HFDatasetMode.EVAL,
+        revision=spec.version,
+    )
+    hf_report = import_hf_dataset_to_pack(hf_spec, pack)
+    if not hf_report.accepted:
+        report.skipped.append({
+            "source_name": spec.source_name,
+            "path_or_url": spec.path_or_url,
+            "reason": hf_report.rejected_reason or "HF import refused",
+        })
+        return
+
+    if hf_report.knowledge_source_id:
+        service.knowledge.load()
+        chunks = len(service.knowledge.list_chunks(
+            source_id=hf_report.knowledge_source_id))
+        report.sources.append({
+            "source_id": hf_report.knowledge_source_id,
+            "source_name": spec.source_name,
+            "domain": spec.domain,
+            "authority": spec.authority,
+            "version": hf_report.license,
+            "licence": hf_report.license,
+            "staleness_policy": "review_required",
+            "path_or_url": spec.path_or_url,
+            "chunks": chunks,
+        })
+    else:
+        report.skipped.append({
+            "source_name": spec.source_name,
+            "path_or_url": spec.path_or_url,
+            "reason": f"eval samples written to {hf_report.eval_output_path}",
+        })
 
 
 def report_for_pack(service: WorkbenchService, *,

@@ -1,0 +1,10 @@
+{
+  "dataset_id": "demo/small-coding",
+  "card_present": true,
+  "license": "apache-2.0",
+  "tags": ["code", "python", "snippets"],
+  "task_categories": ["text-generation"],
+  "size_info": {"num_examples": 1200, "download_size_bytes": 48213},
+  "citation": "@misc{demo_small_coding_2024, title={Demo Small Coding}}",
+  "revision": "abc1234def5678"
+}
