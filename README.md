@@ -1206,6 +1206,45 @@ Relevance-ranked retrieval — actually answering the specific question asked �
 would need a semantic backend or SLM. The sprint is the instrument that makes
 that gap visible and measurable; it deliberately does **not** paper over it.
 
+## AnswerGuard: composer-agnostic answer verification
+
+`src/slm/answer_guard.py` is an independent, deterministic check that runs over
+a **finished** `ComposedAnswer` after composition. Where the composer renders a
+`GroundingPackage` into prose, the guard verifies the prose did not drift from
+the package:
+
+* no citation that is not in the package's allowed evidence (no invented sources);
+* a non-grounded answer (refusal / conflict / model-prior) cites nothing;
+* a refusal was not silently softened into a confident answer;
+* a model-prior answer is labelled as such and never presents as grounded;
+* the answer's mode matches the package's mode (no relabelling);
+* a stale-source caution in the package is still surfaced in the prose.
+
+**Why this exists when `LocalSLMComposer` already validates its own output.**
+That internal check only guards the *SLM* path, as a silent fallback trigger.
+But `WorkbenchService.answer_query` / `compose_answer` accept an **arbitrary**
+`composer=...`. A custom or future composer is not bound by that internal check.
+The AnswerGuard is composer-agnostic: it runs on every answer and emits an
+explicit `ACCEPT` / `REJECT` verdict that lands in the audit trail
+(`result.audit["guard"]`).
+
+Honest scope: this is **defence-in-depth plus an audit verdict**, not a fix for
+a live failure in the default path. The built-in `TemplateComposer` (default)
+and `LocalSLMComposer` are correct by construction, so they always pass — the
+guard's genuinely new value is (1) catching a misbehaving *custom* composer and
+(2) recording a transparent verdict on every answer. `enforce()` is the safe
+wrapper: on `REJECT` it discards the offending answer and recomposes
+deterministically with the template, so a rogue composer cannot leak a
+fabricated, mislabelled, or refusal-softening answer to the caller.
+
+This is the assistant layer's "immune system" / critic. It does **not** rebuild
+the existing intent/route/proposal/approval pipeline (those already exist) and
+it never relaxes a frozen rule — it only observes the composed answer.
+
+Tests: `evals/test_answer_guard.py` (template passes on every mode; each
+violation type is caught on a deliberately-rogue composer; `enforce` recomposes
+safely; `answer_query` records the verdict).
+
 ## License
 
 To be decided.

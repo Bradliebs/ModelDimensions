@@ -72,6 +72,7 @@ from slm.assistant_composer import (
     LocalSLMComposer,
     TemplateComposer,
 )
+from slm.answer_guard import enforce as guard_enforce
 from slm.local_slm_backend import LocalSLMBackend, make_default_slm_backend
 
 # Retrieval is intentionally permissive (epsilon large) so a stored memory is
@@ -881,9 +882,18 @@ class WorkbenchService:
             else:
                 composer = TemplateComposer()
         answer = self.compose_answer(package, composer)
+        # Independent post-hoc guard: verify the composed answer never drifts
+        # from the package (no invented citation, softened refusal, or
+        # stale-as-current). On a REJECT the offending answer is discarded and
+        # recomposed deterministically; the verdict is recorded in the audit.
+        # The built-in template/SLM composers are correct by construction, so
+        # this only changes output for a misbehaving custom composer.
+        answer, guard_report = guard_enforce(package, answer)
+        audit = dict(package.query_audit or {})
+        audit["guard"] = guard_report.to_dict()
         return AssistantResult(
             query=query_text,
-            audit=package.query_audit or {},
+            audit=audit,
             answer=answer,
             evidence_ids=sorted(package.allowed_citation_ids),
             refused=answer.refused,
