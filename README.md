@@ -1157,6 +1157,55 @@ and eval status are visible together.
   would enable — changes *citation eligibility*. That is a separate, ratified
   step and is intentionally **not** in this read-only slice.
 
+## v2.1.1 Value Sprint (read-only instrumentation)
+
+The Value Sprint measures whether the M365 / Coding pack produces *practical
+value* on real recurring workflows — without adding architecture. It runs a
+fixed query set through the **frozen** assistant path (template composer,
+offline, no SLM) and records an audit row per query: how it routed, whether it
+grounded and cited, whether it was refused, whether a stale source was flagged,
+and whether it grounded when it should not have.
+
+```bash
+python scripts/run_value_sprint.py            # writes results/value_sprint_report.md
+python scripts/run_value_sprint.py --jsonl results/value_sprint_rows.jsonl
+```
+
+Each row carries six audit fields: `route`, `refused`, `citations_count`,
+`stale_warning`, `model_prior_used`, and an `answer_snippet`. The report tallies
+**useful answers, refusals, missing evidence, stale evidence, false groundings,
+and pack gaps**.
+
+| File | What it adds |
+|---|---|
+| `src/agent/value_sprint.py` | Pure, read-only sprint runner, summary, and Markdown report |
+| `demos/value_sprint_queries.jsonl` | 10 realistic queries (verbatim, paraphrased, out-of-domain) |
+| `scripts/run_value_sprint.py` | Builds the pack, runs the sprint offline, writes the report |
+| `evals/test_value_sprint.py` | Deterministic tests over a real pack build |
+
+### Honest finding
+
+Running the sprint surfaced a real, measured result that contradicts the
+intuitive story. The deterministic retrieval backend is **over-permissive**: it
+returns a broad fixed citation set for almost any query — verbatim, paraphrased,
+or entirely out-of-domain (an AWS question still grounded an irrelevant coding
+chunk). So `grounded + cited` means *evidence was retrieved*, **not** *the answer
+is relevant*; citation count is not a relevance signal with this backend.
+
+What genuinely delivers value today is **trust behaviour**, not broad retrieval:
+
+* **Refusal on no evidence.** An empty-ledger decision-recall query refuses
+  cleanly instead of inventing an answer.
+* **Stale-source flagging.** Answers that cite the stale PowerApps source carry
+  a stale caution.
+* **Grounding guard.** Even when an irrelevant source is cited for the AWS
+  query, forbidden terms (`AWS`, `S3 bucket`, `Lambda`) never leak into the
+  answer.
+
+Relevance-ranked retrieval — actually answering the specific question asked —
+would need a semantic backend or SLM. The sprint is the instrument that makes
+that gap visible and measurable; it deliberately does **not** paper over it.
+
 ## License
 
 To be decided.
