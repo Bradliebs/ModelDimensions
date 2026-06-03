@@ -551,6 +551,64 @@ false retrievals, zero deleted-source citations, and zero memory pollution.
 | `src/agent/retrieval_backends.py` | Deterministic + semantic backends behind one Protocol |
 | `experiments/exp13_knowledge_retrieval_quality.py` | Retrieval-quality comparison, writes `results/exp13_summary.json` |
 
+## Project Packs
+
+v1.6 adds **project packs**: isolated workspaces so unrelated projects never
+share memory. Each pack is a self-contained directory with its own memory
+ledger, proposal queue, knowledge library, persisted concept-cell bank, and
+runtime settings. Queries only ever see the **active** pack, so a memory or an
+imported document in one pack is invisible from another.
+
+A pack lives under a pack root (default `demos/packs/`):
+
+```
+demos/packs/<pack_id>/
+  manifest.json     # pack metadata + runtime settings
+  bank.jsonl        # persisted concept cells (vectors + ids)
+  ledger.jsonl      # memory ledger
+  proposals.jsonl   # ingestion proposal queue
+  knowledge.jsonl   # imported knowledge library
+```
+
+Open a pack from the CLI and switch between packs at any time:
+
+```bash
+python app/workbench.py --pack concept-cells      # open (or create) a pack
+# or, from inside the REPL:
+#   packs                       list packs (the active one is marked *)
+#   pack-create <name>          create a new pack
+#   pack-use <name>             switch the active pack (re-points every store)
+#   pack-info [name]            show a pack's paths and counts
+#   pack-export <name> <path>   export a pack to a .zip bundle
+#   pack-import <path>          import a pack bundle
+```
+
+The PowerShell launcher forwards the same options (using `-Pack` forces the CLI,
+since Streamlit does not pass script arguments):
+
+```powershell
+.\scripts\run_workbench.ps1 -Pack concept-cells
+.\scripts\run_workbench.ps1 -Pack coding-reference -PackRoot demos\packs
+```
+
+**Isolation guarantee.** Two demo packs ship as worked examples:
+`concept-cells` (project memory seeded from its own history) and
+`coding-reference` (imported coding knowledge). Add the same fact to one and
+query it from the other — the second pack stays silent, because each pack reads
+and writes only its own files. Exporting a pack zips its manifest and all four
+stores into one bundle; importing it elsewhere restores the manifest and the
+data intact.
+
+This layer adds no geometry: the concept-cell core, whitening/scaling,
+write/query construction, the verifier's REJECT override, and the grounding
+policy are unchanged. A pack only decides *where* the existing stores live.
+
+| File | What it adds |
+|---|---|
+| `src/agent/project_packs.py` | `ProjectPack`, `PackManifest`, `PackRegistry` (create/switch/export/import) |
+| `evals/test_project_packs.py` | Isolation, switching, and export/import tests |
+| `demos/packs/` | Two worked-example packs (`concept-cells`, `coding-reference`) |
+
 ## License
 
 To be decided.

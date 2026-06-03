@@ -28,11 +28,13 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
 from agent.workbench_service import QueryAudit, WorkbenchService  # noqa: E402
+from agent.project_packs import PackRegistry  # noqa: E402
 
 _DEFAULT_LEDGER = ROOT / "demos" / "workbench_ledger.jsonl"
 _DEFAULT_QUEUE = ROOT / "demos" / "workbench_proposals.jsonl"
 _SEED_FILE = ROOT / "demos" / "seed_concept_cells_project.jsonl"
 _INGEST_NOTE = ROOT / "demos" / "seed_ingestion_note.md"
+_DEFAULT_PACK_ROOT = ROOT / "demos" / "packs"
 
 # The canonical Friday -> Monday example: a stored fact and a one-word near-miss.
 _FRIDAY_FACT = "the supplier delivery is on Friday afternoon"
@@ -176,6 +178,12 @@ Commands:
   query-knowledge <text>  query imported knowledge only (with domain cautions)
   query-all <text>      query memory and knowledge, kept clearly separated
   backend               show the active knowledge retrieval backend
+  packs                 list project packs (isolated workspaces)
+  pack-create <name>    create a new project pack
+  pack-use <name>       switch the active pack (re-points all stores)
+  pack-info [name]      show the active pack (or a named pack) and its paths
+  pack-export <name> <path>  export a pack to a .zip bundle
+  pack-import <path>    import a pack bundle and register it
   demo                  run the Friday -> Monday near-miss example
   export [path]         write the ledger JSONL (defaults to the active ledger)
   help                  show this help
@@ -262,8 +270,61 @@ def _run_demo() -> None:
           "retrieval, decides grounding.\n")
 
 
-def _repl(service: WorkbenchService) -> None:
-    print("Concept Memory Workbench (v1.1) — offline. Type 'help' for commands.")
+def _pack_label(service: WorkbenchService) -> str:
+    """A short ``[pack: name]`` prefix for audit output, or '' if global."""
+    info = service.active_pack_info()
+    return f"[pack: {info['name']}] " if info else ""
+
+
+def _seed_pack_if_empty(service: WorkbenchService, pack) -> None:
+    """Seed a freshly-used pack from its manifest's seed settings, if present."""
+    if not service.export_ledger():
+        mem_seed = pack.resolve_setting_path("seed_memory")
+        if mem_seed is not None:
+            service.seed_from(mem_seed)
+    if not service.list_knowledge_sources():
+        kn_seed = pack.resolve_setting_path("seed_knowledge")
+        if kn_seed is not None:
+            service.import_knowledge(
+                kn_seed,
+                domain=str(pack.settings.get("knowledge_domain", "general")),
+                authority=str(pack.settings.get("knowledge_authority", "unknown")),
+                source_name=str(pack.settings.get("knowledge_name", pack.name)),
+            )
+
+
+def _print_packs(registry: PackRegistry) -> None:
+    packs = registry.list_packs()
+    if not packs:
+        print("  (no packs yet — create one with: pack-create <name>)")
+        return
+    active = registry.get_active_pack()
+    active_id = active.pack_id if active else None
+    for pack in packs:
+        marker = "*" if pack.pack_id == active_id else " "
+        desc = f"  — {pack.description}" if pack.description else ""
+        print(f"  {marker} {pack.pack_id}  ({pack.name}){desc}")
+
+
+def _print_pack_info(info: dict) -> None:
+    print(f"  pack_id   : {info['pack_id']}")
+    print(f"  name      : {info['name']}")
+    if info.get("description"):
+        print(f"  desc      : {info['description']}")
+    print(f"  root      : {info['root_path']}")
+    print(f"  memories  : {info['memory_entries']} ledger entries")
+    print(f"  proposals : {info['proposal_entries']} queued")
+    print(f"  knowledge : {info['knowledge_records']} records")
+    print(f"  backend   : {info['default_knowledge_backend']}")
+
+
+def _repl(service: WorkbenchService,
+          registry: PackRegistry | None = None) -> None:
+    label = _pack_label(service).strip()
+    suffix = f" {label}" if label else ""
+    print("Concept Memory Workbench (v1.1) — offline. "
+          f"Type 'help' for commands.{suffix}")
+
     while True:
         try:
             raw = input("workbench> ").strip()
@@ -290,11 +351,17 @@ def _repl(service: WorkbenchService) -> None:
             if not arg:
                 print("  usage: query <text>")
                 continue
+            label = _pack_label(service).strip()
+            if label:
+                print(label)
             print(_format_audit(service.query_memory(arg)))
         elif cmd in {"query-history", "query_history"}:
             if not arg:
                 print("  usage: query-history <text>")
                 continue
+            label = _pack_label(service).strip()
+            if label:
+                print(label)
             print(_format_audit(
                 service.query_memory(arg, include_historical=True)))
         elif cmd == "delete":
@@ -454,6 +521,74 @@ def _repl(service: WorkbenchService) -> None:
                 print("  (semantic mode — meaning-based; retrieval is not truth)")
         elif cmd == "demo":
             _run_demo()
+        elif cmd in {"packs", "pack-list", "pack_list"}:
+            if registry is None:
+                print("  packs are disabled; relaunch with --pack-root <dir>")
+                continue
+            _print_packs(registry)
+        elif cmd in {"pack-create", "pack_create"}:
+            if registry is None:
+                print("  packs are disabled; relaunch with --pack-root <dir>")
+                continue
+            if not arg:
+                print("  usage: pack-create <name>")
+                continue
+            pack = registry.create_pack(arg)
+            print(f"  created pack {pack.pack_id} ({pack.name})")
+        elif cmd in {"pack-use", "pack_use"}:
+            if registry is None:
+                print("  packs are disabled; relaunch with --pack-root <dir>")
+                continue
+            if not arg:
+                print("  usage: pack-use <name>")
+                continue
+            try:
+                pack = service.switch_pack(arg)
+            except (KeyError, ValueError) as exc:
+                print(f"  {exc}")
+                continue
+            _seed_pack_if_empty(service, pack)
+            print(f"  active pack -> {pack.pack_id} ({pack.name})")
+        elif cmd in {"pack-info", "pack_info"}:
+            if registry is None:
+                print("  packs are disabled; relaunch with --pack-root <dir>")
+                continue
+            if arg:
+                info = registry.pack_info(arg)
+            else:
+                info = service.active_pack_info()
+            if info is None:
+                print("  no active pack (using global stores)" if not arg
+                       else f"  unknown pack: {arg}")
+                continue
+            _print_pack_info(info)
+        elif cmd in {"pack-export", "pack_export"}:
+            if registry is None:
+                print("  packs are disabled; relaunch with --pack-root <dir>")
+                continue
+            bits = arg.split(maxsplit=1)
+            if len(bits) != 2:
+                print("  usage: pack-export <name> <path>")
+                continue
+            try:
+                out = registry.export_pack(bits[0], bits[1].strip())
+            except KeyError as exc:
+                print(f"  {exc}")
+                continue
+            print(f"  exported pack to {out}")
+        elif cmd in {"pack-import", "pack_import"}:
+            if registry is None:
+                print("  packs are disabled; relaunch with --pack-root <dir>")
+                continue
+            if not arg:
+                print("  usage: pack-import <path>")
+                continue
+            try:
+                pack = registry.import_pack(arg)
+            except (ValueError, OSError) as exc:
+                print(f"  {exc}")
+                continue
+            print(f"  imported pack {pack.pack_id} ({pack.name})")
         elif cmd == "export":
             target = Path(arg) if arg else service.ledger.path
             if target is None:
@@ -476,6 +611,10 @@ def main(argv: list[str] | None = None) -> int:
                         help="start with an empty workbench")
     parser.add_argument("--demo", action="store_true",
                         help="run the Friday -> Monday example and exit")
+    parser.add_argument("--pack-root", default=str(_DEFAULT_PACK_ROOT),
+                        help="directory holding project packs")
+    parser.add_argument("--pack", default=None,
+                        help="name or id of the project pack to open")
     args = parser.parse_args(argv)
 
     if args.demo:
@@ -483,16 +622,30 @@ def main(argv: list[str] | None = None) -> int:
         _run_demo()
         return 0
 
+    registry = PackRegistry(args.pack_root)
+
+    if args.pack:
+        pack = registry.get_pack(args.pack)
+        if pack is None:
+            pack = registry.create_pack(args.pack)
+        registry.set_active_pack(pack.pack_id)
+        service = WorkbenchService.from_pack(pack, registry=registry)
+        if args.seed:
+            _seed_pack_if_empty(service, pack)
+        _repl(service, registry)
+        return 0
+
     service = WorkbenchService(
         ledger_path=args.ledger,
         fresh=True,
         queue_path=str(Path(args.ledger).with_name("workbench_proposals.jsonl")),
         knowledge_path=str(Path(args.ledger).with_name("workbench_knowledge.jsonl")),
+        registry=registry,
     )
     if args.seed and _SEED_FILE.exists():
         service.seed_from(_SEED_FILE)
 
-    _repl(service)
+    _repl(service, registry)
     return 0
 
 

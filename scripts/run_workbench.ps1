@@ -16,16 +16,28 @@
 .PARAMETER Demo
     Run the Friday -> Monday example through the service and exit (CLI only).
 
+.PARAMETER Pack
+    Open the named project pack (isolated workspace). Forces the CLI, because
+    Streamlit does not forward script arguments.
+
+.PARAMETER PackRoot
+    Directory holding project packs (defaults to demos\packs).
+
 .EXAMPLE
     .\scripts\run_workbench.ps1
 
 .EXAMPLE
     .\scripts\run_workbench.ps1 -Demo
+
+.EXAMPLE
+    .\scripts\run_workbench.ps1 -Pack concept-cells
 #>
 [CmdletBinding()]
 param(
     [switch] $NoSeed,
-    [switch] $Demo
+    [switch] $Demo,
+    [string] $Pack,
+    [string] $PackRoot
 )
 
 Set-StrictMode -Version Latest
@@ -60,13 +72,17 @@ try {
 
     $cliArgs = @()
     if ($NoSeed) { $cliArgs += '--no-seed' }
+    if ($PackRoot) { $cliArgs += @('--pack-root', $PackRoot) }
+    if ($Pack) { $cliArgs += @('--pack', $Pack) }
 
-    if ($hasStreamlit) {
+    # A specific pack means CLI mode: Streamlit ignores script args, so the pack
+    # would be silently dropped under the web UI.
+    if ($hasStreamlit -and -not $Pack) {
         Write-Host 'Streamlit found: launching the web workbench...' -ForegroundColor Green
         & $Python -m streamlit run $AppPath
     }
     else {
-        Write-Host 'Streamlit not installed: launching the CLI workbench...' -ForegroundColor Yellow
+        Write-Host 'Streamlit not installed or pack requested: launching the CLI workbench...' -ForegroundColor Yellow
         & $Python $AppPath @cliArgs
     }
     exit $LASTEXITCODE

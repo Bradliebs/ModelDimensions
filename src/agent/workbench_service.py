@@ -49,6 +49,7 @@ from agent.retrieval_backends import (
 from agent.memory_proposals import ProposalBatch
 from agent.note_ingestion import extract_candidate_memories, load_text_file
 from agent.orchestrator import DeterministicEncoder, EncoderProtocol, MemoryBank
+from agent.project_packs import PackRegistry, ProjectPack
 from agent.proposal_queue import ProposalQueue
 from agent.query_planner import QueryRoute, plan_query
 from agent.verifier import verify_candidate
@@ -202,13 +203,48 @@ class WorkbenchService:
                  queue_path: Optional[str | Path] = None,
                  knowledge_path: Optional[str | Path] = None,
                  knowledge_backend: Optional[str] = None,
-                 semantic_embedder: Optional[EncoderProtocol] = None):
+                 semantic_embedder: Optional[EncoderProtocol] = None,
+                 pack: Optional[ProjectPack] = None,
+                 bank_path: Optional[str | Path] = None,
+                 registry: Optional[PackRegistry] = None):
         self.encoder = encoder or DeterministicEncoder(dim=64)
-        self.bank = MemoryBank(
-            self.encoder,
-            epsilon=_EPSILON,
-            radius=_RADIUS,
-        )
+        self.k = k
+        # The v1.4 retrieval backend ranks imported knowledge. Default is the
+        # deterministic, offline backend (tests, CI); ``semantic`` (env
+        # KNOWLEDGE_RETRIEVAL_BACKEND or the constructor arg) uses MiniLM. If a
+        # semantic backend is requested but unavailable, fall back to
+        # deterministic so the workbench never breaks on a missing model.
+        self._semantic_embedder = semantic_embedder
+        # v1.6 project packs: when a pack is bound, every store is re-pointed at
+        # the pack's own files and the bank is persisted so the pack's memories
+        # survive across sessions. Without a pack, behaviour is exactly v1.5.
+        self._registry = registry
+        self._pack: Optional[ProjectPack] = None
+        if pack is not None:
+            self._bind_pack(pack, fresh=fresh, knowledge_backend=knowledge_backend)
+        else:
+            self._wire_stores(
+                ledger_path=ledger_path, queue_path=queue_path,
+                knowledge_path=knowledge_path, bank_path=bank_path,
+                knowledge_backend=knowledge_backend, fresh=fresh)
+
+    # -- store wiring / project packs (v1.6) --
+
+    def _wire_stores(self, *, ledger_path, queue_path, knowledge_path,
+                     bank_path, knowledge_backend, fresh: bool) -> None:
+        """(Re)build the bank and the three stores at the given paths.
+
+        This adds no geometry: the bank is the same frozen concept-cell
+        substrate. When ``bank_path`` is set the bank is loaded from (and later
+        persisted to) that file so a pack's minted ids stay aligned with its
+        ledger across sessions. With no ``bank_path`` the bank is in-memory only,
+        exactly as in v1.5.
+        """
+        self.bank = MemoryBank(self.encoder, epsilon=_EPSILON, radius=_RADIUS)
+        self._bank_path = Path(bank_path) if bank_path else None
+        if self._bank_path is not None and self._bank_path.exists() \
+                and self._bank_path.stat().st_size > 0:
+            self.bank.load(str(self._bank_path))
         # The v1.0 bank is in-memory only and mints its own ids, so it cannot be
         # restored from a saved ledger. ``fresh`` starts the ledger empty (and
         # overwrites any prior file on first write) to keep bank and ledger ids
@@ -225,15 +261,58 @@ class WorkbenchService:
         # imported knowledge can never be mistaken for a project decision. It
         # follows the same ``fresh`` rule as the ledger and queue.
         self.knowledge = KnowledgeLibrary(knowledge_path, load_existing=not fresh)
-        self.k = k
-        # The v1.4 retrieval backend ranks imported knowledge. Default is the
-        # deterministic, offline backend (tests, CI); ``semantic`` (env
-        # KNOWLEDGE_RETRIEVAL_BACKEND or the constructor arg) uses MiniLM. If a
-        # semantic backend is requested but unavailable, fall back to
-        # deterministic so the workbench never breaks on a missing model.
-        self._semantic_embedder = semantic_embedder
         self._knowledge_backend_requested = resolve_backend_name(knowledge_backend)
         self._knowledge_backend: RetrievalBackend = self._build_knowledge_backend()
+
+    def _bind_pack(self, pack: ProjectPack, *, fresh: bool,
+                   knowledge_backend: Optional[str]) -> None:
+        """Point every store at ``pack``'s files and persist the bank there."""
+        self._pack = pack
+        backend = knowledge_backend or pack.default_knowledge_backend
+        self._wire_stores(
+            ledger_path=pack.memory_ledger_path,
+            queue_path=pack.proposal_queue_path,
+            knowledge_path=pack.knowledge_library_path,
+            bank_path=pack.memory_bank_path,
+            knowledge_backend=backend,
+            fresh=fresh,
+        )
+
+    def _persist_bank(self) -> None:
+        """Save the bank to the active pack's file (no-op without a pack)."""
+        if self._bank_path is not None:
+            self._bank_path.parent.mkdir(parents=True, exist_ok=True)
+            self.bank.save(str(self._bank_path))
+
+    @classmethod
+    def from_pack(cls, pack: ProjectPack, *,
+                  registry: Optional[PackRegistry] = None,
+                  **kwargs) -> "WorkbenchService":
+        """Build a service whose stores live entirely inside ``pack``."""
+        return cls(pack=pack, registry=registry, **kwargs)
+
+    def active_pack_info(self) -> Optional[dict]:
+        """Return a summary of the bound pack, or ``None`` if global stores."""
+        if self._pack is None:
+            return None
+        return self._pack.to_info_dict()
+
+    def switch_pack(self, pack_id_or_name: str) -> ProjectPack:
+        """Re-point every store at another pack and mark it active.
+
+        Requires a :class:`PackRegistry` to have been supplied. The bank is
+        rebuilt from the new pack's persisted records, so queries see only the
+        new pack's memories.
+        """
+        if self._registry is None:
+            raise ValueError("switch_pack requires a PackRegistry")
+        pack = self._registry.get_pack(pack_id_or_name)
+        if pack is None:
+            raise KeyError(f"no such pack: {pack_id_or_name!r}")
+        self._bind_pack(pack, fresh=False, knowledge_backend=None)
+        self._registry.set_active_pack(pack.pack_id)
+        return pack
+
 
     def _build_knowledge_backend(self) -> RetrievalBackend:
         """Build the requested knowledge backend, falling back gracefully."""
@@ -267,8 +346,10 @@ class WorkbenchService:
         aligned.
         """
         rec = self.bank.write(text, source=source or "user", tags=tags or [])
-        return self.ledger.add(rec.memory_id, rec.canonical_text,
-                               source=source, tags=tags)
+        entry = self.ledger.add(rec.memory_id, rec.canonical_text,
+                                source=source, tags=tags)
+        self._persist_bank()
+        return entry
 
     # -- query --
 
@@ -352,6 +433,7 @@ class WorkbenchService:
         """
         removed = self.bank.delete(memory_id)
         marked = self.ledger.mark_deleted(memory_id)
+        self._persist_bank()
         return removed or marked
 
     # -- knowledge import / query (v1.3) --
@@ -669,6 +751,7 @@ class WorkbenchService:
                 self.bank.delete(proposal.supersedes_memory_id)
             self.proposals.mark_written(proposal.proposal_id)
             written.append(entry)
+        self._persist_bank()
         return written
 
     # -- inspect / export --

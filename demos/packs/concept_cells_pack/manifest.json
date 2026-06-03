@@ -1,0 +1,1 @@
+{"pack_id": "concept_cells_pack", "name": "concept-cells", "description": "Project memory for the Concept Cells research line.", "created_at": "2026-01-01T00:00:00+00:00", "default_knowledge_backend": "deterministic", "default_domain": null, "settings": {"seed_memory": "seed_memory.jsonl"}}
