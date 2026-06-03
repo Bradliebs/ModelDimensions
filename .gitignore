@@ -35,3 +35,7 @@ demos/packs/*/bank.jsonl
 demos/packs/*/ledger.jsonl
 demos/packs/*/proposals.jsonl
 demos/packs/*/knowledge.jsonl
+
+# Built curated knowledge packs (v1.8): generated from packs/starter specs by
+# scripts/build_starter_packs.ps1; the specs are tracked, the built packs are not
+packs/built/

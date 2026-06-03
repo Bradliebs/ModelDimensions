@@ -19,5 +19,8 @@ pydantic>=2.0
 # Workbench UI (v1.1, optional): the CLI works without this
 streamlit>=1.30
 
+# Curated knowledge packs (v1.8): YAML pack specs (JSON specs need no extra dep)
+pyyaml>=6.0
+
 # Dev
 pytest>=7.0

@@ -672,6 +672,67 @@ not a replacement. Streamlit is optional and only used when it is installed.
 | `evals/test_review_service.py` | Dashboard, proposal/conflict review, audit, and no-bypass tests |
 | `scripts/run_review_console.ps1` | Launcher (web UI if Streamlit is present, else CLI) |
 
+## Curated Knowledge Packs
+
+v1.8 adds a **curated knowledge pack builder**: a way to build real-world
+knowledge packs from named, provenance-tagged sources, then validate retrieval
+and source behaviour with pack-specific evaluation questions before relying on
+the pack. It is additive — building reuses the frozen knowledge-import path and
+evaluating reads through the same `query_knowledge` route, so no geometry,
+grounding policy, or lifecycle semantics change.
+
+**Why curated, not a random dump.** A pack you trust for answers should be built
+deliberately. Each source carries its own provenance — domain, authority,
+version, licence, retrieval date, and a staleness policy — so every retrieved
+chunk can be traced back to a known document, not an anonymous scrape.
+
+**Coding first.** The starter packs build from local demo and project docs only.
+`coding-reference` is built from `demos/seed_coding_knowledge.md`;
+`concept-cells-docs` is built from the repository's own `ARCHITECTURE.md` as
+curated project documentation.
+
+**Medical is guarded.** The medical pack ships only as a disabled example
+(`packs/starter/medical_reference_pack.yaml.example`, `enabled: false`). Medical
+content is flagged informational-only on every answer, and its evaluation
+questions require that flag before the pack is trusted. To use it you must
+supply your own licensed local source and explicitly enable it.
+
+**Source metadata.** A source spec records `source_name`, `path_or_url`,
+`domain`, `authority`, `version`, `licence`, `retrieved_at`, and
+`staleness_policy`. Local files are supported first; URL ingestion is scaffolded
+but disabled, and a URL source is recorded as *skipped* (never fetched silently)
+unless ingestion is explicitly enabled.
+
+**Evaluation questions.** A pack's eval file (JSONL) asserts what its retrieval
+should return for known queries: the expected domain, source, and authority,
+that a retrieved chunk contains a known phrase, that forbidden terms never
+appear, and that safety flags such as `informational_only` are set. Running the
+eval produces a pass/fail report per question.
+
+Build the local starter packs (local docs only, no web access) and validate
+them:
+
+```powershell
+.\scripts\build_starter_packs.ps1
+```
+
+Or drive the same steps from inside the workbench REPL:
+
+```
+pack-build packs/starter/coding_reference_pack.yaml
+pack-eval coding-reference demos/pack_eval_questions/coding_reference_eval.jsonl
+pack-report coding-reference
+```
+
+| File | What it adds |
+|---|---|
+| `src/agent/pack_builder.py` | Pack build plan/specs and local-source import with provenance |
+| `src/agent/pack_evaluator.py` | Retrieval/source validation against pack eval questions |
+| `packs/starter/` | Starter pack specs (coding, project docs, guarded medical example) |
+| `demos/pack_eval_questions/` | Eval question files for the starter packs |
+| `scripts/build_starter_packs.ps1` | Build local starter packs and run their evals |
+| `evals/test_pack_builder.py` | Build, metadata, eval pass/fail, URL-gating, and report tests |
+
 ## License
 
 To be decided.

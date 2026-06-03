@@ -1,0 +1,22 @@
+# Curated knowledge pack: Python coding reference (v1.8 starter).
+#
+# Built entirely from a local demo document — no web access. The build script
+# imports this into an isolated pack so retrieval can be validated with the
+# matching eval file (demos/pack_eval_questions/coding_reference_eval.jsonl)
+# before anyone relies on it.
+
+pack_name: coding-reference
+description: Curated Python coding reference built from local demo docs.
+default_domain: coding
+default_knowledge_backend: deterministic
+allow_url_ingestion: false
+enabled: true
+
+sources:
+  - source_name: Python Coding Reference
+    path_or_url: demos/seed_coding_knowledge.md
+    domain: coding
+    authority: official
+    version: "3.12"
+    licence: CC-BY-4.0
+    staleness_policy: review-quarterly

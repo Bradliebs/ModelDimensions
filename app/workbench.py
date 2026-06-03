@@ -29,6 +29,8 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from agent.workbench_service import QueryAudit, WorkbenchService  # noqa: E402
 from agent.project_packs import PackRegistry  # noqa: E402
+from agent import pack_builder  # noqa: E402
+from agent import pack_evaluator  # noqa: E402
 
 _DEFAULT_LEDGER = ROOT / "demos" / "workbench_ledger.jsonl"
 _DEFAULT_QUEUE = ROOT / "demos" / "workbench_proposals.jsonl"
@@ -184,6 +186,9 @@ Commands:
   pack-info [name]      show the active pack (or a named pack) and its paths
   pack-export <name> <path>  export a pack to a .zip bundle
   pack-import <path>    import a pack bundle and register it
+  pack-build <spec>     build a curated knowledge pack from a JSON/YAML spec
+  pack-eval <pack> <eval-file>  validate a pack's retrieval with eval questions
+  pack-report <pack>    show a pack's curated sources and chunk counts
   demo                  run the Friday -> Monday near-miss example
   export [path]         write the ledger JSONL (defaults to the active ledger)
   help                  show this help
@@ -316,6 +321,31 @@ def _print_pack_info(info: dict) -> None:
     print(f"  proposals : {info['proposal_entries']} queued")
     print(f"  knowledge : {info['knowledge_records']} records")
     print(f"  backend   : {info['default_knowledge_backend']}")
+
+
+def _print_build_report(report: "pack_builder.PackBuildReport") -> None:
+    print(f"  pack      : {report.pack_name} ({report.pack_id})")
+    print(f"  sources   : {report.source_count} "
+          f"({report.total_chunks} chunks)")
+    for src in report.sources:
+        print(f"    - {src['source_name']} [{src['domain']}/{src['authority']}"
+              f"{(' v' + src['version']) if src.get('version') else ''}] "
+              f"-> {src['chunks']} chunks")
+    if report.skipped:
+        print(f"  skipped   : {len(report.skipped)}")
+        for skip in report.skipped:
+            print(f"    - {skip['source_name']} ({skip['reason']})")
+
+
+def _print_eval_results(results: list) -> None:
+    passed = sum(1 for r in results if r.passed)
+    for res in results:
+        mark = "PASS" if res.passed else "FAIL"
+        label = res.question_id or res.query
+        print(f"  [{mark}] {label}")
+        if not res.passed:
+            print(f"         {res.reason}")
+    print(f"  summary   : {passed}/{len(results)} passed")
 
 
 def _repl(service: WorkbenchService,
@@ -589,6 +619,56 @@ def _repl(service: WorkbenchService,
                 print(f"  {exc}")
                 continue
             print(f"  imported pack {pack.pack_id} ({pack.name})")
+        elif cmd in {"pack-build", "pack_build"}:
+            if registry is None:
+                print("  packs are disabled; relaunch with --pack-root <dir>")
+                continue
+            if not arg:
+                print("  usage: pack-build <spec.json|spec.yaml>")
+                continue
+            try:
+                plan = pack_builder.PackBuildPlan.from_file(arg.strip())
+            except (OSError, ValueError, RuntimeError) as exc:
+                print(f"  {exc}")
+                continue
+            if not plan.enabled:
+                print(f"  spec {plan.pack_name} is disabled (enabled: false); "
+                      "not building")
+                continue
+            report = pack_builder.build_pack(plan, registry)
+            _print_build_report(report)
+        elif cmd in {"pack-eval", "pack_eval"}:
+            if registry is None:
+                print("  packs are disabled; relaunch with --pack-root <dir>")
+                continue
+            bits = arg.split(maxsplit=1)
+            if len(bits) != 2:
+                print("  usage: pack-eval <pack> <eval-file.jsonl>")
+                continue
+            try:
+                eval_service = pack_builder.open_pack_service(registry, bits[0])
+                results = pack_evaluator.evaluate_pack_file(
+                    eval_service, bits[1].strip())
+            except (KeyError, OSError, ValueError) as exc:
+                print(f"  {exc}")
+                continue
+            _print_eval_results(results)
+        elif cmd in {"pack-report", "pack_report"}:
+            if registry is None:
+                print("  packs are disabled; relaunch with --pack-root <dir>")
+                continue
+            if not arg:
+                print("  usage: pack-report <pack>")
+                continue
+            pack = registry.get_pack(arg.strip())
+            if pack is None:
+                print(f"  unknown pack: {arg.strip()}")
+                continue
+            report_service = pack_builder.open_pack_service(
+                registry, arg.strip())
+            report = pack_builder.report_for_pack(
+                report_service, pack_id=pack.pack_id, pack_name=pack.name)
+            _print_build_report(report)
         elif cmd == "export":
             target = Path(arg) if arg else service.ledger.path
             if target is None:
