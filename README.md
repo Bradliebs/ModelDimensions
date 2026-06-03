@@ -609,6 +609,69 @@ policy are unchanged. A pack only decides *where* the existing stores live.
 | `evals/test_project_packs.py` | Isolation, switching, and export/import tests |
 | `demos/packs/` | Two worked-example packs (`concept-cells`, `coding-reference`) |
 
+## Review Console
+
+v1.7 adds a **review console**: a local operator UI for running a project pack,
+reviewing pending proposals and conflicts, inspecting memories and knowledge,
+and running audited queries. It is a thin surface over the workbench — every
+action goes through the same service methods, so the console only *shows* the
+existing approval gates and grounding policy, it never bypasses them.
+
+**What it is.** A read-and-decide cockpit for an operator: see the dashboard at
+a glance, approve or reject proposals, resolve duplicates and conflicts (approve
+as new, approve superseding, or mark a memory disputed), browse the memory table
+by lifecycle status, list imported knowledge sources, run a query and read its
+full audit trail, and export the active pack.
+
+**What it is not.** It adds no memory logic. Writes still require explicit
+approval, a hard duplicate or conflict still refuses a plain approve, and a
+query that nothing grounds is reported as the model's ungrounded prior — exactly
+as in the workbench.
+
+Launch the console (text-mode by default; the web UI is used automatically when
+Streamlit is installed):
+
+```bash
+python app/review_console.py --pack concept-cells   # text-mode operator console
+streamlit run app/review_console.py                  # web UI, if Streamlit is installed
+```
+
+The PowerShell launcher forwards the same options (using `-Pack` forces the CLI,
+since Streamlit does not pass script arguments). If Streamlit is not installed
+it prints how to add it and falls back to the CLI:
+
+```powershell
+.\scripts\run_review_console.ps1 -Pack concept-cells
+```
+
+Inside the REPL, `help` lists every command. The core flow:
+
+```
+dashboard                 pack, proposal, conflict, memory, and knowledge counts
+proposals                 list pending proposals
+conflicts                 list duplicates and conflicts
+approve <id>              approve a clean proposal (refused if it is flagged)
+approve-new <id>          approve a flagged proposal as a new memory
+supersede <id> <old_id>   approve a proposal that supersedes an existing memory
+reject <id>               reject a proposal
+dispute <mem_id> [other]  mark a live memory disputed (it stays citable)
+write-approved            write approved proposals into the bank
+memories                  show memories grouped by lifecycle status
+knowledge                 list imported knowledge sources
+query <text>              run an audited query and show its full route
+export <path>             export the active pack to a .zip bundle
+```
+
+The CLI workbench remains fully supported; the console is an additional view,
+not a replacement. Streamlit is optional and only used when it is installed.
+
+| File | What it adds |
+|---|---|
+| `app/review_console.py` | Operator UI (text-mode REPL + optional Streamlit) |
+| `src/agent/review_service.py` | Thin orchestration over `WorkbenchService` (no new memory logic) |
+| `evals/test_review_service.py` | Dashboard, proposal/conflict review, audit, and no-bypass tests |
+| `scripts/run_review_console.ps1` | Launcher (web UI if Streamlit is present, else CLI) |
+
 ## License
 
 To be decided.

@@ -436,6 +436,24 @@ class WorkbenchService:
         self._persist_bank()
         return removed or marked
 
+    # -- dispute (v1.5 lifecycle, exposed for the review console) --
+
+    def dispute_memory(self, memory_id: str,
+                       conflict_id: Optional[str] = None) -> bool:
+        """Flag a live memory as disputed, reusing the v1.5 ledger lifecycle.
+
+        This adds no new lifecycle logic: it delegates to
+        :meth:`MemoryLedger.mark_disputed`. The memory stays in the bank and
+        remains citable; only the ledger status becomes ``disputed`` and, when
+        ``conflict_id`` is given, the contradiction is cross-linked. Deleted or
+        superseded memories cannot be disputed. Returns True if a current memory
+        was flagged.
+        """
+        marked = self.ledger.mark_disputed(memory_id, conflict_id)
+        if marked:
+            self._persist_bank()
+        return marked
+
     # -- knowledge import / query (v1.3) --
 
     def import_knowledge(self, path: str | Path, *,

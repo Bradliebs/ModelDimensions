@@ -22,3 +22,16 @@ demos/workbench_proposals.jsonl
 
 # Workbench runtime knowledge library (generated; the seed doc is tracked)
 demos/workbench_knowledge.jsonl
+
+# Review console runtime stores (generated session state; no seed needed)
+demos/review_ledger.jsonl
+demos/review_proposals.jsonl
+demos/review_knowledge.jsonl
+
+# Project pack runtime state (generated on open; manifests and seed files are
+# tracked, but the regenerated stores and the active-pack registry are not)
+demos/packs/registry.json
+demos/packs/*/bank.jsonl
+demos/packs/*/ledger.jsonl
+demos/packs/*/proposals.jsonl
+demos/packs/*/knowledge.jsonl
