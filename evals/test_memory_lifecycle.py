@@ -211,3 +211,93 @@ def test_list_conflicts_returns_pending_conflicts(tmp_path):
 
     assert len(conflicts) == 1
     assert "monday" in conflicts[0].canonical_text.lower()
+
+
+# 11. a superseded memory is surfaced by query-history as history. ----------
+
+def test_superseded_memory_shown_in_query_history(tmp_path):
+    service = _service(tmp_path)
+    old = service.add_memory(_FRIDAY, source="seed")
+    note = _write_note(tmp_path, f"# Facts\n\n- {_MONDAY}\n")
+    service.import_notes(note)
+    proposal = _proposal_for(service, _MONDAY)
+    service.approve_proposal_superseding(proposal.proposal_id, old.memory_id)
+    service.write_approved_proposals()
+
+    # Default query does not surface the superseded memory.
+    plain = service.query_memory(_FRIDAY)
+    assert plain.historical == []
+
+    # query-history surfaces it as past record, never as a current citation.
+    historical = service.query_memory(_FRIDAY, include_historical=True)
+    hist_ids = [h["memory_id"] for h in historical.historical]
+    assert old.memory_id in hist_ids
+    assert old.memory_id not in historical.cited_memory_ids
+    assert historical.memory_used is False
+
+
+# 12. a deleted memory is never surfaced, even by query-history. -------------
+
+def test_deleted_memory_not_in_query_history(tmp_path):
+    service = _service(tmp_path)
+    entry = service.add_memory(_FRIDAY, source="seed")
+    service.delete_memory(entry.memory_id)
+
+    historical = service.query_memory(_FRIDAY, include_historical=True)
+
+    hist_ids = [h["memory_id"] for h in historical.historical]
+    assert entry.memory_id not in hist_ids
+
+
+# 13. mark_disputed flags a memory and cross-links the conflict. ------------
+
+def test_mark_disputed_links_both_memories(tmp_path):
+    ledger = MemoryLedger(path=str(tmp_path / "ledger.jsonl"))
+    ledger.add("mem-0001", _FRIDAY, source="seed")
+    ledger.add("mem-0002", _MONDAY, source="seed")
+
+    assert ledger.mark_disputed("mem-0001", conflict_id="mem-0002") is True
+
+    a = ledger.get("mem-0001")
+    b = ledger.get("mem-0002")
+    assert a.status == "disputed"
+    assert "mem-0002" in a.conflicts_with
+    assert "mem-0001" in b.conflicts_with
+    # A deleted or superseded memory cannot be disputed.
+    ledger.mark_deleted("mem-0002")
+    assert ledger.mark_disputed("mem-0002") is False
+
+
+# 14. export historical mode filters out superseded/deleted entries. --------
+
+def test_export_historical_mode_filters_history(tmp_path):
+    service = _service(tmp_path)
+    old = service.add_memory(_FRIDAY, source="seed")
+    note = _write_note(tmp_path, f"# Facts\n\n- {_MONDAY}\n")
+    service.import_notes(note)
+    proposal = _proposal_for(service, _MONDAY)
+    service.approve_proposal_superseding(proposal.proposal_id, old.memory_id)
+    service.write_approved_proposals()
+
+    full = service.ledger.export()
+    current = service.ledger.export(include_historical=False)
+
+    assert any(r["status"] == "superseded" for r in full)
+    assert all(r["status"] != "superseded" for r in current)
+
+
+# 15. conflicts_with survives a save/load round trip. -----------------------
+
+def test_conflicts_with_round_trips(tmp_path):
+    path = tmp_path / "ledger.jsonl"
+    ledger = MemoryLedger(path=str(path))
+    ledger.add("mem-0001", _FRIDAY, source="seed")
+    ledger.add("mem-0002", _MONDAY, source="seed")
+    ledger.mark_disputed("mem-0001", conflict_id="mem-0002")
+
+    reloaded = MemoryLedger(path=str(path))
+    entry = reloaded.get("mem-0001")
+
+    assert entry.status == "disputed"
+    assert entry.conflicts_with == ["mem-0002"]
+

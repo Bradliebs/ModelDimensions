@@ -31,16 +31,23 @@ def _utc_now_iso() -> str:
 ACTIVE = "active"
 DELETED = "deleted"
 SUPERSEDED = "superseded"
+DISPUTED = "disputed"
+
+# Statuses that are still "current" — present in the bank and citable. A disputed
+# memory is active-but-flagged; it has not been superseded or deleted.
+_CURRENT_STATUSES = (ACTIVE, DISPUTED)
 
 
 @dataclass
 class LedgerEntry:
     """One memory's provenance record.
 
-    ``status`` is ``"active"``, ``"deleted"``, or ``"superseded"``. A deleted
-    entry keeps its ``deleted_at`` timestamp so the removal itself is auditable.
-    A superseded entry keeps ``superseded_by`` (the id that replaced it); the
-    replacing entry keeps the ids it ``supersedes`` so the history is a chain.
+    ``status`` is ``"active"``, ``"deleted"``, ``"superseded"``, or
+    ``"disputed"``. A deleted entry keeps its ``deleted_at`` timestamp so the
+    removal itself is auditable. A superseded entry keeps ``superseded_by`` (the
+    id that replaced it); the replacing entry keeps the ids it ``supersedes`` so
+    the history is a chain. A disputed entry keeps the ids it ``conflicts_with``
+    so an unresolved contradiction is visible without losing either memory.
     """
 
     memory_id: str
@@ -52,6 +59,7 @@ class LedgerEntry:
     deleted_at: Optional[str] = None
     supersedes: List[str] = field(default_factory=list)
     superseded_by: Optional[str] = None
+    conflicts_with: List[str] = field(default_factory=list)
 
     def to_json(self) -> str:
         return json.dumps(asdict(self), ensure_ascii=False)
@@ -69,6 +77,7 @@ class LedgerEntry:
             deleted_at=data.get("deleted_at"),
             supersedes=list(data.get("supersedes", [])),
             superseded_by=data.get("superseded_by"),
+            conflicts_with=list(data.get("conflicts_with", [])),
         )
 
 
@@ -135,6 +144,29 @@ class MemoryLedger:
         self._flush()
         return True
 
+    def mark_disputed(self, memory_id: str,
+                      conflict_id: Optional[str] = None) -> bool:
+        """Flag ``memory_id`` as disputed and cross-link the conflicting id.
+
+        A disputed memory stays live (still in the bank, still citable) but is
+        marked so an unresolved contradiction is visible. When ``conflict_id`` is
+        given, the link is recorded on both entries so the conflict is auditable
+        in either direction. Deleted or superseded memories cannot be disputed
+        (they are no longer current); the method returns False for them.
+        """
+        entry = self._entries.get(memory_id)
+        if entry is None or entry.status in (DELETED, SUPERSEDED):
+            return False
+        entry.status = DISPUTED
+        if conflict_id is not None:
+            if conflict_id not in entry.conflicts_with:
+                entry.conflicts_with.append(conflict_id)
+            other = self._entries.get(conflict_id)
+            if other is not None and memory_id not in other.conflicts_with:
+                other.conflicts_with.append(memory_id)
+        self._flush()
+        return True
+
     # -- read operations --
 
     def get(self, memory_id: str) -> Optional[LedgerEntry]:
@@ -170,9 +202,18 @@ class MemoryLedger:
             entry = nxt
         return entry
 
-    def export(self) -> List[dict]:
-        """Return the full ledger (active and deleted) as plain dicts."""
-        return [asdict(e) for e in self._entries.values()]
+    def export(self, include_historical: bool = True) -> List[dict]:
+        """Return ledger entries as plain dicts.
+
+        By default the full ledger is returned (active, disputed, superseded, and
+        deleted) so existing callers see every entry. With
+        ``include_historical=False`` only the current memories (active or
+        disputed) are returned, dropping superseded and deleted history.
+        """
+        rows = self._entries.values()
+        if not include_historical:
+            rows = [e for e in rows if e.status in _CURRENT_STATUSES]
+        return [asdict(e) for e in rows]
 
     # -- persistence --
 

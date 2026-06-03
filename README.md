@@ -364,7 +364,17 @@ possible through an explicit action:
 This gives three distinct memory states — `active`, `superseded`, and `deleted`.
 A **superseded** memory is history: it stays in the ledger but is never the
 current grounded answer. A **deleted** memory is likewise gone from the bank and
-can never be cited.
+can never be cited. A memory may also be flagged **disputed** when two
+contradictory memories are deliberately kept side by side; the ledger records
+`conflicts_with` on both so the unresolved contradiction stays visible.
+
+**Current vs historical.** A normal `query` only ever grounds on *current*
+memories — a superseded memory was removed from the bank, so it can never be
+retrieved or cited as the answer. To inspect what a memory *used to say*, use
+`query-history`: it answers exactly like `query` (same grounding, same verifier)
+and additionally surfaces any superseded memories whose text overlaps the query,
+clearly labelled as history and never presented as the current answer. Deleted
+memories are never surfaced, even by `query-history`.
 
 CLI commands:
 
@@ -375,6 +385,7 @@ analyse <proposal_id>      re-check a candidate against the current memories
 approve-new <proposal_id>  force-approve a flagged candidate as a new memory
 approve-supersede <proposal_id> <old_memory_id>  approve and replace an old memory
 show-memory <memory_id>    show a memory and its supersession history
+query-history <text>       query, also surfacing superseded memories as history
 ```
 
 Typical flow (the supplier delivery date changes from Friday to Monday):
@@ -392,6 +403,7 @@ workbench> show-memory mem-0001
   mem-0001  [superseded]  the supplier delivery is on Friday afternoon
       superseded_by: mem-0002 (current: mem-0002)
 workbench> query when is the supplier delivery   # Friday memory is no longer grounded
+workbench> query-history the supplier delivery is on Friday   # shows the old Friday memory as history
 ```
 
 Pieces:
@@ -399,7 +411,7 @@ Pieces:
 | File | Purpose |
 |---|---|
 | `src/agent/memory_lifecycle.py` | Duplicate + conflict detection (reuses the frozen verifier) |
-| `src/agent/memory_ledger.py` | `superseded` status + `supersedes` / `superseded_by` chain |
+| `src/agent/memory_ledger.py` | `superseded` / `disputed` status, `supersedes` / `superseded_by` chain, `conflicts_with` links |
 | `demos/seed_lifecycle_note.md` | Example note with a duplicate, a date conflict, and a supersession |
 
 ```bash

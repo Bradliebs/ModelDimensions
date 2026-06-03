@@ -57,6 +57,14 @@ def _format_audit(audit: QueryAudit) -> str:
     lines.append(f"  refused             = {str(audit.refused).lower()}")
     if audit.cited_memory_ids:
         lines.append(f"  cited_memory_ids    = {', '.join(audit.cited_memory_ids)}")
+    if audit.historical:
+        lines.append("  historical (superseded — not a current answer):")
+        for h in audit.historical:
+            sup = f" -> {h['superseded_by']}" if h.get("superseded_by") else ""
+            lines.append(
+                f"    - {h['memory_id']} (overlap {h['overlap']:.4f}){sup}: "
+                f"{h['canonical_text']}"
+            )
     lines.append("  response:")
     for row in audit.response_text.splitlines():
         lines.append(f"    {row}")
@@ -161,6 +169,7 @@ Commands:
   write-approved        write only approved candidates into the ledger
   queue-export [path]   write the proposal queue JSONL
   show-memory <memory_id>  show a memory and its supersession history
+  query-history <text>     query, also surfacing superseded memories as history
   import-knowledge <path> --domain <d> --authority <a> --name <n> [--version <v>]
                         import an external doc into the knowledge library
   sources               list imported knowledge sources
@@ -282,6 +291,12 @@ def _repl(service: WorkbenchService) -> None:
                 print("  usage: query <text>")
                 continue
             print(_format_audit(service.query_memory(arg)))
+        elif cmd in {"query-history", "query_history"}:
+            if not arg:
+                print("  usage: query-history <text>")
+                continue
+            print(_format_audit(
+                service.query_memory(arg, include_historical=True)))
         elif cmd == "delete":
             if not arg:
                 print("  usage: delete <memory_id>")

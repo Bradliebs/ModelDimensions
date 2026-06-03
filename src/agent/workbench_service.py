@@ -26,10 +26,11 @@ from agent.candidate_retrieval import (
     ground_accepted_candidates,
     retrieve_candidates,
 )
-from agent.memory_ledger import MemoryLedger
+from agent.memory_ledger import MemoryLedger, SUPERSEDED
 from agent.memory_lifecycle import (
     LifecycleVerdict,
     analyse_proposal_against_ledger,
+    lexical_overlap,
 )
 from agent.knowledge_library import KnowledgeLibrary
 from agent.knowledge_retrieval import KnowledgeCandidate, retrieve_knowledge
@@ -59,6 +60,11 @@ from slm.schemas import VerificationVerdict, VerifiedMemoryCandidate
 _EPSILON = 0.25
 _RADIUS = 0.9
 _K = 5
+
+# Minimum content-token overlap for a superseded memory to surface in a
+# historical query. Matches the duplicate threshold so history is shown only
+# when the past memory is clearly about the same thing.
+_HISTORICAL_OVERLAP = 0.4
 
 
 @dataclass
@@ -92,6 +98,7 @@ class QueryAudit:
     response_text: str
     cited_memory_ids: List[str] = field(default_factory=list)
     candidates: List[CandidateView] = field(default_factory=list)
+    historical: List[dict] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -265,8 +272,17 @@ class WorkbenchService:
 
     # -- query --
 
-    def query_memory(self, query_text: str) -> QueryAudit:
-        """Run retrieve -> verify -> ground and return the audit trail."""
+    def query_memory(self, query_text: str,
+                     include_historical: bool = False) -> QueryAudit:
+        """Run retrieve -> verify -> ground and return the audit trail.
+
+        Grounding is always on the *current* memories only: a superseded memory
+        was removed from the bank, so it can never be retrieved or cited as the
+        answer. With ``include_historical=True`` the audit additionally carries a
+        clearly-separated ``historical`` list of superseded memories whose text
+        overlaps the query — surfaced as past record, never as a current answer.
+        Deleted memories are never surfaced, even historically.
+        """
         candidates = retrieve_candidates(self.bank, query_text, self.k)
 
         verified: List[VerifiedMemoryCandidate] = []
@@ -286,6 +302,9 @@ class WorkbenchService:
 
         response = ground_accepted_candidates(verified)
 
+        historical = (self._historical_matches(query_text)
+                      if include_historical else [])
+
         return QueryAudit(
             query=query_text,
             candidate_retrieved=bool(candidates),
@@ -295,7 +314,32 @@ class WorkbenchService:
             response_text=response.text,
             cited_memory_ids=list(response.cited_memory_ids),
             candidates=views,
+            historical=historical,
         )
+
+    def _historical_matches(self, query_text: str) -> List[dict]:
+        """Lexically scan superseded ledger entries relevant to the query.
+
+        Superseded memories are gone from the bank (geometry deleted), so they
+        cannot be retrieved as candidates; this is a plain text-overlap scan over
+        the ledger's ``superseded`` entries only. Deleted entries are excluded so
+        a deleted memory stays uncitable even in history.
+        """
+        matches: List[dict] = []
+        for entry in self.ledger.entries():
+            if entry.status != SUPERSEDED:
+                continue
+            overlap = lexical_overlap(query_text, entry.canonical_text)
+            if overlap >= _HISTORICAL_OVERLAP:
+                matches.append({
+                    "memory_id": entry.memory_id,
+                    "canonical_text": entry.canonical_text,
+                    "status": entry.status,
+                    "superseded_by": entry.superseded_by,
+                    "overlap": round(overlap, 4),
+                })
+        matches.sort(key=lambda m: m["overlap"], reverse=True)
+        return matches
 
     # -- delete --
 

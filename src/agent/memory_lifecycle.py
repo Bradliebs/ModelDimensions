@@ -97,6 +97,16 @@ def _jaccard(a: Set[str], b: Set[str]) -> float:
     return inter / union if union else 0.0
 
 
+def lexical_overlap(a: str, b: str) -> float:
+    """Content-token Jaccard overlap between two texts (stopwords removed).
+
+    The same lexical measure the duplicate/conflict checks use, exposed so other
+    components (such as the historical-memory scan) can rank by overlap without
+    reaching into private helpers.
+    """
+    return _jaccard(_content_tokens(a), _content_tokens(b))
+
+
 # ---------- public checks ----------
 
 def check_duplicate(proposal_text: str,
