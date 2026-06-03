@@ -1426,6 +1426,18 @@ Three different questions, kept distinct:
   grounds a partial answer with an explicit limitation; weak or no overlap
   refuses; a rejected near-miss surfaces as a conflict first.
 
+The work is split across two focused modules. The **EvidenceRanker**
+(`src/retrieval/evidence_ranker.py`) scores and orders the retrieved candidates
+from auditable positive signals (lexical topic overlap; a project-milestone
+preference that favours seeded project memory when the query asks about a
+milestone or decision) and negative signals (metadata/source-header penalty,
+topic/domain mismatch, stale-source penalty, too-few-tokens-to-lead). It records
+the single most-relevant candidate it did *not* let lead, with the reason — the
+`top_rejected` line in the audit. The **SufficiencyGate**
+(`src/retrieval/sufficiency_gate.py`) then turns the ranker's strongest
+substantive score into the verdict below. (`src/agent/relevance_gate.py` remains
+as a thin backward-compatible adapter that re-exports both.)
+
 The gate maps these onto five verdicts:
 
 | Verdict | Meaning | Effect on the answer |
@@ -1468,17 +1480,21 @@ lexical, a true-but-low-overlap paraphrase can still be refused (a safe failure)
 and an over-permissive backend can still surface a verbatim chunk as `RELEVANT`;
 the gate narrows false grounding, it does not eliminate it.
 
-Every verdict carries a per-check trace and a one-line sufficiency reason. These
-appear in the query-assist audit (`query_audit["relevance"]`) and in the
-value-sprint report's `relevance` column, so a reviewer can see *why* a verdict
-was reached.
+Every verdict carries a per-check trace, a one-line sufficiency reason, and the
+top rejected candidate. These appear in the query-assist audit
+(`query_audit["relevance"]`, including `top_rejected`) and in the value-sprint
+report (the `relevance` column plus a *Top rejected evidence* section), so a
+reviewer can see *why* a verdict was reached and *what* was held back.
 
 | File | What it adds |
 |---|---|
-| `src/agent/relevance_gate.py` | The gate: verdicts, lexical overlap, domain/header/near-miss checks, and the per-query relevance report |
+| `src/retrieval/evidence_ranker.py` | The ranker: scores and orders candidates by auditable signals, applies the project-milestone preference, and records the top rejected candidate |
+| `src/retrieval/sufficiency_gate.py` | The gate: maps the ranker's strongest substantive score onto a `RELEVANT` / `PARTIAL` / `WEAK_MATCH` / `CONFLICT` / `NO_SUPPORT` verdict |
+| `src/agent/relevance_gate.py` | Thin backward-compatible adapter: re-exports the ranker and gate and folds them into the per-query relevance report |
 | `src/agent/workbench_service.py` | `build_grounding_package` consults the gate between retrieval and grounding (downgrade-only) and records the verdict in the audit |
-| `src/agent/value_sprint_harness.py` | `SprintRow` carries the `relevance_verdict` / `relevance_label`; the report adds a `relevance` column |
+| `src/agent/value_sprint_harness.py` | `SprintRow` carries the `relevance_verdict` / `relevance_label` and the `rejected_candidate` / `rejected_reason`; the report adds a `relevance` column and a top-rejected section |
 | `evals/test_relevance_gate.py` | Verdict-mapping units, the value-sprint false-grounding rows, out-of-domain refusal, metadata-header lead, and conflict-not-masked integration tests |
+| `evals/test_evidence_ranker.py` | Ranker ordering and top-rejected, gate verdict mapping, project-milestone preference, weak-match pack-gap proposal, and top-rejected in the grounding audit |
 
 ## License
 

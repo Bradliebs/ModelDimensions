@@ -155,6 +155,11 @@ class SprintRow:
     # retrieved (the gate only runs on the would-be-grounded path).
     relevance_verdict: str = ""
     relevance_label: str = ""
+    # The single most-relevant candidate the ranker did NOT let lead, and why —
+    # the most useful audit line for *why* the gate did what it did. Empty when
+    # only one (or no) candidate was retrieved.
+    rejected_candidate: str = ""
+    rejected_reason: str = ""
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -314,6 +319,9 @@ def run_query(service: WorkbenchService, spec: SprintQuery, *,
     relevance = audit.get("relevance") or {}
     relevance_verdict = str(relevance.get("verdict", ""))
     relevance_label = str(relevance.get("label", ""))
+    rejected = relevance.get("top_rejected") or {}
+    rejected_candidate = str(rejected.get("citation_id", ""))
+    rejected_reason = str(rejected.get("reason", ""))
 
     gap = extract_pack_gap(spec, grounded=grounded)
     snippet = (result.answer.text or "").strip().replace("\n", " ")
@@ -340,6 +348,8 @@ def run_query(service: WorkbenchService, spec: SprintQuery, *,
         answer_snippet=snippet,
         relevance_verdict=relevance_verdict,
         relevance_label=relevance_label,
+        rejected_candidate=rejected_candidate,
+        rejected_reason=rejected_reason,
     )
 
 
@@ -478,6 +488,19 @@ def render_markdown(rows: List[SprintRow], summary: SprintSummary, *,
             f"| {idx} | {r.category or '-'} | {_tri(op.get('useful'))} | "
             f"{_tri(op.get('saved_time'))} | {_tri(op.get('reusable_output'))} | "
             f"{op.get('trust_level') or '-'} | {op.get('notes') or '-'} |")
+    rejected = [r for r in rows if r.rejected_candidate]
+    if rejected:
+        lines.append("")
+        lines.append("## Top rejected evidence (why the gate held it back)")
+        lines.append("")
+        lines.append("The strongest candidate the ranker did *not* let lead, per "
+                     "query — the audit line for why a verdict was reached.")
+        lines.append("")
+        for idx, r in enumerate(rows, start=1):
+            if not r.rejected_candidate:
+                continue
+            lines.append(f"- **#{idx}** `{r.rejected_candidate}` — "
+                         f"{r.rejected_reason or 'outranked by lead evidence'}")
     gaps = [r for r in rows if r.suggested_pack_update]
     if gaps:
         lines.append("")
@@ -541,5 +564,7 @@ def load_rows(path: str | Path) -> List[SprintRow]:
             answer_snippet=data.get("answer_snippet", ""),
             relevance_verdict=data.get("relevance_verdict", ""),
             relevance_label=data.get("relevance_label", ""),
+            rejected_candidate=data.get("rejected_candidate", ""),
+            rejected_reason=data.get("rejected_reason", ""),
         ))
     return rows

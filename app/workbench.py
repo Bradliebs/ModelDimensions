@@ -168,6 +168,17 @@ def _format_assistant(result) -> str:
         f"  model_prior_used    = "
         f"{str(result.audit.get('model_prior_used')).lower()}",
     ]
+    relevance = result.audit.get("relevance") or {}
+    if relevance:
+        lines.append(f"  relevance           = {relevance.get('verdict', '-')} "
+                     f"({relevance.get('label', '-')})")
+        reason = relevance.get("sufficiency_reason")
+        if reason:
+            lines.append(f"  sufficiency         = {reason}")
+        rejected = relevance.get("top_rejected") or {}
+        if rejected.get("citation_id"):
+            lines.append(f"  top_rejected        = {rejected['citation_id']} — "
+                         f"{rejected.get('reason', '')}")
     if result.evidence_ids:
         lines.append(f"  evidence_ids        = {', '.join(result.evidence_ids)}")
     if answer.citations:

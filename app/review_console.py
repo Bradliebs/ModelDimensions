@@ -157,6 +157,17 @@ def _print_assisted(result: dict) -> None:
     print(f"  memory_used      = {str(audit.get('memory_used')).lower()}")
     print(f"  knowledge_used   = {str(audit.get('knowledge_used')).lower()}")
     print(f"  model_prior      = {str(audit.get('model_prior_used')).lower()}")
+    relevance = audit.get("relevance") or {}
+    if relevance:
+        print(f"  relevance        = {relevance.get('verdict', '-')} "
+              f"({relevance.get('label', '-')})")
+        reason = relevance.get("sufficiency_reason")
+        if reason:
+            print(f"  sufficiency      = {reason}")
+        rejected = relevance.get("top_rejected") or {}
+        if rejected.get("citation_id"):
+            print(f"  top_rejected     = {rejected['citation_id']} — "
+                  f"{rejected.get('reason', '')}")
     if result.get("evidence_ids"):
         print(f"  evidence_ids     = {', '.join(result['evidence_ids'])}")
     if answer.get("citations"):
