@@ -733,6 +733,71 @@ pack-report coding-reference
 | `scripts/build_starter_packs.ps1` | Build local starter packs and run their evals |
 | `evals/test_pack_builder.py` | Build, metadata, eval pass/fail, URL-gating, and report tests |
 
+## M365 Consultant Pack
+
+v1.9 ships the first **real working pack template**: a Microsoft 365
+consulting and project-architecture knowledge pack built entirely from local,
+curated Markdown field notes. It is the curated pack builder from v1.8 applied
+to a concrete consulting domain — nothing in the concept-cell core, grounding
+policy, or lifecycle semantics changes.
+
+**Purpose.** Give a consultant a trustworthy, provenance-tagged answer surface
+for common M365 governance and security topics: Purview sensitivity labels,
+Endpoint DLP, Defender for Cloud Apps, Copilot Studio agent patterns, Power
+Platform DLP, and SharePoint governance. Every source is tagged
+`domain: microsoft`, `authority: reputable`, `version: local-notes-v1`, and
+`staleness_policy: review_required`, so each retrieved chunk traces back to a
+dated field note rather than an anonymous scrape or an unattributed model prior.
+
+**Local sources only.** The six source documents live under
+`demos/m365_sources/`. Each one records key facts, decisions and assumptions,
+known limitations, worked examples, and source/version metadata in its header.
+There is **no live Microsoft Learn ingestion yet** — URL ingestion stays
+disabled and the network is never touched during a build.
+
+**How to build.** Build the pack from local docs and run its evaluation in one
+step (the script exits non-zero if any eval question fails):
+
+```powershell
+.\scripts\build_m365_pack.ps1
+```
+
+Or drive the same steps from inside the workbench REPL:
+
+```
+pack-build packs/starter/m365_consultant_pack.yaml
+pack-eval m365-consultant demos/pack_eval_questions/m365_consultant_eval.jsonl
+pack-report m365-consultant
+```
+
+**How to evaluate.** The eval file asserts what retrieval should return for
+known queries: exact and paraphrase source retrieval, wrong-topic rejection,
+that version/source metadata is present, and that answers come from imported
+knowledge (`knowledge_used`) rather than model priors. Running the eval produces
+a pass/fail report per question.
+
+**How to open in the review console.** The built pack is an ordinary pack, so
+the review console can inspect its knowledge sources and confirm that imported
+M365 knowledge stays separate from project memory:
+
+```powershell
+python app/review_console.py --pack-root packs\built --pack m365-consultant
+```
+
+**Limitations.** The notes are a curated starting point, not exhaustive
+documentation, and are marked `review_required` for exactly that reason. The
+deterministic retrieval backend is keyword-based, so eval queries are tuned to
+the curated chunks. There is no live Microsoft Learn ingestion yet — refreshing
+a source means editing the local Markdown and rebuilding.
+
+| File | What it adds |
+|---|---|
+| `demos/m365_sources/` | Six curated M365 field-note Markdown sources with provenance headers |
+| `packs/starter/m365_consultant_pack.yaml` | The M365 consultant pack spec (local docs, URL ingestion off) |
+| `demos/pack_eval_questions/m365_consultant_eval.jsonl` | Pack-specific retrieval and provenance eval questions |
+| `scripts/build_m365_pack.ps1` | Build the M365 pack from local docs and run its eval (exits non-zero on failure) |
+| `evals/test_m365_pack.py` | Spec-load, build, metadata, eval, review-console, and memory-separation tests |
+
 ## License
 
 To be decided.
