@@ -1,0 +1,159 @@
+{
+  "experiment": "exp11_failure_taxonomy",
+  "description": "Factual near-miss failure taxonomy across 15 flip configurations. Each flipped query alters exactly one fact of a stored truth and must be rejected by the deterministic verifier. Core geometry, whitening, write/query, Oja binding, and the grounding policy are unchanged.",
+  "encoder": "all-MiniLM-L6-v2",
+  "epsilon": 0.25,
+  "radius": 0.9,
+  "top_k": 5,
+  "n_flip_configurations": 15,
+  "n_truths": 43,
+  "n_flipped_queries": 45,
+  "candidate_recall_at_k": 1.0,
+  "deterministic_reject_rate_by_flip_type": {
+    "weekday_flip": 1.0,
+    "month_date_flip": 1.0,
+    "integer_number_flip": 1.0,
+    "quantity_word_flip": 1.0,
+    "currency_amount_flip": 1.0,
+    "negation_flip": 1.0,
+    "antonym_generic_flip": 1.0,
+    "approval_status_flip": 1.0,
+    "safe_unsafe_flip": 1.0,
+    "increase_decrease_flip": 1.0,
+    "location_swap": 1.0,
+    "person_entity_swap": 1.0,
+    "before_after_flip": 1.0,
+    "modal_must_may_flip": 1.0,
+    "modal_should_not_flip": 1.0
+  },
+  "false_accept_rate_by_flip_type": {
+    "weekday_flip": 0.0,
+    "month_date_flip": 0.0,
+    "integer_number_flip": 0.0,
+    "quantity_word_flip": 0.0,
+    "currency_amount_flip": 0.0,
+    "negation_flip": 0.0,
+    "antonym_generic_flip": 0.0,
+    "approval_status_flip": 0.0,
+    "safe_unsafe_flip": 0.0,
+    "increase_decrease_flip": 0.0,
+    "location_swap": 0.0,
+    "person_entity_swap": 0.0,
+    "before_after_flip": 0.0,
+    "modal_must_may_flip": 0.0,
+    "modal_should_not_flip": 0.0
+  },
+  "ambiguous_rate_by_flip_type": {
+    "weekday_flip": 0.0,
+    "month_date_flip": 0.0,
+    "integer_number_flip": 0.0,
+    "quantity_word_flip": 0.0,
+    "currency_amount_flip": 0.0,
+    "negation_flip": 0.0,
+    "antonym_generic_flip": 0.0,
+    "approval_status_flip": 0.0,
+    "safe_unsafe_flip": 0.0,
+    "increase_decrease_flip": 0.0,
+    "location_swap": 0.0,
+    "person_entity_swap": 0.0,
+    "before_after_flip": 0.0,
+    "modal_must_may_flip": 0.0,
+    "modal_should_not_flip": 0.0
+  },
+  "overall_deterministic_reject_rate": 1.0,
+  "unsupported_answer_after_grounding": 0.0,
+  "examples_of_failures": [],
+  "per_type": {
+    "weekday_flip": {
+      "n": 3,
+      "deterministic_reject_rate": 1.0,
+      "false_accept_rate": 0.0,
+      "ambiguous_rate": 0.0
+    },
+    "month_date_flip": {
+      "n": 3,
+      "deterministic_reject_rate": 1.0,
+      "false_accept_rate": 0.0,
+      "ambiguous_rate": 0.0
+    },
+    "integer_number_flip": {
+      "n": 3,
+      "deterministic_reject_rate": 1.0,
+      "false_accept_rate": 0.0,
+      "ambiguous_rate": 0.0
+    },
+    "quantity_word_flip": {
+      "n": 3,
+      "deterministic_reject_rate": 1.0,
+      "false_accept_rate": 0.0,
+      "ambiguous_rate": 0.0
+    },
+    "currency_amount_flip": {
+      "n": 3,
+      "deterministic_reject_rate": 1.0,
+      "false_accept_rate": 0.0,
+      "ambiguous_rate": 0.0
+    },
+    "negation_flip": {
+      "n": 3,
+      "deterministic_reject_rate": 1.0,
+      "false_accept_rate": 0.0,
+      "ambiguous_rate": 0.0
+    },
+    "antonym_generic_flip": {
+      "n": 3,
+      "deterministic_reject_rate": 1.0,
+      "false_accept_rate": 0.0,
+      "ambiguous_rate": 0.0
+    },
+    "approval_status_flip": {
+      "n": 3,
+      "deterministic_reject_rate": 1.0,
+      "false_accept_rate": 0.0,
+      "ambiguous_rate": 0.0
+    },
+    "safe_unsafe_flip": {
+      "n": 3,
+      "deterministic_reject_rate": 1.0,
+      "false_accept_rate": 0.0,
+      "ambiguous_rate": 0.0
+    },
+    "increase_decrease_flip": {
+      "n": 3,
+      "deterministic_reject_rate": 1.0,
+      "false_accept_rate": 0.0,
+      "ambiguous_rate": 0.0
+    },
+    "location_swap": {
+      "n": 3,
+      "deterministic_reject_rate": 1.0,
+      "false_accept_rate": 0.0,
+      "ambiguous_rate": 0.0
+    },
+    "person_entity_swap": {
+      "n": 3,
+      "deterministic_reject_rate": 1.0,
+      "false_accept_rate": 0.0,
+      "ambiguous_rate": 0.0
+    },
+    "before_after_flip": {
+      "n": 3,
+      "deterministic_reject_rate": 1.0,
+      "false_accept_rate": 0.0,
+      "ambiguous_rate": 0.0
+    },
+    "modal_must_may_flip": {
+      "n": 3,
+      "deterministic_reject_rate": 1.0,
+      "false_accept_rate": 0.0,
+      "ambiguous_rate": 0.0
+    },
+    "modal_should_not_flip": {
+      "n": 3,
+      "deterministic_reject_rate": 1.0,
+      "false_accept_rate": 0.0,
+      "ambiguous_rate": 0.0
+    }
+  },
+  "conclusion": "The deterministic verifier rejects every flip configuration in the taxonomy; no flipped near-miss is accepted or grounded (false-accept and unsupported-after-grounding both 0.0). The checklist is complete at 15/15 flip configurations, including the modal obligation flip (must/may) added in v1.0-finalisation. This measures rejection of known flip classes only; it is not a claim of completeness against all possible factual edits, and carries no production claim."
+}

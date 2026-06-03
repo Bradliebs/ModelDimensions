@@ -13,5 +13,8 @@ matplotlib>=3.7
 seaborn>=0.12
 tqdm>=4.65
 
+# SLM controller layer (v0.8): typed, validated decision schemas
+pydantic>=2.0
+
 # Dev
 pytest>=7.0

@@ -1,0 +1,49 @@
+{
+  "experiment": "exp12_paraphrase_recovery",
+  "description": "Paraphrase recall vs safety across four verifier configurations, each strictly no less safe than the previous. Optional layers are applied after the deterministic verdict and can only make the system more conservative on REJECTs. Core geometry, whitening, write/query, Oja binding, and the grounding policy are unchanged.",
+  "n_pairs": 22,
+  "configurations": {
+    "deterministic_only": {
+      "paraphrase_accept_rate": 0.5,
+      "false_accept_rate": 0.0,
+      "false_reject_rate": 0.0,
+      "ambiguous_rate": 0.1818,
+      "unsupported_answer_after_grounding": 0.0,
+      "safety_recall_tradeoff": {
+        "paraphrase_recall": 0.5,
+        "safety": 1.0,
+        "note": "Safety = 1 - false_accept_rate. A configuration is only worth its added recall if safety stays at 1.0."
+      }
+    },
+    "deterministic_plus_fixture": {
+      "paraphrase_accept_rate": 0.625,
+      "false_accept_rate": 0.0,
+      "false_reject_rate": 0.0,
+      "ambiguous_rate": 0.1364,
+      "unsupported_answer_after_grounding": 0.0,
+      "safety_recall_tradeoff": {
+        "paraphrase_recall": 0.625,
+        "safety": 1.0,
+        "note": "Safety = 1 - false_accept_rate. A configuration is only worth its added recall if safety stays at 1.0."
+      }
+    },
+    "deterministic_plus_slm": {
+      "paraphrase_accept_rate": 0.625,
+      "false_accept_rate": 0.0,
+      "false_reject_rate": 0.0,
+      "ambiguous_rate": 0.1364,
+      "unsupported_answer_after_grounding": 0.0,
+      "safety_recall_tradeoff": {
+        "paraphrase_recall": 0.625,
+        "safety": 1.0,
+        "note": "Safety = 1 - false_accept_rate. A configuration is only worth its added recall if safety stays at 1.0."
+      }
+    },
+    "deterministic_plus_nli": {
+      "available": false,
+      "deferred_reason": "deferred by default (set EXP12_ENABLE_NLI=1 to attempt load)",
+      "note": "No cross-encoder/NLI model available offline. This configuration is deferred: the wiring exists and would obey the same rule (NLI can never override a deterministic REJECT), but no semantic recall is claimed without a real model."
+    }
+  },
+  "conclusion": "Deterministic-only accepts exact matches and strong-containment paraphrases at zero false accepts; the curated fixture adds the two hand-verified safe paraphrases with no safety cost. The offline SLM stub is intentionally conservative and recovers no extra paraphrases (a real backend would be required, and even then could not override a deterministic REJECT). The cross-encoder/NLI configuration is deferred when no model is available offline. Across every available configuration false_accept_rate and unsupported_answer_after_grounding stay at 0.0: paraphrase recall is bought only by moving AMBIGUOUS to ACCEPT on proven-safe pairs, never by relaxing rejection. No production claim."
+}

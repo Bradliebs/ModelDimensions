@@ -305,6 +305,315 @@ Items 1–3 are each less than a day's work. Items 4–5 are larger. None are ur
 
 ---
 
+## v0.8: auditable SLM controller layer
+
+v0.8 adds an orchestration layer around the memory **without modifying any
+concept-cell geometry, whitening, scaling, write, query, or Oja-binding
+behaviour**. The core `concept_cells` modules are unchanged except for one new,
+additive file (`persistence.py`). The design goal is auditability: the SLM is
+treated as untrusted and is never the source of a fact.
+
+### Components
+
+| Module | Role |
+|---|---|
+| `src/slm/schemas.py` | Pydantic v2 data contracts crossing the SLM/memory boundary. Every controller decision is a typed, loggable object. |
+| `src/slm/controller.py` | `SLMController` interface; deterministic `MockSLMController` (default, no download) and optional lazy `LocalSLMController`. |
+| `src/concept_cells/persistence.py` | JSONL store: `memory_id`, canonical text, full vector, threshold, source, timestamp, optional `bound_group_id`. Inspectable and reloadable with no model present. |
+| `src/agent/orchestrator.py` | `MemoryBank` (stateful wrapper that **reuses** `build_concept_cells`) + `DeterministicEncoder` + the `Orchestrator` pipeline. |
+| `src/agent/response_policy.py` | The trust boundary. Builds grounded answers from fired cells; rejects any SLM-claimed memory that did not fire. |
+
+### Pipeline
+
+```
+user text -> controller.classify_intent -> {write|query|bind|delete}
+          -> MemoryBank (encode, fire cells) -> fired ids / silence
+          -> response_policy -> GroundedResponse
+```
+
+The controller is injectable and optional: `Orchestrator(bank, controller=None)`
+runs the bank as pure retrieval with no language model in the loop.
+
+### MemoryBank construction (not a core change)
+
+The bank L2-normalises every incoming vector to a fixed radius `r = 0.9`
+(inside the unit ball) before handing it to the frozen `build_concept_cells`
+with `threshold_scheme="norm_minus_eps"`. This guarantees `theta_i = r - eps`
+is always valid and a cell always fires for its own item
+(`<w_i, x_i> = r > theta_i`); cross-firing then requires near-duplicate cosine
+similarity. This is the bank's own preprocessing, identical in spirit to the
+ball-scaling already used in the experiments — the firing rule itself is the
+unchanged core construction.
+
+### Grounding guarantees (enforced, tested)
+
+- No cell fires ⇒ response states memory is silent, cites nothing, `refused=True`.
+- Cells fire ⇒ answer is assembled from those memories, cites their ids.
+- An SLM-claimed memory id that did not fire is rejected (`enforce_grounding`).
+
+### Offline determinism
+
+`DeterministicEncoder` is content-addressed: a text's vector is a deterministic
+function of its SHA-256 hash, so write-then-query of the *same* text reproduces
+the *same* vector exactly. This lets the full integrity suite and Exp 06 run
+with zero downloads. (The synthetic control encoders in `encoders.py` are seeded
+by item index, not content, so they cannot support exact-recall tests — hence
+the new encoder.) A real semantic encoder (MiniLM) would generalise recall to
+paraphrases; the deterministic encoder is an exact-match proxy for offline CI.
+
+### Experiment 06
+
+`experiments/exp06_slm_controller.py` compares `cells_only`, `mock_slm`, and
+(optionally, if `EXP06_LOCAL_SLM_MODEL` is set) `local_slm` on a scripted
+scenario, reporting routing accuracy, query success, silent-refusal rate,
+unsupported-answer (hallucination) rate, and attribution accuracy. Results are
+written to `results/exp06_summary.json`. The offline run scores 1.0 on routing,
+recall, refusal, and attribution with a 0.0 unsupported-answer rate.
+
+`evals/test_slm_controller_integrity.py` holds 13 offline tests covering intent
+classification, binding formatting, silent refusal, grounded attribution, exact
+delete, and the no-bypass property of the response policy.
+
+---
+
+## v0.9: stress-test layer
+
+v0.9 is a stress-test release, not a feature-expansion release. The frozen core
+(geometry, whitening, scaling, write/query, Oja binding) is untouched. The new
+code pressures the surfaces around the core and measures where they bend.
+
+### Controllers
+
+Three controllers now share the `SLMController` interface:
+
+- `MockSLMController` (v0.8): deterministic regex routing.
+- `RulesController` (`src/slm/rules_controller.py`): a token-based keyword
+  baseline with no model in the loop. Delete/bind/write keyword sets and a
+  set of interrogatives drive routing; everything non-empty otherwise defaults
+  to `QUERY` (safe, because grounding refuses on no fire) and empty input maps
+  to `UNKNOWN`. By construction it is always JSON-valid and never malformed, so
+  it is the floor for the model-based controller.
+- `LocalJSONController` (`src/slm/local_json_controller.py`): the strict
+  local-SLM path. A model name selects a lazily-loaded `TransformersBackend`,
+  or an injectable `GenerationBackend` is supplied for tests. Each decision is
+  parsed (`_extract_json`), validated against a loose `_RawDecision` schema,
+  then mapped to the strict `SLMControllerDecision`. On malformed/invalid
+  output it retries exactly once with a stricter prompt; if the second attempt
+  also fails it falls back to a configurable safe intent (`QUERY` or
+  `UNKNOWN`). It never touches the bank, never fabricates a binding (it keeps
+  only proposed ids that actually exist), and exposes `stats`/`last_call`
+  diagnostics (calls, valid-first, retried, recovered, fallback, malformed) for
+  auditing.
+
+The response policy is unchanged and remains the trust boundary: whatever a
+controller decides, the user only receives text grounded in fired cells.
+
+### Schema invariant
+
+`GroundedResponse` gained a `model_validator` enforcing two invariants:
+`memory_used=True` requires at least one cited id, and a `refused=True`
+response must cite and use no memory. This makes "used memory without naming
+it" and "refused yet cited" unrepresentable rather than merely discouraged.
+
+### Experiment 07
+
+`experiments/exp07_real_slm_controller_stress.py` runs one scripted scenario
+through four paths: `mock`, `rules`, `local_guarded`, and `local_unsafe`. A
+local `ScriptedJSONBackend` drives the local controller deterministically and
+emits malformed JSON on flagged turns to exercise retry and fallback;
+`EXP07_LOCAL_SLM_MODEL` swaps in a real backend. It reports json-validity,
+malformed-decision rate, routing accuracy, silent-refusal rate, unsupported-
+answer (hallucination) rate, attribution accuracy, write-candidate quality, and
+bind-suggestion precision. The headline: `local_guarded` scores 0.0
+unsupported-answer while `local_unsafe` (same model, grounding bypassed,
+citation fabricated on silence) scores 1.0 — the grounding policy is the
+difference. Results in `results/exp07_summary.json`.
+
+### Experiment 08
+
+`experiments/exp08_encoder_semantic_recall.py` holds the geometry fixed and
+varies only the encoder: `deterministic`, raw MiniLM, and MiniLM passed through
+the same whitening+scaling math as `concept_cells.geometry` (re-fit locally on
+the memories only; the core module is not modified). A `PrecomputedEncoder`
+lets the bank consume MiniLM vectors through its normal per-text interface. Each
+of five memories has exact / paraphrase / near-miss / unrelated query variants,
+scored for exact recall, paraphrase recall, false-fire rate, silent-refusal
+rate, and firing-margin distribution. A moderate `epsilon=0.25` (cosine bar
+~0.72) is used so paraphrase recall is measurable — the v0.8 near-duplicate bar
+(0.944) would make every encoder look identical.
+
+Observed (single configuration): deterministic gives perfect exact recall and
+zero paraphrase recall (content-addressed, as designed); raw MiniLM lifts
+paraphrase recall to 0.8 but false-fires on half the near-miss/unrelated
+queries; whitening fit on only five memories over-sharpens and drops paraphrase
+recall back to 0.0. This is a finding about small-sample whitening, not a
+recommendation. Results in `results/exp08_summary.json`.
+
+### Policy-guard tests
+
+`evals/test_real_slm_policy_guards.py` adds offline guard tests driven by a
+`FakeBackend` (queued canned responses, no model): malformed-JSON fallback and
+retry recovery, prompt-injection that cannot fabricate an answer against an
+empty bank, rejection of injected/unsupported citations, silent refusal,
+unsupported-answer prevention, deleted memories that can no longer fire or be
+cited, and the `GroundedResponse` invariants. The full suite is 24 tests,
+entirely offline.
+
+---
+
+## v1.0-rc1: semantic calibration layer
+
+v1.0-rc1 is a calibration release, not a feature release. The frozen core
+(geometry, whitening, scaling, write/query, Oja binding) and the grounding
+policy are untouched. The release asks whether MiniLM-based concept cells can
+support paraphrase recall while keeping false fires acceptably low, and adds
+only opt-in machinery to answer it.
+
+### Threshold policies
+
+`src/concept_cells/thresholds.py` adds firing-decision policies that sit
+*beside* the core, never inside it. Every policy is a pure function of
+activations and parameters: it copies its inputs, never mutates cell weight
+vectors, and is deterministic. `fixed_threshold` and `per_cell_threshold`
+reproduce and generalise the core `activation > theta` rule; `quantile_threshold`
+sets the bar from a negative calibration set; `abstain_band_threshold` and
+`two_stage_threshold` add an explicit `AMBIGUOUS` verdict between FIRE and
+SILENT. `sweep_best_threshold` scans a grid and returns the highest-recall
+threshold whose false-fire rate stays under a cap, or the best Youden's-J point
+flagged infeasible if none qualifies. The core firing rule used by `MemoryBank`
+is unchanged; these are tools for experiments, not a new runtime path.
+
+### Experiment 09
+
+`experiments/exp09_semantic_margin_calibration.py` holds the geometry fixed and
+varies the encoder and preprocessing across seven variants: `deterministic`,
+`minilm_raw`, `minilm_whiten_small` (ZCA fit on the 8 memories, reproducing the
+v0.9 small-sample setting), `minilm_whiten_large_calib` (ZCA fit on a 40-item
+calibration corpus), `minilm_pca_whiten`, `minilm_shrinkage_whiten`, and an
+optional 768d `mpnet768` pair if the model is available locally. Whitening
+transforms are fit locally and applied identically to memories and queries; the
+core module is not modified, and cell construction still routes through
+`build_concept_cells`. Eight memories each carry exact / paraphrase / near-miss /
+unrelated / adversarial query variants. The threshold is swept against the
+*realistic* false-fire sources (near-miss + unrelated); adversarial near-
+duplicates — one-word semantic flips like `launch`→`recall` — are reported as a
+separate stress column rather than gating the operating point. Reported per
+variant: exact and paraphrase recall, per-category false-fire rates, silence
+rate, median / p05 positive margin, p95 negative margin, positive–negative
+margin overlap, and the swept best threshold. Results in
+`results/exp09_summary.json`.
+
+Observed: no variant met the acceptance bar (paraphrase recall ≥ 0.60,
+near-miss false-fire ≤ 0.20, unrelated ≤ 0.05, adversarial ≤ 0.30). Raw MiniLM
+holds exact recall at 1.0 but, under the false-fire cap, paraphrase recall falls
+to 0.0 — MiniLM ranks one-word near-miss flips above genuine paraphrases in
+cosine, so no single threshold separates them. Small-sample whitening over-
+sharpens (paraphrase margins drop to ≈ −0.97 below threshold), and large-
+calibration ZCA, PCA, and shrinkage whitening do not recover paraphrase recall
+in this setup. The experiment therefore records `operating_point.found = false`
+with an explanation. This is an honest negative result about semantic
+calibration, not a recommendation and not a production claim.
+
+### Tests
+
+`evals/test_threshold_policies.py` adds offline tests for the policy layer:
+fixed threshold fires above / silences below theta, abstain-band returns
+AMBIGUOUS in the middle band, two-stage separates FIRE / AMBIGUOUS / SILENT,
+per-cell thresholds do not mutate core cell vectors or input arrays, and policy
+outputs are deterministic. With the v0.8/v0.9 suite the full offline run is 39
+tests.
+
+---
+
+## v1.0-rc2: candidate recall + fact verifier
+
+v1.0-rc1 established a negative result: under MiniLM, one-word near-miss flips
+(`Friday`→`Monday`, `approved`→`rejected`) sit at *higher* cosine than genuine
+paraphrases, so no single firing threshold admits paraphrases without also
+admitting the flips. v1.0-rc2 takes the consequence seriously. Rather than ask
+the geometry to separate the inseparable, it treats the concept cells as a fast
+candidate-recall substrate and adds a separate **verification** stage that
+checks fact preservation lexically, where the encoder cannot.
+
+The core is frozen exactly as before: geometry, whitening/scaling, write/query,
+Oja binding, and the grounding policy in `response_policy.py` are untouched, and
+all 39 prior tests still pass. v1.0-rc2 is purely additive.
+
+### Candidate retrieval
+
+`src/agent/candidate_retrieval.py` exposes `retrieve_candidates(bank, query, k)`.
+It reads the bank through its public surface only (`records()`, `encoder`,
+`radius`) and reproduces the bank's own firing arithmetic: each stored vector
+sits at radius `r`, so the cell weight is the unit vector `x_i/‖x_i‖` and the
+query is scaled to radius `r`, giving `activation = w_i · q`. It returns the
+top-k cells as `MemoryCandidate` objects annotated with rank and a
+`threshold_status` (audit only — retrieval is not gated on firing). Retrieval
+never mutates the bank and never changes geometry. Crucially, a `MemoryCandidate`
+is **not** grounded memory: pulling a candidate is not using it.
+
+`ground_accepted_candidates` then composes a `GroundedResponse` that cites *only*
+candidates a verifier accepted. If none are accepted it refuses
+(`refused=True`, no citations), satisfying the existing `GroundedResponse`
+invariants without modifying the frozen policy.
+
+### Deterministic verifier
+
+`src/agent/verifier.py` is the trust anchor: a pure, deterministic, lexical
+checker with no model dependency. `verify_candidate(query, candidate)` returns
+`REJECT` if any detector trips, `ACCEPT` only on an exact normalised match,
+strong containment (the smaller content-token set ⊆ the larger, ≥3 tokens), or a
+fixture-defined safe paraphrase, and `AMBIGUOUS` otherwise. The five detectors —
+number, date/weekday, entity, negation, and basic antonym mismatch — are
+deliberately **symmetric and conservative**: each fires only when each side
+carries something the other lacks, so one-directional additions do not
+false-reject, and number words normalise so `two` and `2` are equal. The design
+bias is explicit: a false `ACCEPT` grounds a wrong fact and is the failure to
+avoid; a false `AMBIGUOUS` merely refuses a correct paraphrase and is safe.
+
+### Optional SLM equivalence judge
+
+`src/slm/equivalence_judge.py` adds an injectable second opinion behind a
+Pydantic gate. `EquivalenceJudge.judge(query, candidate, deterministic_verdict)`
+enforces one hard rule: if the deterministic verdict is `REJECT`, it returns
+`REJECT` immediately and **never consults the model**. Only `ACCEPT`/`AMBIGUOUS`
+cases reach the backend, and any backend error or malformed JSON falls back to
+`AMBIGUOUS`. The model can only ever be *more* conservative; it cannot resurrect
+a candidate the deterministic layer rejected.
+
+### Experiment 10
+
+`experiments/exp10_candidate_verifier.py` reuses the exact Exp 09 corpus (same 8
+memories, same 48 queries, same categories) and compares four systems:
+threshold-only (the Exp 09 regime), top-1 candidate recall with no verification,
+top-k + deterministic verifier, and top-k + deterministic + optional SLM judge.
+It reports `candidate_recall_at_k`, `verified_accept_rate`,
+`paraphrase_accept_rate`, `near_miss_reject_rate`, `unrelated_reject_rate`,
+`ambiguous_rate`, `false_accept_rate`, `false_reject_rate`, and
+`unsupported_answer_rate_after_grounding`, to `results/exp10_summary.json`.
+
+Observed (MiniLM encoder): candidate recall@5 for the target memory is `1.0`.
+The deterministic verifier rejects `1.0` of one-word near-miss flips and drives
+`false_accept_rate` to `0.0` (threshold-only `0.58`, candidate-only `1.0`) and
+`unsupported_answer_rate_after_grounding` to `0.0` (threshold-only `0.29`,
+candidate-only `0.50`). The cost is conservatism: paraphrase acceptance drops to
+the fixture/exact set (`paraphrase_accept_rate` `0.19`), so unmatched paraphrases
+are refused rather than grounded. The offline SLM judge is a conservative stub
+and only narrows acceptance further; it never creates a false accept and never
+overrides a deterministic reject. This is a positive but bounded result — the
+verifier catches exactly the failure mode Exp 09 could not — and still carries no
+production claim.
+
+### Tests
+
+`evals/test_fact_verifier.py` adds offline tests: each Exp 09 flip class rejects
+(weekday, number, number-word, antonym pairs, negation, entity substitution),
+exact and fixture paraphrases accept, genuine non-fixture paraphrases return
+`AMBIGUOUS`, the SLM judge cannot override a deterministic `REJECT`, and
+malformed judge output falls back to `AMBIGUOUS`. With the prior suite the full
+offline run is 55 tests.
+
+---
+
 ## Acknowledgement of limits
 
 This document describes preliminary work. The architecture mechanism is demonstrated; the architecture's behaviour at production scale is not. The numbers reported here are repeatable (random seeds are fixed in the code) but represent a single configuration of (encoder, corpus, preprocessing, parameters). They should not be cited as evidence that this architecture will work in other configurations until those configurations have been tested.

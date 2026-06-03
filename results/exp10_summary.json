@@ -1,0 +1,65 @@
+{
+  "experiment": "exp10_candidate_verifier",
+  "description": "Candidate recall + deterministic fact verifier. Concept cells retrieve top-k candidates; a lexical verifier decides whether a candidate preserves the queried fact. Core geometry, whitening, write/query, Oja binding, and the grounding policy are unchanged.",
+  "encoder": "all-MiniLM-L6-v2",
+  "epsilon": 0.25,
+  "radius": 0.9,
+  "top_k": 5,
+  "n_memories": 8,
+  "n_queries": 48,
+  "query_categories": [
+    "exact",
+    "one_word_near_miss",
+    "paraphrase",
+    "semantically_related_negative",
+    "unrelated_negative"
+  ],
+  "systems": {
+    "threshold_only": {
+      "candidate_recall_at_k": 0.9583,
+      "verified_accept_rate": 0.7708,
+      "paraphrase_accept_rate": 0.9375,
+      "near_miss_reject_rate": 0.0,
+      "unrelated_reject_rate": 0.0,
+      "ambiguous_rate": 0.2292,
+      "false_accept_rate": 0.5833,
+      "false_reject_rate": 0.0,
+      "unsupported_answer_rate_after_grounding": 0.2917
+    },
+    "candidate_recall_only": {
+      "candidate_recall_at_k": 1.0,
+      "verified_accept_rate": 1.0,
+      "paraphrase_accept_rate": 1.0,
+      "near_miss_reject_rate": 0.0,
+      "unrelated_reject_rate": 0.0,
+      "ambiguous_rate": 0.0,
+      "false_accept_rate": 1.0,
+      "false_reject_rate": 0.0,
+      "unsupported_answer_rate_after_grounding": 0.5
+    },
+    "topk_deterministic": {
+      "candidate_recall_at_k": 1.0,
+      "verified_accept_rate": 0.2292,
+      "paraphrase_accept_rate": 0.1875,
+      "near_miss_reject_rate": 1.0,
+      "unrelated_reject_rate": 0.125,
+      "ambiguous_rate": 0.4167,
+      "false_accept_rate": 0.0,
+      "false_reject_rate": 0.0,
+      "unsupported_answer_rate_after_grounding": 0.0
+    },
+    "topk_deterministic_slm": {
+      "candidate_recall_at_k": 1.0,
+      "verified_accept_rate": 0.1667,
+      "paraphrase_accept_rate": 0.0,
+      "near_miss_reject_rate": 1.0,
+      "unrelated_reject_rate": 0.125,
+      "ambiguous_rate": 0.4792,
+      "false_accept_rate": 0.0,
+      "false_reject_rate": 0.0,
+      "unsupported_answer_rate_after_grounding": 0.0
+    }
+  },
+  "verifier_rejects_exp09_flips": true,
+  "conclusion": "The deterministic verifier rejects the one-word near-miss flips that threshold-only retrieval grounded in Exp 09, driving unsupported-answer-rate after grounding to 0.0 for the verified path versus 0.2917 for threshold-only. Paraphrase acceptance stays conservative (fixture/exact only); unmatched paraphrases are refused, not grounded. The offline SLM judge is a conservative stub and cannot create false accepts; it never overrides a deterministic reject. No production claim."
+}

@@ -1,0 +1,125 @@
+{
+  "experiment": "exp08_encoder_semantic_recall",
+  "description": "How the encoder changes recall over the frozen concept-cell memory: exact vs paraphrase recall, false fires, and firing margins for deterministic / MiniLM / MiniLM+whiten+scale.",
+  "epsilon": 0.25,
+  "radius": 0.9,
+  "note": "Geometry, whitening, scaling, write/query and binding are unchanged; only the encoder feeding the bank differs.",
+  "configs": [
+    {
+      "config": "deterministic",
+      "epsilon": 0.25,
+      "cosine_fire_threshold": 0.7222,
+      "exact_recall": 1.0,
+      "paraphrase_recall": 0.0,
+      "false_fire_rate": 0.0,
+      "silent_refusal_rate": 1.0,
+      "margin_distribution": {
+        "count": 5,
+        "mean": 0.25,
+        "std": 0.0,
+        "min": 0.25,
+        "max": 0.25,
+        "per_kind_mean": {
+          "exact": 0.25,
+          "paraphrase": null,
+          "near_miss": null,
+          "unrelated": null
+        }
+      },
+      "margins_by_kind_raw": {
+        "exact": [
+          0.25,
+          0.25,
+          0.25,
+          0.25,
+          0.25
+        ],
+        "paraphrase": [],
+        "near_miss": [],
+        "unrelated": []
+      },
+      "n_queries": 20
+    },
+    {
+      "config": "minilm_raw",
+      "epsilon": 0.25,
+      "cosine_fire_threshold": 0.7222,
+      "exact_recall": 1.0,
+      "paraphrase_recall": 0.8,
+      "false_fire_rate": 0.5,
+      "silent_refusal_rate": 1.0,
+      "margin_distribution": {
+        "count": 14,
+        "mean": 0.1757,
+        "std": 0.0755,
+        "min": 0.0258,
+        "max": 0.25,
+        "per_kind_mean": {
+          "exact": 0.25,
+          "paraphrase": 0.1099,
+          "near_miss": 0.1539,
+          "unrelated": null
+        }
+      },
+      "margins_by_kind_raw": {
+        "exact": [
+          0.25,
+          0.25,
+          0.25,
+          0.25,
+          0.25
+        ],
+        "paraphrase": [
+          0.105023,
+          0.112693,
+          0.167821,
+          0.05407
+        ],
+        "near_miss": [
+          0.1794,
+          0.130352,
+          0.025779,
+          0.203941,
+          0.230156
+        ],
+        "unrelated": []
+      },
+      "n_queries": 20
+    },
+    {
+      "config": "minilm_whiten_scale",
+      "epsilon": 0.25,
+      "cosine_fire_threshold": 0.7222,
+      "exact_recall": 1.0,
+      "paraphrase_recall": 0.0,
+      "false_fire_rate": 0.0,
+      "silent_refusal_rate": 1.0,
+      "margin_distribution": {
+        "count": 5,
+        "mean": 0.25,
+        "std": 0.0,
+        "min": 0.25,
+        "max": 0.25,
+        "per_kind_mean": {
+          "exact": 0.25,
+          "paraphrase": null,
+          "near_miss": null,
+          "unrelated": null
+        }
+      },
+      "margins_by_kind_raw": {
+        "exact": [
+          0.25,
+          0.25,
+          0.25,
+          0.25,
+          0.25
+        ],
+        "paraphrase": [],
+        "near_miss": [],
+        "unrelated": []
+      },
+      "n_queries": 20
+    }
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "experiment": "exp06_slm_controller",
+  "description": "Auditable SLM controller over the frozen concept-cell memory: routing, grounding, and hallucination-refusal metrics.",
+  "encoder": "DeterministicEncoder(dim=64) [offline, content-addressed]",
+  "configs": [
+    {
+      "config": "cells_only",
+      "routing_accuracy": null,
+      "query_success_rate": 1.0,
+      "silent_refusal_rate": 1.0,
+      "unsupported_answer_rate": 0.0,
+      "attribution_accuracy": 1.0,
+      "n_turns": 6
+    },
+    {
+      "config": "mock_slm",
+      "routing_accuracy": 1.0,
+      "query_success_rate": 1.0,
+      "silent_refusal_rate": 1.0,
+      "unsupported_answer_rate": 0.0,
+      "attribution_accuracy": 1.0,
+      "n_turns": 6
+    },
+    {
+      "config": "local_slm",
+      "skipped": "set EXP06_LOCAL_SLM_MODEL to enable (kept offline by default)"
+    }
+  ]
+}

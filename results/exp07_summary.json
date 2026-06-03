@@ -1,0 +1,65 @@
+{
+  "experiment": "exp07_real_slm_controller_stress",
+  "description": "Stress test of mock / rules / strict-local / unsafe controller paths over the frozen concept-cell memory. Demonstrates that the grounded path refuses the hallucinations the unsafe path emits.",
+  "encoder": "DeterministicEncoder(dim=64) [offline, content-addressed]",
+  "offline": true,
+  "grounding_prevents_hallucination": true,
+  "configs": [
+    {
+      "config": "mock",
+      "json_validity_rate": 1.0,
+      "malformed_decision_rate": 0.0,
+      "retried_decisions": 0,
+      "recovered_on_retry": 0,
+      "routing_accuracy": 1.0,
+      "silent_refusal_rate": 0.0,
+      "unsupported_answer_rate": 0.0,
+      "attribution_accuracy": 1.0,
+      "write_candidate_quality": 1.0,
+      "bind_suggestion_precision": 1.0,
+      "n_turns": 10
+    },
+    {
+      "config": "rules",
+      "json_validity_rate": 1.0,
+      "malformed_decision_rate": 0.0,
+      "retried_decisions": 0,
+      "recovered_on_retry": 0,
+      "routing_accuracy": 1.0,
+      "silent_refusal_rate": 0.0,
+      "unsupported_answer_rate": 0.0,
+      "attribution_accuracy": 1.0,
+      "write_candidate_quality": 1.0,
+      "bind_suggestion_precision": 1.0,
+      "n_turns": 10
+    },
+    {
+      "config": "local_guarded",
+      "json_validity_rate": 0.7,
+      "malformed_decision_rate": 0.1,
+      "retried_decisions": 3,
+      "recovered_on_retry": 2,
+      "routing_accuracy": 1.0,
+      "silent_refusal_rate": 0.0,
+      "unsupported_answer_rate": 0.0,
+      "attribution_accuracy": 1.0,
+      "write_candidate_quality": 1.0,
+      "bind_suggestion_precision": 1.0,
+      "n_turns": 10
+    },
+    {
+      "config": "local_unsafe",
+      "json_validity_rate": 0.7,
+      "malformed_decision_rate": 0.1,
+      "retried_decisions": 3,
+      "recovered_on_retry": 2,
+      "routing_accuracy": 1.0,
+      "silent_refusal_rate": 0.0,
+      "unsupported_answer_rate": 1.0,
+      "attribution_accuracy": 1.0,
+      "write_candidate_quality": 1.0,
+      "bind_suggestion_precision": 1.0,
+      "n_turns": 10
+    }
+  ]
+}
