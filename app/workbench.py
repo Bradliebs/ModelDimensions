@@ -211,7 +211,7 @@ Commands:
   backend               show the active knowledge retrieval backend
   packs                 list project packs (isolated workspaces)
   pack-create <name>    create a new project pack
-  pack-use <name>       switch the active pack (re-points all stores)
+  pack-use <name>       switch the active pack (re-points all stores); alias: pack-switch
   pack-info [name]      show the active pack (or a named pack) and its paths
   pack-export <name> <path>  export a pack to a .zip bundle
   pack-import <path>    import a pack bundle and register it
@@ -607,7 +607,7 @@ def _repl(service: WorkbenchService,
                 continue
             pack = registry.create_pack(arg)
             print(f"  created pack {pack.pack_id} ({pack.name})")
-        elif cmd in {"pack-use", "pack_use"}:
+        elif cmd in {"pack-use", "pack_use", "pack-switch", "pack_switch"}:
             if registry is None:
                 print("  packs are disabled; relaunch with --pack-root <dir>")
                 continue

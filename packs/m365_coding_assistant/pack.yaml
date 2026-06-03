@@ -1,0 +1,66 @@
+# v2.1 M365 / Coding Assistant Pack manifest
+#
+# Declarative recipe consumed by scripts/build_m365_coding_pack.py. The keys
+# under the top level that the frozen PackBuildPlan understands (pack_name,
+# description, default_domain, default_knowledge_backend, allow_url_ingestion,
+# enabled, sources) are used to build the pack. The `policy` block below is a
+# human-readable declaration that the build script validates the sources
+# against; it does not change any frozen builder semantics.
+
+pack_name: m365-coding-assistant-v21
+description: >-
+  Practical Microsoft 365 and coding assistant pack: curated local field notes
+  for M365 administration, Purview labels and DLP, Power Platform / PowerApps
+  formulas, SharePoint / Teams / Copilot Studio, and local coding-agent
+  workflow rules. Answers are grounded in these sources only; the SLM layer is
+  optional and evidence-bounded.
+
+default_domain: microsoft
+default_knowledge_backend: deterministic
+allow_url_ingestion: false
+enabled: true
+
+# Declared policy (validated by the build script; not enforced by the frozen
+# builder). These document the pack's guarantees.
+policy:
+  source_policy: local_only           # no URL or HF ingestion; curated files only
+  allowed_knowledge_types: [microsoft, coding]
+  stale_source_warning: enabled       # sources with a stale policy are labelled at query time
+  medical_legal: disabled             # no medical/legal sources unless explicitly added later
+  model_prior: labelled_only          # model-prior answers are allowed only when explicitly labelled
+
+sources:
+  - source_name: Microsoft 365 Admin Patterns
+    path_or_url: packs/m365_coding_assistant/sources/m365_admin_patterns.md
+    domain: microsoft
+    authority: reputable
+    version: local-notes-v1
+    staleness_policy: review_required
+
+  - source_name: Purview Sensitivity Labels and DLP
+    path_or_url: packs/m365_coding_assistant/sources/purview_dlp_notes.md
+    domain: microsoft
+    authority: reputable
+    version: local-notes-v1
+    staleness_policy: review_required
+
+  - source_name: Power Platform PowerApps Formulas
+    path_or_url: packs/m365_coding_assistant/sources/power_platform_formulas.md
+    domain: microsoft
+    authority: reputable
+    version: local-notes-2023
+    staleness_policy: stale
+
+  - source_name: SharePoint Teams Copilot Studio Notes
+    path_or_url: packs/m365_coding_assistant/sources/copilot_studio_notes.md
+    domain: microsoft
+    authority: reputable
+    version: local-notes-v1
+    staleness_policy: review_required
+
+  - source_name: Local Coding-Agent Workflow Rules
+    path_or_url: packs/m365_coding_assistant/sources/coding_agent_workflow.md
+    domain: coding
+    authority: reputable
+    version: local-notes-v1
+    staleness_policy: review_required

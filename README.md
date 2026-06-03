@@ -1011,6 +1011,84 @@ model-prior answer.
 | `demos/assistant_queries.jsonl` | Seven worked assistant scenarios |
 | `evals/test_assistant_composer.py` | Composer safety tests: no invented citations, no grounding of refusals, safe fallback, lifecycle guarantees |
 
+## v2.1 M365/Coding Assistant Pack
+
+The first **practical** domain pack built on the v2.0 assistant layer. It bundles
+curated local field notes — Microsoft 365 administration, Purview labels and DLP,
+Power Platform / PowerApps formulas, SharePoint / Teams / Copilot Studio, and this
+project's own coding-agent workflow rules — into a single grounded pack under
+`packs/m365_coding_assistant/`. Nothing in the frozen core, the verifier, the
+grounding policy, or the lifecycle changes; this pack is a *consumer* of those
+layers, not a modification of them.
+
+**What it answers.** Questions grounded in its five sources across two domains
+(`microsoft` and `coding`): least-privilege admin roles and break-glass accounts,
+sensitivity labels and DLP modes, Power Fx functions and delegation warnings,
+SharePoint external sharing and Copilot Studio grounding, and the coding agent's
+minimum-change / verification-loop conventions.
+
+**What it refuses.** Off-topic and unsupported questions are not answered. A
+decision-recall query with no matching project memory produces an explicit
+refusal, never a guess. Model-prior output is only produced when
+`allow_model_prior` is explicitly set, and it is clearly labelled as ungrounded.
+
+**Citations.** Grounded answers cite only the source chunks present in the
+grounding package (`[src:<chunk-id>]`). An optional local SLM may render the same
+answer but can never cite a source that is not in the package — a fabricated
+citation makes the composer fall back to the safe template.
+
+**Stale and conflicting evidence.** The Power Platform notes are flagged
+`stale`; any answer touching them carries a query-time caution that the source
+may be outdated and should be verified against current guidance (added via
+`_staleness_cautions`, additive only). Conflicting project decisions are rejected
+by the verifier and surfaced as a conflict explanation rather than grounded.
+
+**Rebuild the pack.**
+
+```
+python scripts/build_m365_coding_pack.py
+```
+
+This validates the manifest's declared `policy` block (local-only sources, no
+medical/legal domains, allowed knowledge types), builds the five sources into
+`packs/built/`, prints provenance and the stale flag, and then runs the eval gate.
+
+**Run the evals.**
+
+```
+python scripts/build_m365_coding_pack.py          # build + retrieval/provenance eval gate
+python -m pytest evals/test_m365_coding_pack.py    # build + assistant-safety tests
+```
+
+**Use it live.**
+
+```
+python app/workbench.py --pack-root packs\built
+workbench> pack-use m365-coding-assistant-v21      # or: pack-switch
+workbench> query-assist <text>                     # template composer
+workbench> query-assist --slm <text>               # optional local SLM, safe fallback
+```
+
+**Limitations (honest).** The default retrieval backend is a deterministic
+whole-string encoder, so it is exact-match, not semantic: the eval queries in
+`evals/m365_coding_pack_eval.jsonl` are verbatim source excerpts because a
+paraphrase will not reliably rank the target chunk. That JSONL therefore
+validates **retrieval and provenance** only (domain, source, authority, chunk
+content, forbidden-term absence). The **assistant-safety** guarantees — refusal
+on missing evidence, stale labelling, model-prior labelling, and SLM citation
+bounds — are validated separately in `evals/test_m365_coding_pack.py`. Because a
+populated knowledge library always returns a chunk, refusal is reachable through
+the memory route (an unanswered decision-recall query), as the tests demonstrate.
+
+| File | What it adds |
+|---|---|
+| `packs/m365_coding_assistant/pack.yaml` | Manifest with five local sources + declared `policy` block |
+| `packs/m365_coding_assistant/sources/*.md` | Five curated field-note sources (M365 + coding) |
+| `scripts/build_m365_coding_pack.py` | Policy-validating build + eval gate |
+| `evals/m365_coding_pack_eval.jsonl` | 20 retrieval/provenance questions (17 grounded, 3 rejection) |
+| `evals/test_m365_coding_pack.py` | Build + assistant-safety tests (refusal, stale, model-prior, SLM bounds) |
+| `demos/m365_coding_assistant_queries.jsonl` | Ten worked assistant scenarios for this pack |
+
 ## License
 
 To be decided.

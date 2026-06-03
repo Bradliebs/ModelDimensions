@@ -77,6 +77,12 @@ _K = 5
 # when the past memory is clearly about the same thing.
 _HISTORICAL_OVERLAP = 0.4
 
+# Staleness policies that surface an explicit "this source may be outdated"
+# caution at query time. Sources marked ``review_required`` or ``static`` do not
+# trigger this warning; only sources a curator has flagged as stale do, so the
+# label distinguishes a known-stale source from a fresh one.
+_STALE_POLICIES = {"stale", "outdated", "deprecated"}
+
 
 @dataclass
 class CandidateView:
@@ -559,6 +565,7 @@ class WorkbenchService:
 
         cautions = _domain_cautions(domain, candidates)
         cautions.extend(self._coding_version_cautions(candidates))
+        cautions.extend(self._staleness_cautions(candidates))
 
         cited: List[str] = []
         cand_dicts: List[dict] = []
@@ -617,6 +624,27 @@ class WorkbenchService:
                 cautions.append(
                     f"Coding source '{src.source_name}' has no recorded "
                     "version; behaviour may differ across versions.")
+        return cautions
+
+    def _staleness_cautions(
+            self, candidates: List[KnowledgeCandidate]) -> List[str]:
+        """Warn when a cited source is flagged stale by its staleness policy."""
+        cautions: List[str] = []
+        warned: set[str] = set()
+        for cand in candidates:
+            if cand.source_name in warned:
+                continue
+            src = self.knowledge.get_source(cand.source_id)
+            if src is None:
+                continue
+            policy = (src.staleness_policy or "").strip().lower()
+            if policy in _STALE_POLICIES:
+                warned.add(cand.source_name)
+                cautions.append(
+                    f"Source '{src.source_name}' is marked stale "
+                    f"(staleness policy: {src.staleness_policy}); it may be "
+                    "outdated \u2014 verify against current guidance before "
+                    "relying on it.")
         return cautions
 
     def query_all(self, query_text: str) -> CombinedAudit:
