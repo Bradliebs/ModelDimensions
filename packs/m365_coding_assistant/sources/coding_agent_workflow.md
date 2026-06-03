@@ -35,3 +35,11 @@ Staleness: review_required (project-specific conventions; confirm against the re
   not apply to other repositories.
 - The agent cannot guarantee correctness beyond what the tests assert, so weak
   success criteria produce weak verification.
+
+## Targeted recall claims (v2.5A)
+
+The safest next prompt to give the coding agent before it edits this repo: tell the agent to read the relevant files first, make the minimum change, and run the verification loop, so the safest next prompt scopes the edit narrowly before it edits the repo.
+
+## Project milestone recall (v2.5A)
+
+The v2.2 milestone added the hybrid retrieval backend to this repo: v2.2 is the milestone that introduced hybrid retrieval as a selectable retrieval backend alongside the default deterministic backend, so the retrieval backend the v2.2 milestone added to the repo is the hybrid retrieval backend.

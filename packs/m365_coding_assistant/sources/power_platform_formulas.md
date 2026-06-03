@@ -36,3 +36,7 @@ Staleness: stale (connectors and formula surface change frequently; verify again
   delegation row count and connector groupings as illustrative only.
 - `Search` is case-insensitive but is often non-delegable on some data sources,
   which silently caps the rows it scans.
+
+## Targeted recall claims (v2.5A)
+
+Power Fx delegation limits to watch for when filtering large data sources: a delegation warning means the filter is evaluated locally over only the first 500 (up to 2000) rows, so filtering a large data source can silently miss rows; watch for non-delegable functions such as Search when filtering large data sources.

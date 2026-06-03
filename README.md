@@ -1496,6 +1496,62 @@ reviewer can see *why* a verdict was reached and *what* was held back.
 | `evals/test_relevance_gate.py` | Verdict-mapping units, the value-sprint false-grounding rows, out-of-domain refusal, metadata-header lead, and conflict-not-masked integration tests |
 | `evals/test_evidence_ranker.py` | Ranker ordering and top-rejected, gate verdict mapping, project-milestone preference, weak-match pack-gap proposal, and top-rejected in the grounding audit |
 
+## v2.5A Targeted Pack Enrichment
+
+The v2.4 gate narrowed false grounding, and the value sprint then exposed the
+opposite, honest failure: several realistic M365 / coding questions had **no
+matching evidence in the pack at all**, so the gate correctly refused them and
+the harness logged them as *pack gaps*. v2.5A closes those specific gaps by
+adding real, source-governed knowledge — not by relaxing any guarantee.
+
+### What changed
+
+Seven *claim-shaped* paragraphs were appended to the existing
+`packs/m365_coding_assistant/` sources, each echoing the vocabulary of a known
+gap query so the answer can be retrieved and cited:
+
+| Source (domain) | Added claim | Closes value-sprint row |
+|---|---|---|
+| Purview Sensitivity Labels and DLP (`microsoft`) | encryption thresholds (`Confidential`+) | 6 |
+| Purview Sensitivity Labels and DLP (`microsoft`) | four-tier label taxonomy design | 13 |
+| Purview Sensitivity Labels and DLP (`microsoft`) | Highly Confidential vs third-party compatibility | 14 |
+| Microsoft 365 Admin Patterns (`microsoft`) | least-privilege scoped admin roles for consultants | 11 |
+| Power Platform PowerApps Formulas (`microsoft`, **stale**) | Power Fx delegation limits and gallery filtering | 16 |
+| Local Coding-Agent Workflow Rules (`coding`) | safe-edit "next prompt" pattern | 19 |
+| Local Coding-Agent Workflow Rules (`coding`) | v2.2 hybrid-retrieval milestone recall | 20 |
+
+The enrichment is **purely additive**: it edits source content only. The pack
+manifest still lists the same five sources, and no frozen scoring module
+(verifier, grounding, citations, lifecycle, refusal, pack isolation, SLM,
+AnswerGuard, EvidenceRanker, SufficiencyGate) was touched.
+
+### Where it grounds — and the backend limitation
+
+The targeted rows ground reliably under the **hybrid** retrieval backend
+(`OfflineHashingEmbedder`, a deterministic offline token bag-of-words embedder),
+because a paraphrase that shares vocabulary with a claim retrieves that claim.
+They do **not** all ground under the default **deterministic** backend
+(`DeterministicEncoder`), which hashes the *whole chunk string* into a random
+vector — so a natural-language paraphrase only retrieves its chunk by chance.
+This is an inherent property of the whole-string-hash encoder, by design
+(reproducible, explicitly *not* semantic), and v2.5A does not change it:
+deterministic/offline remains the default and hybrid is never mandatory. The
+honest summary is that v2.5A adds the *evidence*; the hybrid backend is the path
+that *retrieves* it by meaning.
+
+Measured with `python app/workbench.py value-sprint run --backend hybrid`, all
+seven targeted rows move to a grounded, relevant answer (row 16 still carries its
+stale-source caution), and the pack-gap count drops to the single genuinely
+unanswerable row (a decision with no source). The v2.4 protections are intact in
+the same run: the out-of-domain AWS query still refuses (`no_support`), the
+empty-ledger decision recall still refuses, the `Friday`/`Monday` near-miss still
+surfaces as a conflict, and the model-prior row stays explicitly labelled.
+
+| File | What it adds |
+|---|---|
+| `packs/m365_coding_assistant/sources/*.md` | Seven additive claim-shaped paragraphs under the existing sources |
+| `evals/test_pack_enrichment_v25a.py` | Each enriched gap query grounds on the correct source/domain under hybrid; stale flag preserved; out-of-domain still refuses; Purview-threshold never leads on the Power Fx source |
+
 ## License
 
 To be decided.

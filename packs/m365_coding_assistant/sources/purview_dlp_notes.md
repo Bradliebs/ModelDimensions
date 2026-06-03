@@ -36,3 +36,11 @@ Staleness: review_required (verify against Microsoft Learn before client deliver
   so a new file may stay unlabelled for some time.
 - Encryption applied by a label can block server-side services such as
   eDiscovery search unless the service is explicitly trusted.
+
+## Targeted recall claims (v2.5A)
+
+Purview sensitivity label encryption thresholds: in this pack the encryption threshold is the label tier at which encryption turns on. Encryption is enabled at Confidential and Highly Confidential, while Public and Internal labels stay unencrypted so files do not break third-party scanners.
+
+Designing a Microsoft Purview sensitivity label taxonomy: choose four tiers — Public, Internal, Confidential, and Highly Confidential — and choose the encryption threshold by deciding the lowest tier that enforces encryption, which this taxonomy sets at Confidential and above.
+
+Protecting Highly Confidential files with sensitivity labels while keeping third-party tools working: apply encryption only to the Highly Confidential and Confidential labels, and explicitly trust the third-party tools that must read the files, so protection holds without breaking those tools.

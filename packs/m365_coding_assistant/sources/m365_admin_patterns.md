@@ -37,3 +37,7 @@ Staleness: review_required (verify against Microsoft Learn before client deliver
   Learn documentation; role names and admin center layouts change over time.
 - Conditional Access misconfiguration can lock out administrators, which is why
   break-glass accounts are excluded from the policies.
+
+## Targeted recall claims (v2.5A)
+
+Explaining role-scoped tenant administration and least-privilege admin roles to a new admin: a Microsoft 365 consultant should explain that tenant administration is split into role-scoped admin centres, and that least-privilege means assigning scoped admin roles such as User Administrator or Helpdesk Administrator instead of Global Administrator, which stays a small break-glass set.

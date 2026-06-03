@@ -1,18 +1,18 @@
 # v2.3 Value Sprint report
 
 - pack            : m365_coding_assistant
-- retrieval       : deterministic
+- retrieval       : hybrid
 
 ## Summary
 
 - queries            : 25
-- expectation met    : 18/25
-- grounded + cited   : 13 (evidence retrieved; NOT a relevance guarantee)
-- honest refusals    : 10
+- expectation met    : 25/25
+- grounded + cited   : 20 (evidence retrieved; NOT a relevance guarantee)
+- honest refusals    : 3
 - conflicts surfaced : 1
 - model-prior used   : 1
-- stale-flagged      : 17
-- pack gaps          : 8 (proposals only — never written)
+- stale-flagged      : 5
+- pack gaps          : 1 (proposals only — never written)
 - guard rejects      : 0
 
 ## Honest finding
@@ -25,29 +25,29 @@ Caveat (resolved in v2.4): with the over-permissive *deterministic* knowledge ba
 
 | # | category | expected | mode | relevance | cites | stale | conflict | prior | guard | met | gap |
 |---|----------|----------|------|-----------|-------|-------|----------|-------|-------|-----|-----|
-| 1 | - | grounded_useful | grounded | relevant | 5 | yes | no | no | ACCEPT | yes | no |
-| 2 | - | grounded_useful | grounded | relevant | 5 | yes | no | no | ACCEPT | yes | no |
+| 1 | - | grounded_useful | grounded | relevant | 5 | no | no | no | ACCEPT | yes | no |
+| 2 | - | grounded_useful | grounded | relevant | 5 | no | no | no | ACCEPT | yes | no |
 | 3 | powerapps_formula | stale_flagged | grounded | relevant | 5 | yes | no | no | ACCEPT | yes | no |
-| 4 | - | grounded_useful | grounded | relevant | 5 | yes | no | no | ACCEPT | yes | no |
-| 5 | - | grounded_useful | grounded | relevant | 5 | yes | no | no | ACCEPT | yes | no |
-| 6 | - | grounded_useful | refusal | no_support | 0 | yes | no | no | ACCEPT | no | yes |
+| 4 | - | grounded_useful | grounded | relevant | 5 | no | no | no | ACCEPT | yes | no |
+| 5 | - | grounded_useful | grounded | relevant | 5 | no | no | no | ACCEPT | yes | no |
+| 6 | - | grounded_useful | grounded | relevant | 5 | no | no | no | ACCEPT | yes | no |
 | 7 | - | grounded_useful | grounded | relevant | 5 | yes | no | no | ACCEPT | yes | no |
-| 8 | - | grounded_useful | grounded | partial | 5 | no | no | no | ACCEPT | yes | no |
+| 8 | - | grounded_useful | grounded | relevant | 5 | no | no | no | ACCEPT | yes | no |
 | 9 | no_evidence | honest_refusal | refusal | - | 0 | no | no | no | ACCEPT | yes | no |
-| 10 | out_of_domain | honest_refusal | refusal | no_support | 0 | yes | no | no | ACCEPT | yes | no |
-| 11 | m365_consulting | grounded_useful | refusal | weak_match | 0 | yes | no | no | ACCEPT | no | yes |
+| 10 | out_of_domain | honest_refusal | refusal | no_support | 0 | no | no | no | ACCEPT | yes | no |
+| 11 | m365_consulting | grounded_useful | grounded | relevant | 5 | no | no | no | ACCEPT | yes | no |
 | 12 | m365_consulting | grounded_useful | grounded | relevant | 5 | no | no | no | ACCEPT | yes | no |
-| 13 | purview | grounded_useful | refusal | weak_match | 0 | yes | no | no | ACCEPT | no | yes |
-| 14 | purview | grounded_useful | refusal | weak_match | 0 | yes | no | no | ACCEPT | no | yes |
+| 13 | purview | grounded_useful | grounded | relevant | 5 | no | no | no | ACCEPT | yes | no |
+| 14 | purview | grounded_useful | grounded | relevant | 5 | no | no | no | ACCEPT | yes | no |
 | 15 | powerapps_formula | grounded_useful | grounded | partial | 5 | yes | no | no | ACCEPT | yes | no |
-| 16 | powerapps_formula | stale_flagged | refusal | no_support | 0 | yes | no | no | ACCEPT | no | yes |
-| 17 | copilot_studio | grounded_useful | grounded | partial | 5 | yes | no | no | ACCEPT | yes | no |
+| 16 | powerapps_formula | stale_flagged | grounded | relevant | 5 | yes | no | no | ACCEPT | yes | no |
+| 17 | copilot_studio | grounded_useful | grounded | partial | 5 | no | no | no | ACCEPT | yes | no |
 | 18 | copilot_studio | grounded_useful | grounded | relevant | 5 | no | no | no | ACCEPT | yes | no |
-| 19 | coding_agent | grounded_useful | refusal | weak_match | 0 | no | no | no | ACCEPT | no | yes |
-| 20 | repo_milestone | grounded_useful | refusal | no_support | 0 | no | no | no | ACCEPT | no | yes |
+| 19 | coding_agent | grounded_useful | grounded | relevant | 5 | no | no | no | ACCEPT | yes | no |
+| 20 | repo_milestone | grounded_useful | grounded | relevant | 5 | no | no | no | ACCEPT | yes | no |
 | 21 | project_decision | grounded_useful | grounded | relevant | 6 | yes | no | no | ACCEPT | yes | no |
-| 22 | repo_milestone | grounded_useful | grounded | relevant | 6 | yes | no | no | ACCEPT | yes | no |
-| 23 | conflict | conflict | conflict_explanation | conflict | 0 | yes | yes | no | ACCEPT | yes | no |
+| 22 | repo_milestone | grounded_useful | grounded | relevant | 6 | no | no | no | ACCEPT | yes | no |
+| 23 | conflict | conflict | conflict_explanation | conflict | 0 | no | yes | no | ACCEPT | yes | no |
 | 24 | model_prior | model_prior | model_prior_labelled | - | 0 | no | no | yes | ACCEPT | yes | no |
 | 25 | project_decision | pack_gap | refusal | - | 0 | no | no | no | ACCEPT | yes | yes |
 
@@ -87,36 +87,29 @@ Machine columns are captured automatically; fill these in by hand (edit the JSON
 
 The strongest candidate the ranker did *not* let lead, per query — the audit line for why a verdict was reached.
 
-- **#1** `src:chk-6edcec1b` — stale source — penalised but still citable
-- **#2** `src:chk-57856c85` — stale source — penalised but still citable
-- **#3** `src:chk-8dbc8eb7` — metadata/source header — cannot be substantive lead
-- **#4** `src:chk-d156adaf` — metadata/source header — cannot be substantive lead
-- **#5** `src:chk-6edcec1b` — stale source — penalised but still citable
-- **#6** `src:chk-f64dc0a9` — stale source — penalised but still citable
-- **#7** `src:chk-d663fa0f` — stale source — penalised but still citable
-- **#8** `src:chk-a60a378e` — outranked by lead evidence
-- **#10** `src:chk-6edcec1b` — out-of-domain for query topic 'lambda'
-- **#11** `src:chk-5ce10d00` — stale source — penalised but still citable
-- **#12** `src:chk-79df23b9` — outranked by lead evidence
-- **#13** `src:chk-6edcec1b` — stale source — penalised but still citable
-- **#14** `src:chk-435cf574` — stale source — penalised but still citable
-- **#15** `src:chk-6edcec1b` — stale source — penalised but still citable
-- **#16** `src:chk-d156adaf` — metadata/source header — cannot be substantive lead
-- **#17** `src:chk-6edcec1b` — stale source — penalised but still citable
-- **#18** `src:chk-a60a378e` — outranked by lead evidence
-- **#19** `src:chk-d663fa0f` — outranked by lead evidence
-- **#20** `src:chk-d663fa0f` — outranked by lead evidence
-- **#21** `src:chk-0a44d972` — stale source — penalised but still citable
-- **#22** `src:chk-9bde9cf0` — stale source — penalised but still citable
-- **#23** `src:chk-24d3fb6a` — stale source — penalised but still citable
+- **#1** `src:chk-57c6e8ec` — outranked by lead evidence
+- **#2** `src:chk-c7e5faa3` — outranked by lead evidence
+- **#3** `src:chk-19fbf19c` — stale source — penalised but still citable
+- **#4** `src:chk-2c3847a3` — outranked by lead evidence
+- **#5** `src:chk-9193cc04` — outranked by lead evidence
+- **#6** `src:chk-0a44d972` — outranked by lead evidence
+- **#7** `src:chk-f64dc0a9` — stale source — penalised but still citable
+- **#8** `src:chk-9bde9cf0` — outranked by lead evidence
+- **#10** `src:chk-5ce10d00` — out-of-domain for query topic 'iam'
+- **#11** `src:chk-784c64a1` — outranked by lead evidence
+- **#12** `src:chk-784c64a1` — outranked by lead evidence
+- **#13** `src:chk-0a44d972` — outranked by lead evidence
+- **#14** `src:chk-c7e5faa3` — outranked by lead evidence
+- **#15** `src:chk-24d3fb6a` — stale source — penalised but still citable
+- **#16** `src:chk-f64dc0a9` — stale source — penalised but still citable
+- **#17** `src:chk-d663fa0f` — outranked by lead evidence
+- **#18** `src:chk-d663fa0f` — outranked by lead evidence
+- **#19** `src:chk-89cef7b8` — outranked by lead evidence
+- **#20** `src:chk-2c3847a3` — outranked by lead evidence
+- **#21** `src:chk-d663fa0f` — stale source — penalised but still citable
+- **#22** `src:chk-380dd641` — outranked by lead evidence
+- **#23** `src:chk-8dbc8eb7` — metadata/source header — cannot be substantive lead
 
 ## Pack-gap proposals (advisory — not written)
 
-- **Natural-language paraphrase of Purview content in the pack (gap probe)** (knowledge_source): Import an authoritative source covering 'Natural-language paraphrase of Purview content in the pack (gap probe)' so the pack can ground this query instead of refusing it.
-- **M365 consulting explanation (knowledge question)** (knowledge_source): Import an authoritative source covering 'M365 consulting explanation (knowledge question)' so the pack can ground this query instead of refusing it.
-- **Purview / sensitivity label design (knowledge question)** (knowledge_source): Import an authoritative source covering 'Purview / sensitivity label design (knowledge question)' so the pack can ground this query instead of refusing it.
-- **Purview / sensitivity label design (variant)** (knowledge_source): Import an authoritative source covering 'Purview / sensitivity label design (variant)' so the pack can ground this query instead of refusing it.
-- **PowerApps delegation (stale source expected)** (knowledge_source): Import an authoritative source covering 'PowerApps delegation (stale source expected)' so the pack can ground this query instead of refusing it.
-- **Coding-agent next prompt (knowledge question)** (knowledge_source): Import an authoritative source covering 'Coding-agent next prompt (knowledge question)' so the pack can ground this query instead of refusing it.
-- **Repo milestone recall (knowledge question)** (memory_proposal): Capture the decision behind 'Repo milestone recall (knowledge question)' as an approved project memory so future recall can ground it.
 - **Pack gap detection (expected decision, no evidence -> proposal)** (memory_proposal): Capture the decision behind 'Pack gap detection (expected decision, no evidence -> proposal)' as an approved project memory so future recall can ground it.
