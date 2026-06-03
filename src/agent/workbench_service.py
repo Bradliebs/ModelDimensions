@@ -161,6 +161,11 @@ class KnowledgeAudit:
     cautions: List[str] = field(default_factory=list)
     response_text: str = ""
     backend_name: str = "deterministic"
+    # Optional per-query retrieval audit (backend used, per-candidate keyword/
+    # semantic/combined scores, rejected candidates). Populated only by backends
+    # that expose a ``last_report`` (e.g. the hybrid backend); ``None`` keeps the
+    # default deterministic path byte-for-byte unchanged.
+    retrieval: Optional[dict] = None
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -371,9 +376,22 @@ class WorkbenchService:
 
     def _build_knowledge_backend(self) -> RetrievalBackend:
         """Build the requested knowledge backend, falling back gracefully."""
+        requested = self._knowledge_backend_requested
+        if requested == "hybrid":
+            # Imported lazily so ``agent.retrieval_backends`` never depends on
+            # the ``retrieval`` package (the hybrid backend composes it).
+            try:
+                from retrieval.hybrid_backend import HybridRetrievalBackend
+                return HybridRetrievalBackend(
+                    self.encoder,
+                    semantic_embedder=self._semantic_embedder,
+                )
+            except BackendUnavailableError:
+                return make_backend(
+                    "deterministic", deterministic_encoder=self.encoder)
         try:
             return make_backend(
-                self._knowledge_backend_requested,
+                requested,
                 deterministic_encoder=self.encoder,
                 semantic_embedder=self._semantic_embedder,
             )
@@ -624,6 +642,23 @@ class WorkbenchService:
                 "is_semantic": cand.is_semantic,
             })
 
+        # Additive retrieval audit: backends that expose ``last_report`` (the
+        # hybrid backend) enrich each candidate with its score breakdown and
+        # attach a route-decision report. The default deterministic backend has
+        # no ``last_report``, so this is a no-op and the audit is unchanged.
+        retrieval: Optional[dict] = None
+        report = getattr(self._knowledge_backend, "last_report", None)
+        if report is not None:
+            scores_by_chunk = {s["chunk_id"]: s for s in report.selected}
+            for cd in cand_dicts:
+                s = scores_by_chunk.get(cd["chunk_id"])
+                if s is not None:
+                    cd["keyword_score"] = s["keyword_score"]
+                    cd["semantic_score"] = s["semantic_score"]
+                    cd["combined_score"] = s["combined_score"]
+                    cd["exact_match"] = s["exact_match"]
+            retrieval = report.to_dict()
+
         if candidates:
             lines = [f"- ({c.source_name}) {c.chunk_text}" for c in candidates]
             response = "From imported knowledge:\n" + "\n".join(lines)
@@ -640,6 +675,7 @@ class WorkbenchService:
             cautions=cautions,
             response_text=response,
             backend_name=self.knowledge_backend_name(),
+            retrieval=retrieval,
         )
 
     def _coding_version_cautions(

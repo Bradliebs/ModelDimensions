@@ -551,6 +551,68 @@ false retrievals, zero deleted-source citations, and zero memory pollution.
 | `src/agent/retrieval_backends.py` | Deterministic + semantic backends behind one Protocol |
 | `experiments/exp13_knowledge_retrieval_quality.py` | Retrieval-quality comparison, writes `results/exp13_summary.json` |
 
+## Hybrid Knowledge Retrieval (v2.2)
+
+v2.2 adds a third, **opt-in** knowledge backend that *composes* the two above
+instead of choosing between them. The hybrid backend blends three signals per
+candidate chunk and records why each one was selected or rejected:
+
+- a **keyword** overlap score (token-level lexical overlap — paraphrase-robust
+  in a way the whole-string-hash deterministic encoder is not);
+- an optional **semantic** cosine score, only when an embedding component is
+  supplied (never loaded implicitly, so the default stays offline);
+- a gentle **authority** multiplier from the source metadata, plus an
+  exact-phrase bonus so a verbatim match outranks a paraphrase.
+
+It is enabled exactly like the semantic backend — constructor argument, else the
+`KNOWLEDGE_RETRIEVAL_BACKEND` environment variable:
+
+```bash
+set KNOWLEDGE_RETRIEVAL_BACKEND=hybrid   # PowerShell: $env:KNOWLEDGE_RETRIEVAL_BACKEND="hybrid"
+python -m app.workbench
+```
+
+The retrieval route decision is exposed in the audit. Each knowledge query
+audit gains a `retrieval` block (backend used, blend weights, per-candidate
+keyword/semantic/combined scores, and rejected candidates with reasons), and
+each selected candidate carries its `keyword_score`, `semantic_score`,
+`combined_score`, and `exact_match` flag.
+
+**Honest limitations — read these before trusting it:**
+
+- **The default offline embedder is lexical, not neural.** `OfflineHashingEmbedder`
+  (`src/retrieval/embedding_backend.py`) is a deterministic bag-of-words hash:
+  texts that *share tokens* score close together, but genuine synonyms with no
+  shared words do not. It exists so the hybrid path is testable offline and
+  reproducibly — it is **not** semantic understanding. For real meaning-based
+  recall, inject a true model (e.g. MiniLM via the `semantic` backend's embedder).
+- **The offline recall win is driven by token overlap.** When the hybrid backend
+  out-recalls the deterministic backend on a paraphrase in the offline suite, the
+  cause is lexical token matching (a signal the whole-string-hash backend lacks),
+  optionally corroborated by the bag-of-words embedding — not neural semantics.
+- **Default behaviour is unchanged.** The default backend stays `deterministic`
+  and offline; nothing here is mandatory. The audit enrichment is additive — the
+  deterministic backend exposes no `retrieval` block, so existing audits are
+  byte-for-byte identical.
+- **Safety is inherited, not re-decided.** Deleted/inactive chunks are excluded
+  upstream (and defensively filtered again), stale sources are *labelled* (never
+  silently promoted), the memory near-miss verifier and superseded/lifecycle
+  rules run on a separate path, and AnswerGuard still runs after composition. The
+  hybrid backend only reorders the chunks it is handed.
+- **Graceful fallback.** If a supplied embedder fails to construct or throws at
+  index/query time, the backend degrades to keyword + geometry, stops reporting
+  `is_semantic`, and never crashes a query.
+
+```bash
+python -m pytest evals/test_hybrid_retrieval.py -q   # hybrid backend tests, offline
+```
+
+| File | What it adds |
+|---|---|
+| `src/retrieval/scoring.py` | Pure score-blending + auditable retrieval report |
+| `src/retrieval/embedding_backend.py` | Offline deterministic token-hashing embedder (lexical, not neural) |
+| `src/retrieval/hybrid_backend.py` | Hybrid backend composing deterministic + optional semantic |
+
 ## Project Packs
 
 v1.6 adds **project packs**: isolated workspaces so unrelated projects never
