@@ -1307,6 +1307,100 @@ Tests: `evals/test_answer_guard.py` (template passes on every mode; each
 violation type is caught on a deliberately-rogue composer; `enforce` recomposes
 safely; `answer_query` records the verdict).
 
+## v2.3 Value Sprint Harness (daily brain loop)
+
+The v2.3 harness exists to **stop adding hidden architecture and measure whether
+the system produces practical value** on real Brad / M365 / coding workflows. It
+is an evolution of the v2.1.1 Value Sprint: same read-only, frozen-path
+discipline, but a richer schema that captures the *trust* signals (conflict,
+stale, model-prior, AnswerGuard verdict, retrieval backend) and turns weak or
+refused answers into **advisory pack-gap proposals**. It changes no v1.0 core
+semantics and adds no new grounding, verifier, lifecycle, refusal, citation, or
+pack-isolation behaviour — it only observes and reports.
+
+### How to run
+
+```powershell
+python app/workbench.py value-sprint run                              # deterministic backend (default)
+python app/workbench.py value-sprint run --backend hybrid             # opt-in hybrid retrieval
+python app/workbench.py value-sprint run --pack m365_coding_assistant # choose the pack
+python app/workbench.py value-sprint report                           # re-render Markdown from the JSONL
+```
+
+`run` builds the named pack into a throwaway temporary registry, seeds a handful
+of demo project memories (into that temporary ledger only — never a tracked
+store) so the memory-routed paths can fire, runs every query in
+`demos/value_sprint_queries.jsonl` (25+ realistic questions across project
+decision recall, M365 consulting, Purview labels, PowerApps formulas, Copilot
+Studio architecture, coding-agent prompts, repo milestones, stale handling,
+conflict, no-evidence refusal, model-prior, and pack-gap detection), and writes
+two reports:
+
+* `reports/value_sprint_latest.md` — a human-readable per-query audit table;
+* `reports/value_sprint_latest.jsonl` — one machine-readable row per query.
+
+Each row records: `query`, `expected_outcome`, `actual_mode`, `refused`,
+`citations_count`, `stale_warning`, `conflict_warning`, `model_prior_used`,
+`retrieval_backend`, `guard_verdict`, `outcome_label`, `pack_gap_detected`, and
+(when relevant) `suggested_pack_update`, plus an `operator` block.
+
+### How to interpret the labels
+
+The harness records *machine* outcomes automatically; the **operator** columns
+are for human judgement and are captured, never inferred. After a run, edit the
+JSONL to fill in each `operator` block, then `value-sprint report` re-renders
+the Markdown from your edits without re-running queries:
+
+| Operator field | Meaning |
+|---|---|
+| `useful` | Did the answer actually help the workflow? (yes/no) |
+| `saved_time` | Did it save time versus doing it by hand? (yes/no) |
+| `reusable_output` | Is the output reusable as-is? (yes/no) |
+| `trust_level` | How much do you trust it? (high/medium/low) |
+| `notes` | Free-text rationale |
+
+`outcome_label` summarises the machine outcome (`grounded+cited`,
+`honest_refusal`, `conflict_explained`, `model_prior_labelled`, …); `met` in the
+table is whether the machine outcome matched the query's `expected_outcome`.
+
+### Turning pack gaps into approved updates
+
+When a query that expected value is refused (or is an explicit gap probe), the
+harness emits a `suggested_pack_update` proposal: a missing topic, a suggested
+source type (`knowledge_source` or `memory_proposal`), a candidate memory, and
+the affected query. **These are proposals only — the harness never writes to the
+`MemoryLedger` or `KnowledgeLibrary`.** To act on one, an operator follows the
+existing, ratified paths: import an authoritative source through the pack
+builder / knowledge import for a `knowledge_source` gap, or add a memory through
+the normal human-approval proposal queue for a `memory_proposal` gap. The gap
+report is the input to those workflows, not a substitute for them.
+
+### Honest limitations
+
+* **Usefulness needs human judgement.** The report cannot decide whether an
+  answer helped; the operator columns exist precisely because the machine
+  cannot infer them.
+* **The report does not prove correctness.** `grounded + cited` means evidence
+  was *retrieved*, not that the answer is right — the deterministic backend is
+  over-permissive (see the v2.1.1 finding).
+* **The over-permissive backend masks conflict surfacing in integration.** A
+  declarative near-miss routes to both memory and knowledge, and the knowledge
+  backend grounds it, so conflict detection is masked in the integrated pack
+  run. It still works on memory-only routes (decision-cue questions) and is
+  exercised directly by the harness tests.
+* **The offline sprint is memory-free unless seeded.** Memory-routed paths
+  (recall, conflict, model-prior) only fire because the runner seeds demo
+  memories into a temporary ledger; against a real empty ledger they refuse.
+* **Pack gaps are proposals, not writes.** Nothing is added to any tracked
+  store; acting on a gap is a separate, human-owned step.
+
+| File | What it adds |
+|---|---|
+| `src/agent/value_sprint_harness.py` | Read-only v2.3 runner: query schema, run/summarize, pack-gap proposals, Markdown + JSONL reports |
+| `demos/value_sprint_queries.jsonl` | 25+ realistic value queries across 12 workflow categories (shared with v2.1.1) |
+| `app/workbench.py` | `value-sprint run` / `value-sprint report` CLI (temporary pack, seeded demo memories, deterministic default) |
+| `evals/test_value_sprint_harness.py` | Mechanism tests: refusal, conflict, model-prior, stale, guard verdict, no-writes, deterministic default, report generation |
+
 ## License
 
 To be decided.

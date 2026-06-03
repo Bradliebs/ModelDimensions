@@ -882,7 +882,117 @@ def _repl(service: WorkbenchService,
             print(f"  unknown command: {cmd} (type 'help')")
 
 
+# ---------- v2.3 value sprint CLI ----------
+
+_VALUE_SPRINT_MANIFEST_DIR = ROOT / "packs"
+_VALUE_SPRINT_QUERIES = ROOT / "demos" / "value_sprint_queries.jsonl"
+_VALUE_SPRINT_DIR = ROOT / "reports"
+
+
+def _build_sprint_service(pack_name: str, backend: str, *, seed: bool):
+    """Build the named pack into a temporary registry and bind a service.
+
+    The pack is built into a throwaway temp directory so the tracked pack data
+    stays pristine, and the demo project memories are seeded into that temporary
+    ledger only (never a tracked store) so the memory-routed paths can fire.
+    """
+    import tempfile
+
+    from agent.value_sprint_harness import DEMO_SEED_MEMORIES
+
+    manifest = _VALUE_SPRINT_MANIFEST_DIR / pack_name / "pack.yaml"
+    if not manifest.exists():
+        raise SystemExit(f"no pack manifest at {manifest}")
+
+    tmp_root = Path(tempfile.mkdtemp(prefix="value_sprint_"))
+    registry = PackRegistry(tmp_root / "packs")
+    plan = pack_builder.PackBuildPlan.from_file(manifest)
+    report = pack_builder.build_pack(plan, registry)
+    pack = registry.get_pack(report.pack_id)
+
+    embedder = None
+    if backend == "hybrid":
+        from retrieval.embedding_backend import OfflineHashingEmbedder
+        embedder = OfflineHashingEmbedder()
+    service = WorkbenchService.from_pack(
+        pack, registry=registry,
+        knowledge_backend=backend, semantic_embedder=embedder)
+
+    if seed:
+        for text in DEMO_SEED_MEMORIES:
+            service.add_memory(text, source="value-sprint-demo")
+    return service
+
+
+def _value_sprint_cli(argv: list[str]) -> int:
+    from agent import value_sprint_harness as vsh
+
+    parser = argparse.ArgumentParser(
+        prog="workbench.py value-sprint",
+        description="Run the v2.3 value sprint or re-render its report.")
+    sub = parser.add_subparsers(dest="action", required=True)
+
+    run = sub.add_parser("run", help="run the sprint and write reports")
+    run.add_argument("--pack", default="m365_coding_assistant",
+                     help="pack manifest directory under packs/")
+    run.add_argument("--backend", default="deterministic",
+                     choices=["deterministic", "hybrid"],
+                     help="knowledge retrieval backend (default deterministic)")
+    run.add_argument("--queries", default=str(_VALUE_SPRINT_QUERIES),
+                     help="path to the value sprint query JSONL")
+    run.add_argument("--no-seed", dest="seed", action="store_false",
+                     default=True,
+                     help="do not seed the demo project memories")
+    run.add_argument("--out-md", default=str(_VALUE_SPRINT_DIR
+                                             / "value_sprint_latest.md"))
+    run.add_argument("--out-jsonl", default=str(_VALUE_SPRINT_DIR
+                                                / "value_sprint_latest.jsonl"))
+
+    rep = sub.add_parser("report",
+                         help="re-render Markdown from a sprint JSONL report")
+    rep.add_argument("--jsonl", default=str(_VALUE_SPRINT_DIR
+                                            / "value_sprint_latest.jsonl"))
+    rep.add_argument("--out-md", default=str(_VALUE_SPRINT_DIR
+                                             / "value_sprint_latest.md"))
+
+    args = parser.parse_args(argv)
+
+    if args.action == "run":
+        service = _build_sprint_service(args.pack, args.backend, seed=args.seed)
+        queries = vsh.load_queries(args.queries)
+        rows = vsh.run_sprint(service, queries, retrieval_backend=args.backend)
+        summary = vsh.summarize(rows)
+        vsh.write_reports(
+            rows, summary, md_path=args.out_md, jsonl_path=args.out_jsonl,
+            pack_label=args.pack, backend_label=args.backend)
+        print(f"[value-sprint] {summary.query_count} queries | "
+              f"grounded={summary.grounded_count} "
+              f"refused={summary.refused_count} "
+              f"conflicts={summary.conflict_count} "
+              f"model-prior={summary.model_prior_count} "
+              f"stale={summary.stale_flagged_count} "
+              f"gaps={summary.pack_gap_count} "
+              f"guard-rejects={summary.guard_reject_count}")
+        print(f"[value-sprint] wrote {args.out_md}")
+        print(f"[value-sprint] wrote {args.out_jsonl}")
+        return 0
+
+    # report: re-render Markdown from a (possibly operator-edited) JSONL.
+    rows = vsh.load_rows(args.jsonl)
+    summary = vsh.summarize(rows)
+    backend_label = rows[0].retrieval_backend if rows else "deterministic"
+    Path(args.out_md).parent.mkdir(parents=True, exist_ok=True)
+    Path(args.out_md).write_text(
+        vsh.render_markdown(rows, summary, backend_label=backend_label),
+        encoding="utf-8")
+    print(f"[value-sprint] re-rendered {args.out_md} from {args.jsonl}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
+    argv = sys.argv[1:] if argv is None else argv
+    if argv and argv[0] == "value-sprint":
+        return _value_sprint_cli(argv[1:])
     parser = argparse.ArgumentParser(description="Concept Memory Workbench v1.1")
     parser.add_argument("--ledger", default=str(_DEFAULT_LEDGER),
                         help="path to the JSONL memory ledger")
