@@ -61,6 +61,12 @@ from agent.pack_maintenance import (
 from agent.project_packs import PackRegistry, ProjectPack
 from agent.proposal_queue import ProposalQueue
 from agent.query_planner import QueryRoute, plan_query
+from agent.relevance_gate import (
+    RelevanceReport,
+    SufficiencyVerdict,
+    assess_relevance,
+    has_near_miss_conflict,
+)
 from agent.verifier import verify_candidate
 from slm.schemas import VerificationVerdict, VerifiedMemoryCandidate
 from slm.assistant_composer import (
@@ -813,10 +819,62 @@ class WorkbenchService:
         informational = bool(know.get("informational_only"))
         conflict_context: List[EvidenceItem] = []
         historical_note: Optional[str] = None
+        cautions = list(combined.cautions)
+        relevance_report: Optional[RelevanceReport] = None
 
         if combined.memory_used or combined.knowledge_used:
-            mode = ComposerMode.GROUNDED
-            refused = False
+            # v2.4 relevance & sufficiency gate. Retrieval presence is not
+            # relevance: before grounding, assess whether the retrieved evidence
+            # actually supports the query. The gate is downgrade-only — it can
+            # turn a would-be GROUNDED decision into a partial answer, a refusal,
+            # or an explicit conflict, and re-order evidence so the strongest
+            # substantive item leads, but it can never upgrade or invent.
+            conflict_signal = has_near_miss_conflict(
+                query_text, mem.get("candidates"))
+            stale = any("stale" in c.lower() for c in cautions)
+            stale_ids = ({e.citation_id for e in evidence
+                          if e.kind == "knowledge"} if stale else set())
+            relevance_report = assess_relevance(
+                query_text, evidence, route=combined.route,
+                conflict_signal=conflict_signal, stale_ids=stale_ids)
+
+            if relevance_report.verdict in (
+                    SufficiencyVerdict.RELEVANT, SufficiencyVerdict.PARTIAL):
+                mode = ComposerMode.GROUNDED
+                refused = False
+                evidence = list(relevance_report.ordered_evidence)
+                if relevance_report.limitation:
+                    cautions.append(relevance_report.limitation)
+            elif relevance_report.verdict == SufficiencyVerdict.CONFLICT:
+                # A near-miss the verifier rejected must surface as conflict and
+                # is never masked by a knowledge chunk retrieved on the same
+                # query.
+                mode = ComposerMode.CONFLICT_EXPLANATION
+                refused = True
+                evidence = []
+                for cand in mem.get("candidates") or []:
+                    if cand.get("verdict") == "reject" and has_near_miss_conflict(
+                            query_text, [cand]):
+                        conflict_context.append(EvidenceItem(
+                            citation_id=f"rejected:{cand['memory_id']}",
+                            kind="rejected",
+                            text=cand.get("canonical_text", ""),
+                        ))
+            else:
+                # WEAK_MATCH or NO_SUPPORT: weak evidence cannot ground a
+                # confident answer. Refuse, or — only when explicitly allowed —
+                # fall back to a clearly labelled model prior. Evidence is
+                # dropped so nothing weak is ever cited.
+                evidence = []
+                if allow_model_prior:
+                    mode = ComposerMode.MODEL_PRIOR_LABELLED
+                    refused = False
+                else:
+                    mode = ComposerMode.REFUSAL
+                    refused = True
+            cautions.append(
+                f"Relevance gate: {relevance_report.verdict.value} — "
+                f"{relevance_report.sufficiency_reason}")
         elif mem.get("verifier_verdict") == "reject":
             mode = ComposerMode.CONFLICT_EXPLANATION
             refused = True
@@ -845,6 +903,10 @@ class WorkbenchService:
                     f"A superseded memory exists ({ids}) but is not current and "
                     "cannot be cited as the answer.")
 
+        audit = combined.to_dict()
+        if relevance_report is not None:
+            audit["relevance"] = relevance_report.to_dict()
+
         return GroundingPackage(
             query=query_text,
             mode=mode,
@@ -856,9 +918,9 @@ class WorkbenchService:
             route=combined.route,
             evidence=evidence,
             conflict_context=conflict_context,
-            cautions=list(combined.cautions),
+            cautions=cautions,
             historical_note=historical_note,
-            query_audit=combined.to_dict(),
+            query_audit=audit,
         )
 
     def build_pack_summary_package(self) -> GroundingPackage:

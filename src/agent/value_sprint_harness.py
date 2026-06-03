@@ -150,6 +150,11 @@ class SprintRow:
     suggested_pack_update: Optional[dict] = None
     operator: dict = field(default_factory=lambda: OperatorScore().to_dict())
     answer_snippet: str = ""
+    # v2.4 relevance & sufficiency gate verdict for this query (the gate decides
+    # answerability between retrieval and grounding). Empty when no evidence was
+    # retrieved (the gate only runs on the would-be-grounded path).
+    relevance_verdict: str = ""
+    relevance_label: str = ""
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -306,6 +311,9 @@ def run_query(service: WorkbenchService, spec: SprintQuery, *,
     # also true on plain refusals — the AnswerGuard lesson from v2.1.1).
     model_prior = mode == ComposerMode.MODEL_PRIOR_LABELLED
     guard_verdict = str((audit.get("guard") or {}).get("verdict", ""))
+    relevance = audit.get("relevance") or {}
+    relevance_verdict = str(relevance.get("verdict", ""))
+    relevance_label = str(relevance.get("label", ""))
 
     gap = extract_pack_gap(spec, grounded=grounded)
     snippet = (result.answer.text or "").strip().replace("\n", " ")
@@ -330,6 +338,8 @@ def run_query(service: WorkbenchService, spec: SprintQuery, *,
         suggested_pack_update=gap.to_dict() if gap else None,
         operator=spec.operator.to_dict(),
         answer_snippet=snippet,
+        relevance_verdict=relevance_verdict,
+        relevance_label=relevance_label,
     )
 
 
@@ -429,24 +439,28 @@ def render_markdown(rows: List[SprintRow], summary: SprintSummary, *,
         "columns below are captured, never inferred.")
     lines.append("")
     lines.append(
-        "Caveat: with the over-permissive *deterministic* knowledge backend, a "
-        "declarative near-miss query routes to both memory and knowledge, and "
-        "knowledge grounds it — masking conflict surfacing in integration. "
-        "Conflict detection still works on memory-only routes (decision-cue "
-        "questions) and is exercised directly by the harness tests.")
+        "Caveat (resolved in v2.4): with the over-permissive *deterministic* "
+        "knowledge backend, a declarative near-miss query routes to both memory "
+        "and knowledge, and knowledge used to ground it — masking conflict "
+        "surfacing in integration. The v2.4 relevance & sufficiency gate now "
+        "surfaces a rejected near-miss as a conflict even when a knowledge "
+        "chunk was retrieved on the same query, and downgrades weak or "
+        "out-of-domain evidence to a refusal instead of a confident grounding. "
+        "The `relevance` column below shows the gate verdict per query.")
     lines.append("")
     lines.append("## Per-query audit")
     lines.append("")
-    header = ("| # | category | expected | mode | cites | stale | conflict | "
-              "prior | guard | met | gap |")
-    sep = ("|---|----------|----------|------|-------|-------|----------|"
-           "-------|-------|-----|-----|")
+    header = ("| # | category | expected | mode | relevance | cites | stale | "
+              "conflict | prior | guard | met | gap |")
+    sep = ("|---|----------|----------|------|-----------|-------|-------|"
+           "----------|-------|-------|-----|-----|")
     lines.append(header)
     lines.append(sep)
     for idx, r in enumerate(rows, start=1):
         lines.append(
             f"| {idx} | {r.category or '-'} | {r.expected_outcome} | "
-            f"{r.actual_mode} | {r.citations_count} | {_check(r.stale_warning)} | "
+            f"{r.actual_mode} | {r.relevance_verdict or '-'} | "
+            f"{r.citations_count} | {_check(r.stale_warning)} | "
             f"{_check(r.conflict_warning)} | {_check(r.model_prior_used)} | "
             f"{r.guard_verdict or '-'} | {_check(_row_expectation_met(r))} | "
             f"{_check(r.pack_gap_detected)} |")
@@ -525,5 +539,7 @@ def load_rows(path: str | Path) -> List[SprintRow]:
             suggested_pack_update=data.get("suggested_pack_update"),
             operator=data.get("operator") or OperatorScore().to_dict(),
             answer_snippet=data.get("answer_snippet", ""),
+            relevance_verdict=data.get("relevance_verdict", ""),
+            relevance_label=data.get("relevance_label", ""),
         ))
     return rows

@@ -1401,6 +1401,85 @@ report is the input to those workflows, not a substitute for them.
 | `app/workbench.py` | `value-sprint run` / `value-sprint report` CLI (temporary pack, seeded demo memories, deterministic default) |
 | `evals/test_value_sprint_harness.py` | Mechanism tests: refusal, conflict, model-prior, stale, guard verdict, no-writes, deterministic default, report generation |
 
+## v2.4 Relevance & Sufficiency Gate
+
+The v2.3 harness measured the dominant failure mode: the frozen
+retrieve -> verify -> ground path is *recall-biased*, so
+`build_grounding_package` grounded an answer whenever **any** memory or
+knowledge chunk came back. Retrieval presence is not relevance, so weakly
+related, out-of-domain, or metadata-only chunks could become a confident
+grounded answer. The v2.4 gate sits between retrieval and grounding and decides
+*answerability* before anything is grounded.
+
+### Grounded vs relevant vs sufficient
+
+Three different questions, kept distinct:
+
+* **Grounded** — the answer cites retrieved evidence rather than a model prior.
+  This was the only gate before v2.4, and it is necessary but not enough: a
+  chunk can be retrieved and cited yet have nothing to do with the question.
+* **Relevant** — the retrieved evidence is actually *about* the question. The
+  gate measures this with lexical token overlap (the Szymkiewicz-Simpson overlap
+  coefficient between query and evidence content tokens) plus a domain check.
+* **Sufficient** — the relevant evidence is *strong enough* to answer, and the
+  right item leads. Strong overlap grounds a full answer; moderate overlap
+  grounds a partial answer with an explicit limitation; weak or no overlap
+  refuses; a rejected near-miss surfaces as a conflict first.
+
+The gate maps these onto five verdicts:
+
+| Verdict | Meaning | Effect on the answer |
+|---|---|---|
+| `RELEVANT` | strong substantive match | full grounded answer |
+| `PARTIAL` | moderate match | grounded answer + an explicit limitation caution |
+| `WEAK_MATCH` | too weak to lead | refuse (or labelled model prior if allowed) |
+| `CONFLICT` | a rejected near-miss contradicts the query | surface the conflict, never ground |
+| `NO_SUPPORT` | unrelated or out-of-domain | refuse (or propose a pack gap) |
+
+### What the gate guarantees
+
+* **Relevance, not just retrieval, decides grounding.** A topic mismatch (a
+  Purview-encryption question answered from a Power Fx chunk, a PowerApps filter
+  question answered from SharePoint governance) is downgraded to a refusal
+  instead of a confident grounding.
+* **Out-of-domain questions refuse.** A question clearly about AWS / S3 / Lambda
+  with no domain-matching pack evidence refuses, even when an incidental chunk
+  shares a few tokens.
+* **Metadata/source headers cannot lead.** A `Source: ... Version: ...
+  Authority: ...` header asserts nothing, so it can never be the substantive
+  lead evidence.
+* **Knowledge does not mask a memory conflict.** A rejected near-miss (the
+  `Friday` memory vs a `Monday` query) surfaces as a `CONFLICT` even when a
+  knowledge chunk was retrieved on the same query — the v2.3 caveat is fixed.
+  The conflict signal is *narrow*: it fires only when a verifier-rejected
+  candidate has high lexical overlap with the query (a true one-token
+  contradiction), not when the nearest memory is merely irrelevant.
+
+### What the gate is, and is not
+
+The gate is **deterministic, offline, and downgrade-only**. It is a lexical
+heuristic — token overlap and a domain marker check — not semantic
+understanding. It can move a would-be grounded answer to a partial answer, a
+refusal, or a conflict, and it can re-order evidence so the strongest
+substantive item leads, but it can **never** invent evidence, upgrade a refusal
+into a grounded answer, add a citation, or relax any frozen guarantee (verifier,
+citations, lifecycle, pack isolation, AnswerGuard). Because the signal is
+lexical, a true-but-low-overlap paraphrase can still be refused (a safe failure)
+and an over-permissive backend can still surface a verbatim chunk as `RELEVANT`;
+the gate narrows false grounding, it does not eliminate it.
+
+Every verdict carries a per-check trace and a one-line sufficiency reason. These
+appear in the query-assist audit (`query_audit["relevance"]`) and in the
+value-sprint report's `relevance` column, so a reviewer can see *why* a verdict
+was reached.
+
+| File | What it adds |
+|---|---|
+| `src/agent/relevance_gate.py` | The gate: verdicts, lexical overlap, domain/header/near-miss checks, and the per-query relevance report |
+| `src/agent/workbench_service.py` | `build_grounding_package` consults the gate between retrieval and grounding (downgrade-only) and records the verdict in the audit |
+| `src/agent/value_sprint_harness.py` | `SprintRow` carries the `relevance_verdict` / `relevance_label`; the report adds a `relevance` column |
+| `evals/test_relevance_gate.py` | Verdict-mapping units, the value-sprint false-grounding rows, out-of-domain refusal, metadata-header lead, and conflict-not-masked integration tests |
+
 ## License
 
 To be decided.
