@@ -198,6 +198,17 @@ class ReviewService:
         audit["backend_name"] = self.service.knowledge_backend_name()
         return audit
 
+    def run_assisted_query(self, query_text: str,
+                           use_slm: bool = False) -> dict:
+        """Compose a readable answer over the audited query.
+
+        The composer never changes the grounding decision; it only renders the
+        trusted result. With ``use_slm`` the optional local backend is used and
+        falls back to the deterministic template if it is unavailable.
+        """
+        return self.service.answer_query(
+            query_text, use_slm=use_slm).to_dict()
+
     # -- pack operations --
 
     def select_pack(self, pack_id_or_name: str) -> ProjectPack:

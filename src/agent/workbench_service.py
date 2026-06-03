@@ -54,6 +54,16 @@ from agent.proposal_queue import ProposalQueue
 from agent.query_planner import QueryRoute, plan_query
 from agent.verifier import verify_candidate
 from slm.schemas import VerificationVerdict, VerifiedMemoryCandidate
+from slm.assistant_composer import (
+    AssistantComposer,
+    ComposedAnswer,
+    ComposerMode,
+    EvidenceItem,
+    GroundingPackage,
+    LocalSLMComposer,
+    TemplateComposer,
+)
+from slm.local_slm_backend import LocalSLMBackend, make_default_slm_backend
 
 # Retrieval is intentionally permissive (epsilon large) so a stored memory is
 # always offered as a candidate; safety is decided by the verifier, never by
@@ -162,6 +172,35 @@ class CombinedAudit:
 
     def to_dict(self) -> dict:
         return asdict(self)
+
+
+@dataclass
+class AssistantResult:
+    """The optional assistant layer's full, auditable answer.
+
+    It bundles the underlying combined audit (the trusted decision), the
+    rendered :class:`ComposedAnswer`, the ids that were actually cited, the
+    refusal flag, and the name of the composer backend that produced the prose.
+    The composed answer can never contradict the audit: it is rendered from a
+    :class:`GroundingPackage` derived from this same audit.
+    """
+
+    query: str
+    audit: dict
+    answer: ComposedAnswer
+    evidence_ids: List[str]
+    refused: bool
+    composer_backend: str
+
+    def to_dict(self) -> dict:
+        return {
+            "query": self.query,
+            "audit": self.audit,
+            "answer": self.answer.to_dict(),
+            "evidence_ids": list(self.evidence_ids),
+            "refused": self.refused,
+            "composer_backend": self.composer_backend,
+        }
 
 
 def _domain_cautions(domain: Optional[str],
@@ -627,6 +666,164 @@ class WorkbenchService:
             knowledge=knowledge_audit.to_dict() if knowledge_audit else None,
             cautions=cautions,
             knowledge_backend=self.knowledge_backend_name(),
+        )
+
+    # -- optional assistant composer layer (v2.0) --
+
+    def build_grounding_package(
+            self, query_text: str, *,
+            allow_model_prior: bool = False) -> GroundingPackage:
+        """Build the deterministic envelope the composer is allowed to render.
+
+        Every decision here comes from the frozen path via :meth:`query_all`:
+        which source grounded the answer, whether it was refused, and which ids
+        may be cited. Only *grounded, accepted* memories and *retrieved*
+        knowledge chunks become citable evidence. A near-miss the verifier
+        rejected, and any superseded memory, are surfaced as display-only
+        context that can never be cited.
+        """
+        combined = self.query_all(query_text)
+        mem = combined.memory or {}
+        know = combined.knowledge or {}
+
+        evidence: List[EvidenceItem] = []
+        # Memory evidence: strictly the grounded (accepted + cited) memories.
+        mem_by_id = {c["memory_id"]: c for c in (mem.get("candidates") or [])}
+        for mid in mem.get("cited_memory_ids") or []:
+            cand = mem_by_id.get(mid)
+            evidence.append(EvidenceItem(
+                citation_id=f"mem:{mid}",
+                kind="memory",
+                text=(cand or {}).get("canonical_text", ""),
+            ))
+        # Knowledge evidence: the retrieved chunks (only present when the route
+        # consulted knowledge and a chunk was returned).
+        if combined.knowledge_used:
+            for cand in know.get("candidates") or []:
+                evidence.append(EvidenceItem(
+                    citation_id=f"src:{cand['chunk_id']}",
+                    kind="knowledge",
+                    text=cand.get("text", ""),
+                    source_name=cand.get("source_name"),
+                    domain=cand.get("domain"),
+                    authority=cand.get("authority"),
+                ))
+
+        informational = bool(know.get("informational_only"))
+        conflict_context: List[EvidenceItem] = []
+        historical_note: Optional[str] = None
+
+        if combined.memory_used or combined.knowledge_used:
+            mode = ComposerMode.GROUNDED
+            refused = False
+        elif mem.get("verifier_verdict") == "reject":
+            mode = ComposerMode.CONFLICT_EXPLANATION
+            refused = True
+            for cand in mem.get("candidates") or []:
+                conflict_context.append(EvidenceItem(
+                    citation_id=f"rejected:{cand['memory_id']}",
+                    kind="rejected",
+                    text=cand.get("canonical_text", ""),
+                ))
+        elif allow_model_prior:
+            mode = ComposerMode.MODEL_PRIOR_LABELLED
+            refused = False
+        else:
+            mode = ComposerMode.REFUSAL
+            refused = True
+
+        # When not grounded, surface a superseded record (if any) as a
+        # display-only note so the reviewer knows a past answer existed — but it
+        # is never citable as the current answer.
+        if mode in (ComposerMode.REFUSAL, ComposerMode.CONFLICT_EXPLANATION):
+            hist = self.query_memory(
+                query_text, include_historical=True).historical
+            if hist:
+                ids = ", ".join(h["memory_id"] for h in hist)
+                historical_note = (
+                    f"A superseded memory exists ({ids}) but is not current and "
+                    "cannot be cited as the answer.")
+
+        return GroundingPackage(
+            query=query_text,
+            mode=mode,
+            memory_used=combined.memory_used,
+            knowledge_used=combined.knowledge_used,
+            model_prior_used=combined.model_prior_used,
+            informational_only=informational,
+            refused=refused,
+            route=combined.route,
+            evidence=evidence,
+            conflict_context=conflict_context,
+            cautions=list(combined.cautions),
+            historical_note=historical_note,
+            query_audit=combined.to_dict(),
+        )
+
+    def build_pack_summary_package(self) -> GroundingPackage:
+        """Build a citable summary of the active pack's knowledge sources."""
+        evidence: List[EvidenceItem] = []
+        for src in self.list_knowledge_sources():
+            evidence.append(EvidenceItem(
+                citation_id=f"src:{src['source_id']}",
+                kind="knowledge",
+                text=src["source_name"],
+                source_name=src["source_name"],
+                domain=src["domain"],
+                authority=src["authority"],
+            ))
+        return GroundingPackage(
+            query="(pack summary)",
+            mode=ComposerMode.PACK_SUMMARY,
+            memory_used=False,
+            knowledge_used=bool(evidence),
+            model_prior_used=False,
+            informational_only=False,
+            refused=False,
+            route="pack_summary",
+            evidence=evidence,
+        )
+
+    def compose_answer(self, grounding_package: GroundingPackage,
+                       composer: Optional[AssistantComposer] = None
+                       ) -> ComposedAnswer:
+        """Render a grounding package into prose with the given composer.
+
+        The default composer is the deterministic template composer; nothing in
+        the package can be overridden by the composer.
+        """
+        composer = composer or TemplateComposer()
+        return composer.compose(grounding_package)
+
+    def answer_query(self, query_text: str, use_slm: bool = False, *,
+                     allow_model_prior: bool = False,
+                     slm_backend: Optional[LocalSLMBackend] = None,
+                     composer: Optional[AssistantComposer] = None
+                     ) -> AssistantResult:
+        """Answer a query with the optional composer layer.
+
+        With ``use_slm=False`` (the default) the deterministic template composer
+        renders the answer. With ``use_slm=True`` a :class:`LocalSLMComposer`
+        wraps a local backend (the supplied one, or the environment default);
+        if that backend is unavailable or misbehaves, the answer falls back to
+        the template — so the assistant layer is always safe to call.
+        """
+        package = self.build_grounding_package(
+            query_text, allow_model_prior=allow_model_prior)
+        if composer is None:
+            if use_slm:
+                backend = slm_backend or make_default_slm_backend()
+                composer = LocalSLMComposer(backend)
+            else:
+                composer = TemplateComposer()
+        answer = self.compose_answer(package, composer)
+        return AssistantResult(
+            query=query_text,
+            audit=package.query_audit or {},
+            answer=answer,
+            evidence_ids=sorted(package.allowed_citation_ids),
+            refused=answer.refused,
+            composer_backend=answer.composer_backend,
         )
 
     # -- ingestion / approval queue (v1.2) --

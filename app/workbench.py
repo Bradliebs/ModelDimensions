@@ -152,6 +152,33 @@ def _format_combined(audit) -> str:
     return "\n".join(lines)
 
 
+def _format_assistant(result) -> str:
+    """Render an AssistantResult: the composed answer plus its audit trail."""
+    answer = result.answer
+    lines = [
+        f'Assisted answer: "{result.query}"',
+        f"  composer_backend    = {result.composer_backend}",
+        f"  mode                = {answer.mode.value}",
+        f"  refused             = {str(result.refused).lower()}",
+        f"  fell_back_to_template = {str(answer.fell_back).lower()}",
+        f"  memory_used         = {str(result.audit.get('memory_used')).lower()}",
+        f"  knowledge_used      = "
+        f"{str(result.audit.get('knowledge_used')).lower()}",
+        f"  model_prior_used    = "
+        f"{str(result.audit.get('model_prior_used')).lower()}",
+    ]
+    if result.evidence_ids:
+        lines.append(f"  evidence_ids        = {', '.join(result.evidence_ids)}")
+    if answer.citations:
+        lines.append(f"  cited               = {', '.join(answer.citations)}")
+    if answer.informational_only:
+        lines.append("  informational_only  = true")
+    lines.append("  answer:")
+    for row in answer.text.splitlines():
+        lines.append(f"    {row}")
+    return "\n".join(lines)
+
+
 # ---------- CLI ----------
 
 _HELP = """\
@@ -179,6 +206,8 @@ Commands:
   sources               list imported knowledge sources
   query-knowledge <text>  query imported knowledge only (with domain cautions)
   query-all <text>      query memory and knowledge, kept clearly separated
+  query-assist <text>   compose a readable answer over the audit (template)
+  query-assist --slm <text>  same, using the optional local SLM (falls back safely)
   backend               show the active knowledge retrieval backend
   packs                 list project packs (isolated workspaces)
   pack-create <name>    create a new project pack
@@ -542,6 +571,17 @@ def _repl(service: WorkbenchService,
                 print("  usage: query-all <text>")
                 continue
             print(_format_combined(service.query_all(arg)))
+        elif cmd in {"query-assist", "query_assist"}:
+            use_slm = False
+            text = arg
+            if text.startswith("--slm"):
+                use_slm = True
+                text = text[len("--slm"):].strip()
+            if not text:
+                print("  usage: query-assist [--slm] <text>")
+                continue
+            print(_format_assistant(
+                service.answer_query(text, use_slm=use_slm)))
         elif cmd == "backend":
             name = service.knowledge_backend_name()
             print(f"  knowledge retrieval backend = {name}")

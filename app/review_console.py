@@ -50,6 +50,8 @@ Commands:
   memories                  list memories by status (active/deleted/...)
   knowledge                 list imported knowledge sources
   query <text>              audited query (memory + knowledge, kept separate)
+  query-assist <text>       compose a readable answer over the audit (template)
+  query-assist --slm <text> same, using the optional local SLM (falls back safely)
   export <path>             export the active pack to a .zip bundle
   help                      show this help
   quit / exit               leave the console
@@ -144,6 +146,28 @@ def _print_query_audit(audit: dict) -> None:
         print(f"  ! {caution}")
 
 
+def _print_assisted(result: dict) -> None:
+    answer = result["answer"]
+    audit = result.get("audit", {})
+    print(f'  query            = "{result["query"]}"')
+    print(f"  composer_backend = {result['composer_backend']}")
+    print(f"  mode             = {answer['mode']}")
+    print(f"  refused          = {str(result['refused']).lower()}")
+    print(f"  fell_back        = {str(answer['fell_back']).lower()}")
+    print(f"  memory_used      = {str(audit.get('memory_used')).lower()}")
+    print(f"  knowledge_used   = {str(audit.get('knowledge_used')).lower()}")
+    print(f"  model_prior      = {str(audit.get('model_prior_used')).lower()}")
+    if result.get("evidence_ids"):
+        print(f"  evidence_ids     = {', '.join(result['evidence_ids'])}")
+    if answer.get("citations"):
+        print(f"  cited            = {', '.join(answer['citations'])}")
+    if answer.get("informational_only"):
+        print("  informational_only = true")
+    print("  answer:")
+    for row in answer["text"].splitlines():
+        print(f"    {row}")
+
+
 # ---------- CLI ----------
 
 def _repl(review: ReviewService, registry: PackRegistry | None) -> None:
@@ -235,6 +259,16 @@ def _repl(review: ReviewService, registry: PackRegistry | None) -> None:
                 print("  usage: query <text>")
             else:
                 _print_query_audit(review.run_audited_query(arg))
+        elif cmd in {"query-assist", "query_assist"}:
+            use_slm = False
+            text = arg
+            if text.startswith("--slm"):
+                use_slm = True
+                text = text[len("--slm"):].strip()
+            if not text:
+                print("  usage: query-assist [--slm] <text>")
+            else:
+                _print_assisted(review.run_assisted_query(text, use_slm=use_slm))
         elif cmd == "export":
             if not arg:
                 print("  usage: export <path>")

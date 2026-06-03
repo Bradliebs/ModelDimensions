@@ -928,6 +928,89 @@ explicitly promoted.
 | `scripts/demo_m365_coding_assistant.ps1` | Build, evaluate, and demo the pack with memory / knowledge / model-prior flags (exits non-zero on failure) |
 | `evals/test_m365_coding_assistant_pack.py` | Spec-load, build, metadata, eval, review-console, routing-flag, memory-separation, and HF eval-only tests |
 
+## SLM-Grounded Assistant Layer
+
+The retrieve → verify → ground path produces a faithful but terse audit. The
+**optional** SLM-grounded assistant layer (v2.0) adds a thin *rendering* layer on
+top of it that composes a readable answer, explains refusals and conflicts, and
+can propose memories — **without ever changing a grounding decision**. It is off
+by default, deterministic, and fully offline unless you explicitly wire in a
+local model.
+
+### What the SLM can do
+
+- Rewrite the trusted result into readable prose.
+- Explain *why* an answer was refused, or why a near-miss was rejected as a
+  conflict.
+- Optionally suggest candidate memories from a note — which still enter the
+  normal human-approval queue like any other proposal.
+
+### What the SLM cannot do
+
+- It cannot decide what is grounded. The mode, the `refused` flag, and the exact
+  set of citable ids all come from the deterministic **grounding package**, not
+  the model.
+- It cannot invent a citation. Any `[mem:…]` / `[src:…]` marker the model emits
+  that is not in the allowed set is rejected and the layer falls back to the
+  deterministic template.
+- It cannot cite on a non-grounded answer, turn a refusal into a grounded one,
+  or cite a deleted or superseded memory as the current answer.
+- It cannot write to memory or knowledge. Suggested memories are proposals only.
+
+If the model is unavailable, returns malformed output, or violates any of the
+rules above, the layer **falls back to the deterministic template** — the safe
+answer is always available.
+
+### Local / offline defaults
+
+By default `query-assist` uses the deterministic `TemplateComposer`; no model is
+loaded and no network is touched. Tests use an in-process `MockSLMBackend`, so
+the whole suite stays offline and reproducible.
+
+### Optional local model
+
+To enable the SLM path, point the layer at a **local** endpoint via environment
+variables (nothing is downloaded at import time):
+
+- Ollama: set `OLLAMA_HOST` (and optionally `OLLAMA_MODEL`).
+- OpenAI-compatible local server: set `OPENAI_COMPAT_BASE_URL` (and optionally
+  `OPENAI_COMPAT_MODEL`, `OPENAI_COMPAT_API_KEY`).
+
+`make_default_slm_backend()` resolves these in order and returns an unconfigured
+backend (which always falls back to the template) when none is set.
+
+### Grounding package
+
+`WorkbenchService.build_grounding_package(query)` returns the deterministic
+envelope the composer is allowed to render: the mode (`grounded`, `refusal`,
+`conflict_explanation`, `model_prior_labelled`, `pack_summary`), the refused
+flag, the citable evidence, display-only conflict/near-miss context, and any
+historical note. `answer_query(query, use_slm=…)` ties the package and the
+composer together and returns an `AssistantResult` carrying the composed answer
+plus the full audit trail.
+
+### Examples
+
+In either CLI (`app/workbench.py` or `app/review_console.py`):
+
+```
+query-assist the supplier delivery is on Friday afternoon
+query-assist --slm what does pydantic validate
+```
+
+`demos/assistant_queries.jsonl` lists seven worked scenarios: grounded memory,
+grounded knowledge, no-evidence refusal, the Friday→Monday near-miss, a
+superseded-memory query, a medical informational query, and a labelled
+model-prior answer.
+
+| File | What it adds |
+|---|---|
+| `src/slm/assistant_composer.py` | Grounding package + `TemplateComposer` / `LocalSLMComposer` (citation validation, safe fallback) |
+| `src/slm/local_slm_backend.py` | Injectable backend Protocol with `MockSLMBackend`, Ollama, and OpenAI-compatible local backends |
+| `src/slm/proposal_extractor.py` | Optional SLM-assisted memory suggestions that still require human approval |
+| `demos/assistant_queries.jsonl` | Seven worked assistant scenarios |
+| `evals/test_assistant_composer.py` | Composer safety tests: no invented citations, no grounding of refusals, safe fallback, lifecycle guarantees |
+
 ## License
 
 To be decided.
