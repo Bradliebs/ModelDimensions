@@ -31,6 +31,11 @@ from agent.pack_builder import (  # noqa: E402
     open_pack_service,
 )
 from agent.pack_evaluator import evaluate_pack_file  # noqa: E402
+from agent.pack_maintenance import (  # noqa: E402
+    FreshnessPolicy,
+    build_inventory,
+    build_maintenance_report,
+)
 from agent.project_packs import PackRegistry  # noqa: E402
 
 MANIFEST = ROOT / "packs" / "m365_coding_assistant" / "pack.yaml"
@@ -124,26 +129,48 @@ def main(argv: list[str] | None = None) -> int:
         print("\nBuild FAILED: not every declared source was imported.")
         return 3
 
+    service = open_pack_service(registry, plan.pack_name)
+    policy = FreshnessPolicy.from_manifest(raw)
+
+    eval_total: int | None = None
+    eval_passed: int | None = None
+    exit_code = 0
+
     if args.no_eval:
         print("\nEval skipped (--no-eval).")
-        return 0
+    else:
+        eval_path = Path(args.eval_file)
+        if not eval_path.exists():
+            print(f"\nNo eval file at {eval_path}; skipping eval.")
+        else:
+            results = evaluate_pack_file(service, eval_path)
+            eval_passed = sum(1 for r in results if r.passed)
+            eval_total = len(results)
+            rate = (100.0 * eval_passed / eval_total) if eval_total else 0
+            print(f"\nEval: {eval_passed}/{eval_total} passed ({rate:.1f}%).")
+            for r in results:
+                if not r.passed:
+                    print(f"  FAIL {r.question_id}: {r.reason}")
+            if eval_passed != eval_total:
+                exit_code = 1
 
-    eval_path = Path(args.eval_file)
-    if not eval_path.exists():
-        print(f"\nNo eval file at {eval_path}; skipping eval.")
-        return 0
+    # v2.2 maintenance report: source freshness + (optional) eval status.
+    inventory = build_inventory(service.knowledge, policy)
+    maint = build_maintenance_report(
+        inventory, eval_total=eval_total, eval_passed=eval_passed)
+    print("\nSource maintenance report:")
+    print(f"  sources    : {maint.source_count} "
+          f"({maint.total_entries} entries)")
+    print(f"  current    : {maint.current_count}")
+    print(f"  review_due : {maint.review_due_count}")
+    print(f"  stale      : {maint.stale_count}")
+    print(f"  unknown    : {maint.unknown_count}")
+    for row in inventory:
+        if row.status.value != "current":
+            print(f"    [{row.status.value:<10}] {row.source_name} "
+                  f"\u2014 {row.reason}")
 
-    service = open_pack_service(registry, plan.pack_name)
-    results = evaluate_pack_file(service, eval_path)
-    passed = sum(1 for r in results if r.passed)
-    total = len(results)
-    print(f"\nEval: {passed}/{total} passed "
-          f"({(100.0 * passed / total) if total else 0:.1f}%).")
-    for r in results:
-        if not r.passed:
-            print(f"  FAIL {r.question_id}: {r.reason}")
-
-    return 0 if passed == total else 1
+    return exit_code
 
 
 if __name__ == "__main__":

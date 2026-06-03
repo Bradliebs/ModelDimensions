@@ -49,6 +49,15 @@ from agent.retrieval_backends import (
 from agent.memory_proposals import ProposalBatch
 from agent.note_ingestion import extract_candidate_memories, load_text_file
 from agent.orchestrator import DeterministicEncoder, EncoderProtocol, MemoryBank
+from agent.pack_maintenance import (
+    FreshnessPolicy,
+    MaintenanceReport,
+    RefreshItem,
+    SourceFreshness,
+    build_inventory,
+    build_maintenance_report,
+    build_refresh_plan,
+)
 from agent.project_packs import PackRegistry, ProjectPack
 from agent.proposal_queue import ProposalQueue
 from agent.query_planner import QueryRoute, plan_query
@@ -538,6 +547,33 @@ class WorkbenchService:
     def delete_knowledge_source(self, source_id: str) -> bool:
         """Deactivate a knowledge source so its chunks can no longer be cited."""
         return self.knowledge.delete_source(source_id)
+
+    # -- v2.2 source maintenance (read-only) --------------------------------
+    # These compute a freshness view over the active pack's sources. They
+    # mutate nothing and change no grounding/citation/refusal semantics; they
+    # only surface which sources need an operator's attention.
+
+    def source_inventory(
+            self, policy: "Optional[FreshnessPolicy]" = None
+    ) -> "List[SourceFreshness]":
+        """Freshness status for every active source in the active pack."""
+        return build_inventory(self.knowledge, policy or FreshnessPolicy())
+
+    def refresh_plan(
+            self, policy: "Optional[FreshnessPolicy]" = None
+    ) -> "List[RefreshItem]":
+        """Action list for sources that are stale, review-due, or undatable."""
+        return build_refresh_plan(self.source_inventory(policy))
+
+    def maintenance_report(
+            self, policy: "Optional[FreshnessPolicy]" = None, *,
+            eval_total: Optional[int] = None,
+            eval_passed: Optional[int] = None,
+    ) -> "MaintenanceReport":
+        """Source-health summary, optionally folding in eval pass numbers."""
+        return build_maintenance_report(
+            self.source_inventory(policy),
+            eval_total=eval_total, eval_passed=eval_passed)
 
     def query_knowledge(self, query_text: str) -> KnowledgeAudit:
         """Retrieve imported knowledge chunks for ``query_text``.

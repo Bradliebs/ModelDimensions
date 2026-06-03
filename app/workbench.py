@@ -21,6 +21,7 @@ Or, if Streamlit is installed, as a local web app:
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from pathlib import Path
 
@@ -213,6 +214,9 @@ Commands:
   pack-create <name>    create a new project pack
   pack-use <name>       switch the active pack (re-points all stores); alias: pack-switch
   pack-info [name]      show the active pack (or a named pack) and its paths
+  pack-sources [--stale] [--json]  list source freshness (current/review_due/stale/unknown)
+  pack-refresh-plan [--json]  list sources needing review, with risk and action
+  pack-maintenance-report [--json]  summarise pack source health
   pack-export <name> <path>  export a pack to a .zip bundle
   pack-import <path>    import a pack bundle and register it
   pack-build <spec>     build a curated knowledge pack from a JSON/YAML spec
@@ -352,6 +356,45 @@ def _print_pack_info(info: dict) -> None:
     print(f"  proposals : {info['proposal_entries']} queued")
     print(f"  knowledge : {info['knowledge_records']} records")
     print(f"  backend   : {info['default_knowledge_backend']}")
+
+
+def _print_inventory(rows: list) -> None:
+    if not rows:
+        print("  (no knowledge sources in the active pack)")
+        return
+    for r in rows:
+        age = f"{r.age_days}d" if r.age_days is not None else "?"
+        print(f"  [{r.status.value:<10}] {r.source_name}  "
+              f"({r.domain}/{r.authority}, {r.entries} entr"
+              f"{'y' if r.entries == 1 else 'ies'}, age {age})")
+        print(f"               policy={r.staleness_policy}  — {r.reason}")
+
+
+def _print_refresh_plan(items: list) -> None:
+    if not items:
+        print("  all sources are current — nothing to refresh.")
+        return
+    for it in items:
+        print(f"  [{it.risk:<6}] {it.source_name}  ({it.status.value})")
+        print(f"             why : {it.reason}")
+        print(f"             do  : {it.suggested_action}")
+
+
+def _print_maintenance_report(report) -> None:
+    print(f"  sources    : {report.source_count} "
+          f"({report.total_entries} entries)")
+    print(f"  current    : {report.current_count}")
+    print(f"  review_due : {report.review_due_count}")
+    print(f"  stale      : {report.stale_count}")
+    print(f"  unknown    : {report.unknown_count}")
+    if report.eval_total:
+        rate = (report.eval_pass_rate or 0.0) * 100.0
+        print(f"  eval       : {report.eval_passed}/{report.eval_total} "
+              f"passed ({rate:.1f}%)")
+    else:
+        print("  eval       : not run in this session "
+              "(use scripts/build_m365_coding_pack.py for the eval gate)")
+
 
 
 def _print_build_report(report: "pack_builder.PackBuildReport") -> None:
@@ -634,6 +677,36 @@ def _repl(service: WorkbenchService,
                        else f"  unknown pack: {arg}")
                 continue
             _print_pack_info(info)
+        elif cmd in {"pack-sources", "pack_sources"}:
+            if registry is None:
+                print("  packs are disabled; relaunch with --pack-root <dir>")
+                continue
+            flags = arg.split()
+            rows = service.source_inventory()
+            if "--stale" in flags:
+                rows = [r for r in rows if r.status.value != "current"]
+            if "--json" in flags:
+                print(json.dumps([r.to_dict() for r in rows], indent=2))
+            else:
+                _print_inventory(rows)
+        elif cmd in {"pack-refresh-plan", "pack_refresh_plan"}:
+            if registry is None:
+                print("  packs are disabled; relaunch with --pack-root <dir>")
+                continue
+            items = service.refresh_plan()
+            if "--json" in arg.split():
+                print(json.dumps([i.to_dict() for i in items], indent=2))
+            else:
+                _print_refresh_plan(items)
+        elif cmd in {"pack-maintenance-report", "pack_maintenance_report"}:
+            if registry is None:
+                print("  packs are disabled; relaunch with --pack-root <dir>")
+                continue
+            report = service.maintenance_report()
+            if "--json" in arg.split():
+                print(json.dumps(report.to_dict(), indent=2))
+            else:
+                _print_maintenance_report(report)
         elif cmd in {"pack-export", "pack_export"}:
             if registry is None:
                 print("  packs are disabled; relaunch with --pack-root <dir>")

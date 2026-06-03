@@ -28,6 +28,16 @@ policy:
   stale_source_warning: enabled       # sources with a stale policy are labelled at query time
   medical_legal: disabled             # no medical/legal sources unless explicitly added later
   model_prior: labelled_only          # model-prior answers are allowed only when explicitly labelled
+  # v2.2 source freshness policy. Used by scripts/build_m365_coding_pack.py to
+  # produce a maintenance report. Time-based windows apply only to sources whose
+  # staleness_policy is a date-based cadence; sources marked `stale` or
+  # `review_required` short-circuit to stale / review_due regardless of age.
+  freshness:
+    default_stale_after_days: 365      # general/architecture notes age slowly
+    domain_stale_after_days:
+      microsoft: 180                   # M365 admin/Purview/Copilot guidance moves faster
+      coding: 365
+    review_due_fraction: 0.8           # flag for review at 80% of the window
 
 sources:
   - source_name: Microsoft 365 Admin Patterns

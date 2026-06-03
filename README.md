@@ -1089,6 +1089,74 @@ the memory route (an unanswered decision-recall query), as the tests demonstrate
 | `evals/test_m365_coding_pack.py` | Build + assistant-safety tests (refusal, stale, model-prior, SLM bounds) |
 | `demos/m365_coding_assistant_queries.jsonl` | Ten worked assistant scenarios for this pack |
 
+## v2.2 Source Refresh & Pack Maintenance
+
+A read-only maintenance layer that keeps existing pack knowledge **trustworthy
+over time**. It does not add knowledge; it reports which sources have gone — or
+are going — stale so an operator can act before a stale-but-cited answer
+misleads someone. It changes no frozen core semantics: the verifier, grounding,
+citation, lifecycle, refusal, SLM-optional, TemplateComposer-default, and
+pack-isolation rules are all untouched, and the existing tests stay green.
+
+Every source already carries provenance (`staleness_policy`, `retrieved_at`,
+`published_at`, `version`). This layer reads those fields plus a per-pack
+**freshness policy** and assigns each source one of four statuses:
+
+| Status | Meaning |
+|---|---|
+| `current` | Trusted as up to date (declared `static`, or young enough). |
+| `review_due` | Flagged for human review (declared `review_required`, or past the review threshold but not yet stale). |
+| `stale` | Declared `stale`/`outdated`/`deprecated`, or older than its stale window. |
+| `unknown` | No date recorded, so age cannot be assessed. |
+
+Declared policies short-circuit the age check, so `stale` is always `stale` and
+`review_required` is always `review_due` regardless of dates. Otherwise the
+status is time-based: a source flips to `review_due` at `review_due_fraction` of
+its window and to `stale` at the full window. Windows come from the manifest's
+`policy.freshness` block:
+
+```yaml
+policy:
+  freshness:
+    default_stale_after_days: 365
+    domain_stale_after_days:
+      microsoft: 180        # M365 guidance moves faster than general notes
+      coding: 365
+    review_due_fraction: 0.8  # warn at 80% of the window
+```
+
+### Workbench commands
+
+| Command | What it shows |
+|---|---|
+| `pack-sources [--stale] [--json]` | Freshness status for every active source; `--stale` hides current ones |
+| `pack-refresh-plan [--json]` | Non-current sources ranked by risk, each with a suggested action |
+| `pack-maintenance-report [--json]` | Source-health summary (current/review_due/stale/unknown) |
+
+The build script `scripts/build_m365_coding_pack.py` also prints a maintenance
+report after the eval gate, folding in the eval pass numbers so source freshness
+and eval status are visible together.
+
+| File | What it adds |
+|---|---|
+| `src/agent/pack_maintenance.py` | Pure, read-only freshness analysis (status, inventory, refresh plan, report) |
+| `evals/test_pack_maintenance.py` | Unit tests + a real M365-pack maintenance test |
+| `packs/m365_coding_assistant/pack.yaml` | `policy.freshness` block |
+
+### Honest limitations
+
+* **No automatic refresh.** This layer does not fetch the web or re-import
+  anything. It reports staleness; a human refreshes the source and rebuilds the
+  pack. The deterministic, offline backend makes metadata-driven maintenance the
+  honest design — there is no silent substitution of "newer" content.
+* **Operator owns the judgement.** `review_required`/`stale` are operator
+  declarations in the manifest. The layer surfaces and ranks them; it does not
+  decide whether a source is actually correct.
+* **Lifecycle write-actions are deferred.** Marking a source reviewed, historical,
+  or retired — and the query-assist refusal behaviour that retiring a source
+  would enable — changes *citation eligibility*. That is a separate, ratified
+  step and is intentionally **not** in this read-only slice.
+
 ## License
 
 To be decided.
