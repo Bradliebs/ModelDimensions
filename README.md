@@ -1773,6 +1773,63 @@ queries and is shown only as a floor.
 | `app/workbench.py` | the `retrieval-eval` subcommand (default pack `m365_coding_assistant`, default backend `hybrid`, optional report output) |
 | `evals/test_retrieval_eval_harness.py` | metric shape, determinism (identical results across runs), and non-mutation (ledger / proposals / knowledge unchanged) |
 
+## v3.0.1 Report-path probe (bleed localisation, measurement only)
+
+The v3.0 harness measures only the *raw* retrieval signal. On this pack that
+signal is clean — the historical off-topic Copilot Studio caution does **not**
+reproduce at the raw layer. If relevance bleed exists, it must therefore enter
+*later* in the report path. The report-path probe instruments the full path,
+read-only, and reports the **first stage** at which a forbidden source/term
+appears:
+
+| stage | source | what it observes |
+|---|---|---|
+| `raw` | `query_knowledge(q).candidates` | the ordered retrieved candidates |
+| `selected` | `build_grounding_package(q).evidence` | the post-gate, re-ordered evidence the composer may cite |
+| `final` | `answer_query(q, ConsultantReportComposer()).answer` | the final cited report spans / citations |
+
+Every call is a read — `query_knowledge`, `build_grounding_package`, and
+`answer_query` mutate no ledger, proposal queue, report, or pack (the same path
+the value sprint already exercises). The probe changes no retrieval, ranking,
+source-selection, grounding, composer, or memory behaviour; it only observes.
+
+```text
+# trace the full report path and localise where bleed enters (read-only)
+python app/workbench.py retrieval-eval --probe-report-path --backend hybrid
+
+# optional: also write reports (otherwise nothing is generated)
+python app/workbench.py retrieval-eval --probe-report-path --backend hybrid \
+    --out-md reports/report_path_probe_latest.md \
+    --out-jsonl reports/report_path_probe_latest.jsonl
+```
+
+**Probe dataset** — `demos/retrieval_report_path_cases.jsonl` (same
+`RetrievalEvalCase` format). These are **near-neighbour** cases that share
+vocabulary but must not cross-contaminate: least-privilege/PIM must not pull
+Copilot Studio connector cautions; a Copilot Studio connector caution must not
+pull least-privilege role guidance; Purview sensitivity labels must not pull
+Power Platform formula/DLP guidance; and a data-residency query exposes the
+known gap.
+
+**Per-stage metrics** — `raw_off_topic_rate`, `selected_evidence_off_topic_rate`,
+`final_citation_off_topic_rate`, the `raw` / `selected` / `final`
+`wrong_source_rate`, and `bleed_introduced_stage` (the first stage with a
+forbidden hit, or `not reproduced`). The aggregate reports `bleed_reproduced`
+and a per-stage first-bleed count.
+
+**Baseline finding (honest):** on `m365_coding_assistant` (hybrid) bleed is **not
+reproduced at any stage** — raw, selected, and final off-topic rates are all
+`0.00`. The non-zero `wrong_source_rate` reflects other on-topic sources in the
+candidate set, not forbidden bleed. The purpose of this slice is *localisation*,
+not optimisation: a clean result is recorded as-is, not forced into a failure.
+
+| File | What it adds |
+|---|---|
+| `src/agent/retrieval_eval_harness.py` | additive `StageObservation`, `ReportPathCaseResult`, `ReportPathSummary`, `probe_case` / `run_probe` / `summarize_probe`, and a Markdown renderer (all read-only; v3.0 functions untouched) |
+| `demos/retrieval_report_path_cases.jsonl` | the near-neighbour probe set |
+| `app/workbench.py` | the `retrieval-eval --probe-report-path` flag |
+| `evals/test_report_path_probe.py` | stage-metric shape, per-stage detection, determinism, non-mutation, and proof the v3.0 eval is unchanged alongside the probe |
+
 ## License
 
 To be decided.

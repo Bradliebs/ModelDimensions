@@ -441,3 +441,349 @@ def write_reports(results: List[RetrievalCaseResult],
         handle.write(json.dumps({"summary": summary.to_dict()}) + "\n")
         for r in results:
             handle.write(json.dumps(r.to_dict()) + "\n")
+
+
+# =============================================================================
+# v3.0.1 Report-path probe — localise *where* relevance bleed is introduced
+# =============================================================================
+#
+# The v3.0 harness above measures only the *raw* retrieval signal
+# (``query_knowledge``). A known historical defect — an off-topic Copilot Studio
+# connector caution in a least-privilege report — did **not** reproduce at that
+# raw layer. The bleed, if it exists, must therefore be introduced *later* in the
+# report path. This probe instruments the full path read-only and reports the
+# first stage at which a forbidden source/term appears:
+#
+#   STAGE 1  raw       — ``query_knowledge(q).candidates`` (ordered candidates)
+#   STAGE 2  selected  — ``build_grounding_package(q).evidence`` (post-gate,
+#                         re-ordered evidence the composer is allowed to cite)
+#   STAGE 3  final     — ``answer_query(q, ConsultantReportComposer()).answer``
+#                         (the final cited report spans / citations)
+#
+# Every call is a read. ``query_knowledge``, ``build_grounding_package`` and
+# ``answer_query`` mutate no ledger, proposal queue, report, or pack — the same
+# read-only path the value sprint already exercises. This probe changes **no**
+# retrieval, ranking, source-selection, grounding, composer, or memory semantics;
+# it only observes and tallies. If no bleed is found, that is the honest finding.
+
+_STAGE_NAMES = ("raw", "selected", "final")
+
+
+def _stage_off_topic_hits(case: RetrievalEvalCase,
+                          items: List[dict]) -> List[str]:
+    """Forbidden source/term hits among a stage's *non-expected* items.
+
+    Identical bleed rule to :func:`evaluate_case`, applied to any normalised
+    stage item (``source_name`` / ``source_id`` / ``chunk_id`` / ``text``):
+    an expected item is never counted, then a forbidden source or a forbidden
+    topic term in the item's text is recorded as bleed.
+    """
+    hits: List[str] = []
+    for item in items:
+        if case.has_expected and _candidate_matches_case(case, item):
+            continue
+        name = str(item.get("source_name") or "")
+        text = str(item.get("text") or "").lower()
+        for forbidden in case.forbidden_sources:
+            if _source_matches(forbidden, item):
+                hits.append(f"{name or '?'}: forbidden source")
+                break
+        else:
+            for term in case.forbidden_topic_terms:
+                if term.lower() in text:
+                    hits.append(f"{name or '?'}: term '{term}'")
+                    break
+    return hits
+
+
+def _stage_wrong_source_rate(case: RetrievalEvalCase,
+                             items: List[dict]) -> Optional[float]:
+    """Fraction of a stage's items that are not an expected source.
+
+    ``None`` when the case names no expected source or the stage is empty, so an
+    aggregate can average only over stages where the rate is defined.
+    """
+    if not case.expected_sources or not items:
+        return None
+    wrong = sum(
+        1 for item in items
+        if not any(_source_matches(src, item)
+                   for src in case.expected_sources))
+    return wrong / len(items)
+
+
+@dataclass(frozen=True)
+class StageObservation:
+    """What one report-path stage retrieved/selected/cited for one case."""
+
+    stage: str                       # "raw" | "selected" | "final"
+    item_count: int
+    source_names: List[str]
+    chunk_ids: List[str]
+    off_topic_hits: List[str]
+    wrong_source_rate: Optional[float]
+
+    @property
+    def off_topic_count(self) -> int:
+        return len(self.off_topic_hits)
+
+    def to_dict(self) -> dict:
+        data = asdict(self)
+        data["off_topic_count"] = self.off_topic_count
+        return data
+
+
+@dataclass(frozen=True)
+class ReportPathCaseResult:
+    """Per-case, per-stage bleed localisation for one query."""
+
+    case_id: str
+    query: str
+    raw: StageObservation
+    selected: StageObservation
+    final: StageObservation
+    final_citations: List[str]
+    bleed_introduced_stage: Optional[str]  # first stage with bleed, else None
+    tags: List[str] = field(default_factory=list)
+
+    def stage(self, name: str) -> StageObservation:
+        return {"raw": self.raw, "selected": self.selected,
+                "final": self.final}[name]
+
+    def to_dict(self) -> dict:
+        return {
+            "case_id": self.case_id,
+            "query": self.query,
+            "raw": self.raw.to_dict(),
+            "selected": self.selected.to_dict(),
+            "final": self.final.to_dict(),
+            "final_citations": list(self.final_citations),
+            "bleed_introduced_stage": self.bleed_introduced_stage,
+            "tags": list(self.tags),
+        }
+
+
+@dataclass(frozen=True)
+class ReportPathSummary:
+    """Aggregate bleed-localisation tallies across all probed cases."""
+
+    case_count: int
+    raw_off_topic_rate: float
+    selected_evidence_off_topic_rate: float
+    final_citation_off_topic_rate: float
+    raw_wrong_source_rate: Optional[float]
+    selected_wrong_source_rate: Optional[float]
+    final_wrong_source_rate: Optional[float]
+    bleed_stage_counts: dict          # {"raw": n, "selected": n, "final": n}
+    cases_with_bleed: int
+    bleed_reproduced: bool
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+
+def _norm_evidence_items(evidence) -> List[dict]:
+    """Normalise grounding-package evidence into stage-item dicts.
+
+    Only knowledge evidence carries a source; memory evidence is kept (with a
+    ``None`` source_name and its ``mem:`` id as chunk id) so a forbidden term
+    bleeding through a memory would still be observed.
+    """
+    items: List[dict] = []
+    for ev in evidence:
+        citation = str(getattr(ev, "citation_id", "") or "")
+        items.append({
+            "source_name": getattr(ev, "source_name", None),
+            "source_id": None,
+            "chunk_id": _norm_chunk_id(citation),
+            "text": getattr(ev, "text", "") or "",
+        })
+    return items
+
+
+def _norm_span_items(spans) -> List[dict]:
+    """Normalise composed report spans into stage-item dicts (final stage)."""
+    items: List[dict] = []
+    for span in spans:
+        citation = str(getattr(span, "citation_id", "") or "")
+        items.append({
+            "source_name": getattr(span, "source_name", None),
+            "source_id": None,
+            "chunk_id": _norm_chunk_id(citation),
+            "text": getattr(span, "text", "") or "",
+        })
+    return items
+
+
+def _build_stage(stage: str, case: RetrievalEvalCase,
+                 items: List[dict]) -> StageObservation:
+    source_names: List[str] = []
+    chunk_ids: List[str] = []
+    for item in items:
+        name = str(item.get("source_name") or "")
+        if name and name not in source_names:
+            source_names.append(name)
+        chunk = str(item.get("chunk_id") or "")
+        if chunk and chunk not in chunk_ids:
+            chunk_ids.append(chunk)
+    return StageObservation(
+        stage=stage,
+        item_count=len(items),
+        source_names=source_names,
+        chunk_ids=chunk_ids,
+        off_topic_hits=_stage_off_topic_hits(case, items),
+        wrong_source_rate=_stage_wrong_source_rate(case, items),
+    )
+
+
+def probe_case(service: WorkbenchService,
+               case: RetrievalEvalCase) -> ReportPathCaseResult:
+    """Trace one case through the full report path and localise any bleed.
+
+    Read-only: three reads of the frozen path (``query_knowledge``,
+    ``build_grounding_package``, ``answer_query`` with the consultant report
+    composer), then pure measurement. Nothing is mutated.
+    """
+    # Lazy import: keeps the composer dependency out of module import (and mirrors
+    # the value sprint, which imports the composer only when it composes).
+    from slm.assistant_composer import ConsultantReportComposer
+
+    # STAGE 1 — raw retrieved candidates.
+    audit = service.query_knowledge(case.query)
+    raw_items = list(audit.candidates)
+    raw = _build_stage("raw", case, raw_items)
+
+    # STAGE 2 — evidence selected/passed into the composer (post-gate).
+    package = service.build_grounding_package(case.query)
+    selected_items = _norm_evidence_items(package.evidence)
+    selected = _build_stage("selected", case, selected_items)
+
+    # STAGE 3 — final cited report spans / citations.
+    result = service.answer_query(
+        case.query, composer=ConsultantReportComposer())
+    final_items = _norm_span_items(result.answer.spans)
+    final = _build_stage("final", case, final_items)
+
+    bleed_introduced_stage: Optional[str] = None
+    for obs in (raw, selected, final):
+        if obs.off_topic_count:
+            bleed_introduced_stage = obs.stage
+            break
+
+    return ReportPathCaseResult(
+        case_id=case.case_id or case.query[:40],
+        query=case.query,
+        raw=raw,
+        selected=selected,
+        final=final,
+        final_citations=list(result.answer.citations),
+        bleed_introduced_stage=bleed_introduced_stage,
+        tags=list(case.tags),
+    )
+
+
+def run_probe(service: WorkbenchService,
+              cases: List[RetrievalEvalCase]) -> List[ReportPathCaseResult]:
+    """Probe every case through the full report path (read-only)."""
+    return [probe_case(service, case) for case in cases]
+
+
+def summarize_probe(
+        results: List[ReportPathCaseResult]) -> ReportPathSummary:
+    """Aggregate per-case stage observations into bleed-localisation tallies."""
+    n = len(results)
+
+    def _off_rate(stage: str) -> float:
+        if not n:
+            return 0.0
+        return sum(1 for r in results if r.stage(stage).off_topic_count) / n
+
+    def _wrong_mean(stage: str) -> Optional[float]:
+        vals = [r.stage(stage).wrong_source_rate for r in results
+                if r.stage(stage).wrong_source_rate is not None]
+        return _mean(vals)
+
+    stage_counts = {name: sum(1 for r in results
+                              if r.bleed_introduced_stage == name)
+                    for name in _STAGE_NAMES}
+    cases_with_bleed = sum(1 for r in results
+                           if r.bleed_introduced_stage is not None)
+    return ReportPathSummary(
+        case_count=n,
+        raw_off_topic_rate=_off_rate("raw"),
+        selected_evidence_off_topic_rate=_off_rate("selected"),
+        final_citation_off_topic_rate=_off_rate("final"),
+        raw_wrong_source_rate=_wrong_mean("raw"),
+        selected_wrong_source_rate=_wrong_mean("selected"),
+        final_wrong_source_rate=_wrong_mean("final"),
+        bleed_stage_counts=stage_counts,
+        cases_with_bleed=cases_with_bleed,
+        bleed_reproduced=cases_with_bleed > 0,
+    )
+
+
+def render_probe_markdown(results: List[ReportPathCaseResult],
+                          summary: ReportPathSummary, *,
+                          pack_label: str, backend_label: str) -> str:
+    """Render the report-path probe as Markdown (no side effects)."""
+    lines: List[str] = []
+    lines.append(f"# Report-path probe — {pack_label} ({backend_label})")
+    lines.append("")
+    lines.append("Read-only trace of the full report path. Localises the first "
+                 "stage at which a forbidden source/term appears; changes "
+                 "nothing.")
+    lines.append("")
+    lines.append("## Summary")
+    lines.append("")
+    lines.append(f"- cases: {summary.case_count}")
+    if summary.bleed_reproduced:
+        lines.append(f"- **bleed reproduced**: yes "
+                     f"({summary.cases_with_bleed} case(s))")
+        order = ", ".join(f"{name}={summary.bleed_stage_counts[name]}"
+                          for name in _STAGE_NAMES)
+        lines.append(f"- first-bleed stage counts: {order}")
+    else:
+        lines.append("- **bleed reproduced**: no — not reproduced at any stage "
+                     "(raw, selected, or final)")
+    lines.append(f"- off-topic rate raw / selected / final: "
+                 f"{summary.raw_off_topic_rate:.2f} / "
+                 f"{summary.selected_evidence_off_topic_rate:.2f} / "
+                 f"{summary.final_citation_off_topic_rate:.2f}")
+    lines.append(f"- wrong-source rate raw / selected / final: "
+                 f"{_fmt_opt(summary.raw_wrong_source_rate)} / "
+                 f"{_fmt_opt(summary.selected_wrong_source_rate)} / "
+                 f"{_fmt_opt(summary.final_wrong_source_rate)}")
+    lines.append("")
+    lines.append("## Cases")
+    lines.append("")
+    lines.append("| case | raw off / wrong | selected off / wrong | "
+                 "final off / wrong | first bleed |")
+    lines.append("|---|---|---|---|---|")
+    for r in results:
+        def _cell(obs: StageObservation) -> str:
+            return f"{obs.off_topic_count} / {_fmt_opt(obs.wrong_source_rate)}"
+        bleed = r.bleed_introduced_stage or "not reproduced"
+        lines.append(
+            f"| {r.case_id} | {_cell(r.raw)} | {_cell(r.selected)} | "
+            f"{_cell(r.final)} | {bleed} |")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def write_probe_reports(results: List[ReportPathCaseResult],
+                        summary: ReportPathSummary, *,
+                        md_path: str | Path, jsonl_path: str | Path,
+                        pack_label: str, backend_label: str) -> None:
+    """Write the probe Markdown and JSONL reports (only when asked)."""
+    md_path = Path(md_path)
+    jsonl_path = Path(jsonl_path)
+    md_path.parent.mkdir(parents=True, exist_ok=True)
+    jsonl_path.parent.mkdir(parents=True, exist_ok=True)
+    md_path.write_text(
+        render_probe_markdown(results, summary, pack_label=pack_label,
+                              backend_label=backend_label),
+        encoding="utf-8")
+    with jsonl_path.open("w", encoding="utf-8") as handle:
+        handle.write(json.dumps({"summary": summary.to_dict()}) + "\n")
+        for r in results:
+            handle.write(json.dumps(r.to_dict()) + "\n")

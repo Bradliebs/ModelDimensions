@@ -1,0 +1,17 @@
+# v3.0.1 Report-path probe cases — near-neighbour bleed localisation (read-only).
+#
+# JSONL. Blank lines and lines beginning with '#' are ignored. Same case format
+# as demos/retrieval_eval_cases.jsonl (RetrievalEvalCase), but these are run by
+# the report-path probe, which traces each query through THREE stages —
+#   raw (query_knowledge) -> selected (build_grounding_package evidence)
+#   -> final (consultant-report citations/spans)
+# — and reports the first stage at which a forbidden source/term appears.
+#
+# Each case pairs two topical near-neighbours that share vocabulary but must not
+# cross-contaminate. forbidden_sources / forbidden_topic_terms name the sibling
+# whose presence in a non-expected stage item is relevance bleed. The probe
+# changes nothing; reproducing or NOT reproducing bleed are both honest findings.
+{"case_id": "least-priv-not-copilot", "query": "How do we set up least-privilege admin roles, separate break-glass Global Administrator accounts, and Privileged Identity Management for just-in-time activation?", "expected_sources": ["Microsoft 365 Admin Patterns"], "forbidden_sources": ["SharePoint Teams Copilot Studio Notes"], "forbidden_topic_terms": ["Copilot Studio", "connector"], "minimum_hit_k": 3, "tags": ["m365", "source_librarian"], "notes": "Least-privilege / PIM / break-glass must NOT pull Copilot Studio connector cautions at any stage."}
+{"case_id": "copilot-not-least-priv", "query": "What cautions apply to Copilot Studio custom agents, their connected knowledge sources, and connector availability?", "expected_sources": ["SharePoint Teams Copilot Studio Notes"], "forbidden_sources": ["Microsoft 365 Admin Patterns"], "forbidden_topic_terms": ["least-privilege", "Privileged Identity", "break-glass"], "minimum_hit_k": 3, "tags": ["m365", "copilot"], "notes": "Copilot Studio connector caution must NOT pull least-privilege role guidance at any stage."}
+{"case_id": "purview-not-powerplatform", "query": "Design a Purview sensitivity label taxonomy of Public, Internal, Confidential, and Highly Confidential, and explain where encryption is enabled.", "expected_sources": ["Purview Sensitivity Labels and DLP"], "forbidden_sources": ["Power Platform PowerApps Formulas"], "forbidden_topic_terms": ["Power Fx", "delegation", "PowerApps"], "minimum_hit_k": 3, "tags": ["m365", "purview"], "notes": "Purview sensitivity labels must NOT pull unrelated Power Platform formula/DLP guidance unless explicitly asked."}
+{"case_id": "data-residency-gap", "query": "What is our decision on data residency and which Azure region customer data is stored in?", "expected_sources": [], "minimum_hit_k": 0, "tags": ["m365", "decision"], "notes": "Known pack gap: no data-residency source exists. Probe should expose gap / no-answer behaviour; bleed here would be a non-expected forbidden hit (none declared), so honest outcome is no bleed and a weak/empty final."}

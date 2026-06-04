@@ -235,6 +235,7 @@ Commands:
   pack-eval <pack> <eval-file>  validate a pack's retrieval with eval questions
   pack-report <pack>    show a pack's curated sources and chunk counts
   retrieval-eval [--pack p] [--backend hybrid]  measure retrieval quality (read-only baseline)
+  retrieval-eval --probe-report-path  localise where relevance bleed enters the report path (read-only)
   hf-inspect <dataset_id>  preview a Hugging Face dataset's licence/decision
   hf-import <dataset_id> --pack <pack>  import a small governed HF sample
   demo                  run the Friday -> Monday near-miss example
@@ -1053,6 +1054,7 @@ def _value_sprint_cli(argv: list[str]) -> int:
 # ---------- v3.0 retrieval evaluation CLI ----------
 
 _RETRIEVAL_EVAL_CASES = ROOT / "demos" / "retrieval_eval_cases.jsonl"
+_RETRIEVAL_REPORT_PATH_CASES = ROOT / "demos" / "retrieval_report_path_cases.jsonl"
 
 
 def _retrieval_eval_cli(argv: list[str]) -> int:
@@ -1063,6 +1065,11 @@ def _retrieval_eval_cli(argv: list[str]) -> int:
     summary. Changes no retrieval, ranking, source-selection, composer, or
     memory behaviour; writes reports only when ``--out-md`` / ``--out-jsonl``
     are given.
+
+    With ``--probe-report-path`` (v3.0.1) it instead traces each case through the
+    full report path — raw candidates -> selected evidence -> final report
+    citations — and reports the first stage at which a forbidden source/term
+    appears (or "not reproduced"). Still entirely read-only.
     """
     from agent import retrieval_eval_harness as reh
 
@@ -1077,8 +1084,13 @@ def _retrieval_eval_cli(argv: list[str]) -> int:
                         help="knowledge retrieval backend (default hybrid — the "
                              "meaningful lexical path; deterministic recall is "
                              "near-chance and shown only as a floor)")
-    parser.add_argument("--cases", default=str(_RETRIEVAL_EVAL_CASES),
-                        help="path to the retrieval eval case JSONL")
+    parser.add_argument("--cases", default=None,
+                        help="path to the case JSONL (defaults to the retrieval "
+                             "eval cases, or the report-path cases under "
+                             "--probe-report-path)")
+    parser.add_argument("--probe-report-path", action="store_true",
+                        help="trace the full report path and localise the stage "
+                             "where relevance bleed is introduced (read-only)")
     parser.add_argument("--out-md", default=None,
                         help="optional path to write a Markdown report")
     parser.add_argument("--out-jsonl", default=None,
@@ -1087,7 +1099,30 @@ def _retrieval_eval_cli(argv: list[str]) -> int:
 
     # seed=False: no memory writes; this exercises the knowledge path only.
     service = _build_sprint_service(args.pack, args.backend, seed=False)
-    cases = reh.load_cases(args.cases)
+
+    if args.probe_report_path:
+        cases_path = args.cases or str(_RETRIEVAL_REPORT_PATH_CASES)
+        cases = reh.load_cases(cases_path)
+        results = reh.run_probe(service, cases)
+        summary = reh.summarize_probe(results)
+        print(reh.render_probe_markdown(
+            results, summary, pack_label=args.pack,
+            backend_label=args.backend))
+        if args.out_md or args.out_jsonl:
+            reh.write_probe_reports(
+                results, summary,
+                md_path=args.out_md or (ROOT / "reports"
+                                        / "report_path_probe_latest.md"),
+                jsonl_path=args.out_jsonl or (ROOT / "reports"
+                                              / "report_path_probe_latest.jsonl"),
+                pack_label=args.pack, backend_label=args.backend)
+            if args.out_md:
+                print(f"[report-path-probe] wrote {args.out_md}")
+            if args.out_jsonl:
+                print(f"[report-path-probe] wrote {args.out_jsonl}")
+        return 0
+
+    cases = reh.load_cases(args.cases or str(_RETRIEVAL_EVAL_CASES))
     results = reh.run_eval(service, cases)
     summary = reh.summarize(results)
 
