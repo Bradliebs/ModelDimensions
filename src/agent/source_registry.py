@@ -20,6 +20,7 @@ object per line, with ``#`` comment lines allowed, readable by eye.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
@@ -653,3 +654,269 @@ def render_audit_markdown(report: SourceRegistryAuditReport) -> str:
                      "complete and its supersession links are consistent.")
     lines.append("")
     return "\n".join(lines)
+
+
+# =============================================================================
+# v4.2 — Source update proposal generator (read-only; tasks, not truth claims)
+# -----------------------------------------------------------------------------
+# This layer turns audit findings (v4.1) into structured *maintenance proposals*
+# a human can review and apply by hand. It is strictly proposal-generation:
+#
+#   * it mutates NO registry file (``save_registry`` is still the only registry
+#     writer, and is never called from here),
+#   * it mutates NO source/knowledge file,
+#   * it changes NO retrieval/ranking/source-selection/grounding/composer/memory
+#     behaviour, and writes NO memory ledger,
+#   * every proposal carries ``requires_human_approval=True`` and
+#     ``status="proposed"`` — nothing is ever applied automatically.
+#
+# A proposal is a TASK ("a human should look at this metadata"), never a truth
+# claim about a source's content. The only file this layer may write is the
+# explicit proposal export requested via :func:`write_proposals`; it never
+# touches the registry or source truth.
+
+
+class ProposalType:
+    """Stable string codes for the kinds of maintenance task a proposal asks for."""
+
+    REVIEW_STALE_SOURCE = "review_stale_source"
+    ADD_MISSING_OWNER = "add_missing_owner"
+    ADD_LAST_REVIEWED_AT = "add_last_reviewed_at"
+    ADD_TOPICS = "add_topics"
+    RESOLVE_DANGLING_SUPERSESSION = "resolve_dangling_supersession"
+    RESOLVE_ASYMMETRIC_SUPERSESSION = "resolve_asymmetric_supersession"
+    SET_SUCCESSOR_FOR_DEPRECATED_SOURCE = "set_successor_for_deprecated_source"
+    CLARIFY_DRAFT_SOURCE = "clarify_draft_source"
+    REVIEW_UNKNOWN_AUTHORITY = "review_unknown_authority"
+
+
+# Which finding code becomes which proposal type. Findings absent from this map
+# produce no proposal on purpose:
+#   * ``deprecated_source`` is a settled, intentional state (no task needed);
+#   * ``active_source_superseded`` is advisory ("consider deprecating") — the
+#     deprecation itself, once a human makes it, is what triggers a
+#     ``set_successor_for_deprecated_source`` proposal.
+PROPOSAL_TYPE_BY_FINDING: Dict[str, str] = {
+    FindingCode.STALE_BY_POLICY: ProposalType.REVIEW_STALE_SOURCE,
+    FindingCode.STALE_BY_STATUS: ProposalType.REVIEW_STALE_SOURCE,
+    FindingCode.MISSING_OWNER: ProposalType.ADD_MISSING_OWNER,
+    FindingCode.MISSING_LAST_REVIEWED_AT: ProposalType.ADD_LAST_REVIEWED_AT,
+    FindingCode.MISSING_TOPICS: ProposalType.ADD_TOPICS,
+    FindingCode.DANGLING_SUPERSEDES: ProposalType.RESOLVE_DANGLING_SUPERSESSION,
+    FindingCode.DANGLING_SUPERSEDED_BY: ProposalType.RESOLVE_DANGLING_SUPERSESSION,
+    FindingCode.ASYMMETRIC_SUPERSESSION: ProposalType.RESOLVE_ASYMMETRIC_SUPERSESSION,
+    FindingCode.DEPRECATED_SOURCE_WITHOUT_SUCCESSOR:
+        ProposalType.SET_SUCCESSOR_FOR_DEPRECATED_SOURCE,
+    FindingCode.DRAFT_SOURCE: ProposalType.CLARIFY_DRAFT_SOURCE,
+    FindingCode.UNKNOWN_AUTHORITY_LEVEL: ProposalType.REVIEW_UNKNOWN_AUTHORITY,
+}
+
+# Static, human-readable task text per proposal type. Each is an instruction to
+# a person, never an automated action.
+_PROPOSED_ACTION: Dict[str, str] = {
+    ProposalType.REVIEW_STALE_SOURCE:
+        "Review the source and refresh last_reviewed_at, or confirm its status.",
+    ProposalType.ADD_MISSING_OWNER:
+        "Assign an accountable owner for this source.",
+    ProposalType.ADD_LAST_REVIEWED_AT:
+        "Record a last_reviewed_at date so freshness can be assessed.",
+    ProposalType.ADD_TOPICS:
+        "Add subject topics so the source is easier to classify and discover.",
+    ProposalType.RESOLVE_DANGLING_SUPERSESSION:
+        "Fix or remove the supersession link that points to a non-existent source.",
+    ProposalType.RESOLVE_ASYMMETRIC_SUPERSESSION:
+        "Add the missing reciprocal supersession back-link.",
+    ProposalType.SET_SUCCESSOR_FOR_DEPRECATED_SOURCE:
+        "Record a superseded_by successor for this deprecated source.",
+    ProposalType.CLARIFY_DRAFT_SOURCE:
+        "Ratify the draft or confirm it should remain a draft.",
+    ProposalType.REVIEW_UNKNOWN_AUTHORITY:
+        "Establish and record the source's authority_level.",
+}
+
+
+@dataclass(frozen=True)
+class SourceUpdateProposal:
+    """One maintenance task derived from one audit finding. Pure data; inert.
+
+    A proposal records *what a human might change* and *why*, never an applied
+    change. ``requires_human_approval`` is always ``True`` and ``status`` is
+    always ``"proposed"``; ``current_value`` describes the present metadata so a
+    reviewer has context. The proposal never asserts the source's content is
+    wrong — it only flags metadata worth a human's attention.
+    """
+
+    proposal_id: str
+    source_id: str
+    proposal_type: str
+    severity: FindingSeverity
+    finding_code: str
+    current_value: str
+    proposed_action: str
+    rationale: str
+    requires_human_approval: bool = True
+    status: str = "proposed"
+    created_at: Optional[str] = None
+    notes: str = ""
+
+    def to_dict(self) -> dict:
+        return {
+            "proposal_id": self.proposal_id,
+            "source_id": self.source_id,
+            "proposal_type": self.proposal_type,
+            "severity": self.severity.value,
+            "finding_code": self.finding_code,
+            "current_value": self.current_value,
+            "proposed_action": self.proposed_action,
+            "rationale": self.rationale,
+            "requires_human_approval": self.requires_human_approval,
+            "status": self.status,
+            "created_at": self.created_at,
+            "notes": self.notes,
+            "_record": "source_update_proposal",
+        }
+
+
+def _proposal_id(source_id: str, finding_code: str, rationale: str) -> str:
+    """Deterministic, stable id for a proposal.
+
+    Derived only from the source, the finding code, and the finding's message,
+    so the same registry always yields the same id and distinct findings (even
+    of the same code, e.g. two dangling links) get distinct ids.
+    """
+    digest = hashlib.sha1(
+        f"{source_id}|{finding_code}|{rationale}".encode("utf-8")).hexdigest()
+    return f"srcprop-{digest[:10]}"
+
+
+def _current_value(entry: SourceRegistryEntry, proposal_type: str) -> str:
+    """A short, read-only description of the entry's present metadata."""
+    if proposal_type == ProposalType.REVIEW_STALE_SOURCE:
+        return (f"status={entry.status.value}, "
+                f"last_reviewed_at={entry.last_reviewed_at!r}, "
+                f"stale_after_days={entry.stale_after_days}")
+    if proposal_type == ProposalType.ADD_MISSING_OWNER:
+        return f"owner={entry.owner!r}"
+    if proposal_type == ProposalType.ADD_LAST_REVIEWED_AT:
+        return f"last_reviewed_at={entry.last_reviewed_at!r}"
+    if proposal_type == ProposalType.ADD_TOPICS:
+        return f"topics={entry.topics}"
+    if proposal_type in (ProposalType.RESOLVE_DANGLING_SUPERSESSION,
+                         ProposalType.RESOLVE_ASYMMETRIC_SUPERSESSION):
+        return (f"supersedes={entry.supersedes}, "
+                f"superseded_by={entry.superseded_by}")
+    if proposal_type == ProposalType.SET_SUCCESSOR_FOR_DEPRECATED_SOURCE:
+        return (f"status={entry.status.value}, "
+                f"superseded_by={entry.superseded_by}")
+    if proposal_type == ProposalType.CLARIFY_DRAFT_SOURCE:
+        return f"status={entry.status.value}"
+    if proposal_type == ProposalType.REVIEW_UNKNOWN_AUTHORITY:
+        return f"authority_level={entry.authority_level.value}"
+    return ""
+
+
+def propose_source_updates(entries: List[SourceRegistryEntry], *,
+                           now: Optional[datetime] = None,
+                           ) -> List[SourceUpdateProposal]:
+    """Generate deterministic, read-only maintenance proposals from an audit.
+
+    Runs :func:`audit_registry` internally and converts each mapped finding into
+    a :class:`SourceUpdateProposal`. Pure: it reads the entries (and ``now`` for
+    freshness) and returns a list. It calls neither :func:`save_registry` nor any
+    source/memory writer, and changes no retrieval/ranking/grounding behaviour. A
+    clean registry yields an empty list. Output is sorted deterministically by
+    (severity, proposal_type, source_id, proposal_id).
+    """
+    report = audit_registry(entries, now=now)
+    ids = index_by_id(entries)
+    proposals: List[SourceUpdateProposal] = []
+
+    for finding in report.findings:
+        proposal_type = PROPOSAL_TYPE_BY_FINDING.get(finding.code)
+        if proposal_type is None:
+            continue
+        entry = ids[finding.source_id]
+        proposals.append(SourceUpdateProposal(
+            proposal_id=_proposal_id(finding.source_id, finding.code,
+                                     finding.message),
+            source_id=finding.source_id,
+            proposal_type=proposal_type,
+            severity=finding.severity,
+            finding_code=finding.code,
+            current_value=_current_value(entry, proposal_type),
+            proposed_action=_PROPOSED_ACTION[proposal_type],
+            rationale=finding.message,
+        ))
+
+    proposals.sort(key=lambda p: (_SEVERITY_RANK[p.severity], p.proposal_type,
+                                  p.source_id, p.proposal_id))
+    return proposals
+
+
+def proposals_to_jsonl(proposals: List[SourceUpdateProposal]) -> str:
+    """Serialise proposals to deterministic JSONL (one proposal per line)."""
+    return "\n".join(
+        json.dumps(p.to_dict(), ensure_ascii=False) for p in proposals)
+
+
+def render_proposals_markdown(proposals: List[SourceUpdateProposal]) -> str:
+    """Render a deterministic Markdown view of proposals. No side effects.
+
+    Output depends only on the (already deterministic) proposals, so the same
+    registry renders identical text every time. Nothing is written.
+    """
+    counts_by_type: Dict[str, int] = {}
+    for p in proposals:
+        counts_by_type[p.proposal_type] = counts_by_type.get(p.proposal_type, 0) + 1
+
+    lines: List[str] = []
+    lines.append("# Source update proposals")
+    lines.append("")
+    lines.append("Read-only maintenance proposals generated from the source "
+                 "registry audit (v4.2). Proposals are **tasks, not truth "
+                 "claims**: each requires human approval and nothing is applied "
+                 "automatically. No registry/source file is modified, and no "
+                 "retrieval/ranking/grounding/memory behaviour changes.")
+    lines.append("")
+    lines.append(f"- proposals: {len(proposals)}")
+    lines.append("- every proposal requires human approval (status: proposed)")
+    lines.append("")
+
+    lines.append("## Summary by type")
+    lines.append("")
+    if counts_by_type:
+        for proposal_type in sorted(counts_by_type):
+            lines.append(f"- {proposal_type}: {counts_by_type[proposal_type]}")
+    else:
+        lines.append("- (no proposals)")
+    lines.append("")
+
+    lines.append("## Proposals")
+    lines.append("")
+    if proposals:
+        lines.append("| severity | proposal_type | source_id | finding_code "
+                     "| proposed_action | approval |")
+        lines.append("|---|---|---|---|---|---|")
+        for p in proposals:
+            approval = "required" if p.requires_human_approval else "not required"
+            lines.append(
+                f"| {p.severity.value} | {p.proposal_type} | {p.source_id} "
+                f"| {p.finding_code} | {p.proposed_action} | {approval} |")
+    else:
+        lines.append("No proposals — the registry audit found nothing to "
+                     "maintain.")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def write_proposals(proposals: List[SourceUpdateProposal],
+                    path: str | Path) -> None:
+    """Write proposals to a JSONL file. The ONLY file this layer may write.
+
+    This export writer touches *only* the given path; it never writes the
+    registry (``save_registry`` remains the sole registry writer and is not
+    called here) and never writes any source or memory file.
+    """
+    out_path = Path(path)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(proposals_to_jsonl(proposals), encoding="utf-8")

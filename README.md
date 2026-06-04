@@ -2073,6 +2073,71 @@ and the unratified draft as `draft_source` + `missing_last_reviewed_at` +
 | `app/workbench.py` | the `source-registry audit` read-only CLI action |
 | `evals/test_source_registry_audit.py` | fresh-vs-stale detection, `stale_by_status`/`stale_by_policy`, deprecated/draft surfacing, missing-metadata, dangling/asymmetric/active-superseded/orphaned-deprecated supersession findings, determinism, read-only CLI, `save_registry` never called, no MemoryLedger writes, `list_knowledge_sources` unchanged, and v3.0 eval + v2.7 report contracts unchanged alongside an audit |
 
+## v4.2 Source update proposal generator (read-only; tasks, not truth claims)
+
+v4.1 *reports* metadata risk; v4.2 turns those audit findings into structured
+**source-maintenance proposals** a human reviews and applies by hand. It is
+strictly proposal-generation: it mutates **no** registry file, **no** source or
+knowledge file, writes **no** memory ledger, and changes **no** retrieval,
+ranking, source-selection, grounding, composer, or memory behaviour.
+
+**A proposal is a task, not a truth claim.** It records *what a human might
+change and why* — never an applied change. Every proposal carries
+`requires_human_approval=True` and `status="proposed"`, so **nothing is ever
+applied automatically** and no autonomous behaviour is introduced. Generation is
+the same kind of pure read as the audit: it runs `audit_registry` internally,
+converts each mapped finding to a proposal, and returns a deterministic list.
+`save_registry` stays the only registry writer and is never called here; the
+only file this layer may write is the explicit proposal export requested via
+`--out`.
+
+Each proposal records `proposal_id`, `source_id`, `proposal_type`, `severity`,
+`finding_code`, `current_value` (the present metadata, for reviewer context),
+`proposed_action` (a human task), `rationale` (the finding message),
+`requires_human_approval`, `status`, `created_at` (deterministic; unset by
+default), and `notes`. The `proposal_id` is a stable
+`srcprop-<sha1(source_id|finding_code|rationale)[:10]>`.
+
+**Finding → proposal type** mapping:
+
+| finding code | proposal type |
+|---|---|
+| `stale_by_policy`, `stale_by_status` | `review_stale_source` |
+| `missing_owner` | `add_missing_owner` |
+| `missing_last_reviewed_at` | `add_last_reviewed_at` |
+| `missing_topics` | `add_topics` |
+| `unknown_authority_level` | `review_unknown_authority` |
+| `draft_source` | `clarify_draft_source` |
+| `deprecated_source_without_successor` | `set_successor_for_deprecated_source` |
+| `dangling_supersedes`, `dangling_superseded_by` | `resolve_dangling_supersession` |
+| `asymmetric_supersession` | `resolve_asymmetric_supersession` |
+
+Two findings intentionally produce **no** proposal: `deprecated_source` (a
+settled, intentional state needing no task) and `active_source_superseded`
+(advisory — the human deprecation is what later triggers a
+`set_successor_for_deprecated_source` proposal).
+
+```text
+# generate proposals from the audit (deterministic; prints to stdout, writes nothing)
+python app/workbench.py source-registry propose-updates
+python app/workbench.py source-registry propose-updates --registry demos/source_registry.jsonl
+
+# write proposals to a JSONL file (the ONLY file written; registry untouched)
+python app/workbench.py source-registry propose-updates --out reports/source_proposals.jsonl
+```
+
+Proposals are ordered deterministically by `(severity, proposal_type,
+source_id, proposal_id)`. On the bundled `demos/source_registry.jsonl` the
+generator yields **5 proposals** — two `review_stale_source`, one
+`add_last_reviewed_at`, one `clarify_draft_source`, and one
+`review_unknown_authority` — and the settled deprecated source contributes none.
+
+| File | What it adds |
+|---|---|
+| `src/agent/source_registry.py` | `ProposalType` codes + `PROPOSAL_TYPE_BY_FINDING` map, frozen `SourceUpdateProposal`, the pure `propose_source_updates`, deterministic `render_proposals_markdown` / `proposals_to_jsonl`, and the export-only `write_proposals` |
+| `app/workbench.py` | the `source-registry propose-updates [--out path]` read-only CLI action |
+| `evals/test_source_registry_proposals.py` | finding→proposal-type mapping, settled/advisory findings producing none, clean registry → no proposals, determinism, stable ids, every proposal requires approval, `save_registry` never called, registry byte-identical, `list_knowledge_sources` unchanged, no MemoryLedger writes, CLI stdout writes no files, `--out` writes only the proposal file, and v4.1 audit + v3.0 eval + v2.7 report contracts unchanged alongside generation |
+
 ## License
 
 To be decided.

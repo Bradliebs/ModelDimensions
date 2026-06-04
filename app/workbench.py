@@ -240,6 +240,7 @@ Commands:
   source-registry list [--registry path]  list source metadata entries (read-only)
   source-registry inspect <id> [--registry path]  show one source's metadata (read-only)
   source-registry audit [--registry path]  report source lifecycle/metadata risk (read-only)
+  source-registry propose-updates [--registry path] [--out path]  generate source-maintenance proposals (read-only; not applied)
   hf-inspect <dataset_id>  preview a Hugging Face dataset's licence/decision
   hf-import <dataset_id> --pack <pack>  import a small governed HF sample
   demo                  run the Friday -> Monday near-miss example
@@ -1188,10 +1189,14 @@ def _source_registry_cli(argv: list[str]) -> int:
     ``list`` prints a deterministic table of every entry with its stored and
     *computed* effective freshness status; ``inspect <id>`` prints one entry's
     full metadata; ``audit`` prints a deterministic lifecycle/metadata risk
-    report (v4.1). All are pure reads: nothing is written, and no retrieval,
-    ranking, source-selection, grounding, composer, or memory behaviour is
-    touched. The registry annotates sources; it never becomes the evidence, and
-    the audit never decides a source is false.
+    report (v4.1); ``propose-updates`` turns that audit into deterministic
+    source-maintenance proposals (v4.2) — printed to stdout, or written to
+    ``--out`` as JSONL. All are pure reads of source metadata: the registry and
+    source files are never modified, no memory ledger is written, and no
+    retrieval, ranking, source-selection, grounding, or composer behaviour is
+    touched. Proposals are tasks requiring human approval, never applied
+    automatically; the registry annotates sources but never becomes the evidence,
+    and neither the audit nor a proposal decides a source is false.
     """
     from agent import source_registry as sr
 
@@ -1199,13 +1204,18 @@ def _source_registry_cli(argv: list[str]) -> int:
         prog="workbench.py source-registry",
         description="Inspect source metadata (read-only). The registry annotates "
                     "sources; it changes no retrieval/ranking/grounding logic.")
-    parser.add_argument("action", choices=["list", "inspect", "audit"],
-                        help="list all entries, inspect a single source_id, or "
-                             "audit lifecycle/metadata risk")
+    parser.add_argument(
+        "action", choices=["list", "inspect", "audit", "propose-updates"],
+        help="list all entries, inspect a single source_id, audit "
+             "lifecycle/metadata risk, or propose source-maintenance updates")
     parser.add_argument("source_id", nargs="?", default=None,
                         help="the source_id to inspect (required for 'inspect')")
     parser.add_argument("--registry", default=str(_SOURCE_REGISTRY_DEFAULT),
                         help="path to the source registry JSONL")
+    parser.add_argument("--out", default=None,
+                        help="for 'propose-updates': write proposals to this "
+                             "JSONL file instead of printing them (the only file "
+                             "this command may write)")
     args = parser.parse_args(argv)
 
     entries = sr.load_registry(args.registry)
@@ -1217,6 +1227,16 @@ def _source_registry_cli(argv: list[str]) -> int:
     if args.action == "audit":
         report = sr.audit_registry(entries)
         print(sr.render_audit_markdown(report))
+        return 0
+
+    if args.action == "propose-updates":
+        proposals = sr.propose_source_updates(entries)
+        if args.out:
+            sr.write_proposals(proposals, args.out)
+            print(f"[source-registry] wrote {len(proposals)} proposal(s) to "
+                  f"{args.out} (registry unchanged; not applied)")
+        else:
+            print(sr.render_proposals_markdown(proposals))
         return 0
 
     if not args.source_id:
