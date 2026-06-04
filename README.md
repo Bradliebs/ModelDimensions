@@ -2563,6 +2563,184 @@ a structural invariant (`0`), not a parser of free text.
 | `src/agent/chat_orchestrator.py` | five pure deterministic formatters (`format_evidence_bound_answer`, `format_insufficient_evidence_answer`, `format_labelled_judgement`, `format_unsupported_governed_action`, `summarize_evidence_gaps`); seven additive `ChatOrchestratorResult` audit fields wired into the unsupported / evidence / insufficient / judgement branches; no writer imported, no retrieval or ranking touched |
 | `evals/test_chat_orchestrator.py` | evidence answer is structured and exposes its metadata, `summarize_evidence_gaps` reads only the audit, insufficient-evidence names the missing evidence, labelled judgement separates fact from judgement and assumptions, unsupported request refuses and offers a safe alternative, answer UX is deterministic across repeated runs, and `to_dict` exposes the new metadata |
 
+## v6.2A Clean Data Intake Lane (governed, assessment-only; no external data auto-trusted)
+
+v6.2A adds a **read-only assessment gate** that every external dataset (or
+external content) must pass before it can become eval samples, knowledge,
+source-registry entries, memory proposals, or chat retrieval. The lane
+**assesses, it does not ingest**: it reads only the metadata a dataset *declares
+about itself* and returns a deterministic classification. It **downloads
+nothing**, writes no memory ledger, writes no source registry, creates or applies
+no source/memory proposal, and changes no retrieval, ranking, grounding, or chat
+routing. It writes to disk only when a human passes an explicit `--out` path (an
+assessment report, nothing else). The module imports none of those writers, so it
+cannot mutate that state even by accident.
+
+**Why quarantine first?** External data is untrusted by default. A licence may
+forbid commercial reuse, provenance may be unknown, a corpus may carry personal
+data, or the content may simply be a benchmark test set rather than training
+knowledge. The intake lane makes that judgement *explicit and auditable* before
+anything enters the trusted layers — nothing is silently promoted.
+
+**Eval data vs knowledge data.** `approved_for_eval` is deliberately **distinct**
+from `approved_for_knowledge`. Eval samples are test inputs held to a lighter bar
+(a non-commercial, synthetic, benchmark, or stale dataset can still be a fair
+*test*). Knowledge is what the system treats as true, so it must be
+affirmatively licence-clean, provenance-known, PII-free, carry a dataset card,
+and not be a benchmark/synthetic/stale set. Knowledge approval implies eval is
+permitted; eval approval never implies knowledge.
+
+Each candidate is assessed across licence, provenance, dataset card, PII,
+intended use, synthetic origin, format, size, freshness, and quality. Each
+dimension emits stable finding codes (e.g. `missing_license`,
+`unknown_provenance`, `possible_pii`, `non_commercial_license`,
+`stale_dataset`, `approved_open_license`). The decision is the *worst* finding's
+tier, so a single risk can only lower the classification, never raise it:
+
+| Decision | Lane | When |
+|---|---|---|
+| `approved_for_knowledge` | `knowledge_candidate` | every dimension is affirmatively clean: a recognised commercial licence, known provenance, a dataset card, declared no-PII, not synthetic, not a benchmark, in-size, fresh |
+| `approved_for_eval` | `eval_only` / `synthetic_examples` / `benchmark` | clears the lighter eval bar but a knowledge-disqualifying finding applies (non-commercial or research-only licence, synthetic data, benchmark/eval intended use, or a stale dataset) |
+| `needs_review` | `quarantine` | a human must classify it first (missing/unknown/unrecognised licence, unknown provenance, missing dataset card, or undeclared PII) |
+| `quarantine` | `quarantine` | held until cleaned (unsupported format, too large for an initial import, or a flagged low-quality sample) |
+| `blocked` | `blocked` | may not be used at all (declared personal data) |
+
+By construction, a **missing licence, unknown provenance, possible PII, or a
+non-commercial/research-only licence can never auto-classify as
+`approved_for_knowledge`** — the worst-finding-wins rule routes them to
+`needs_review`, `quarantine`, `blocked`, or `approved_for_eval` instead.
+
+**Hugging Face guidance.** Treat a Hugging Face dataset as an *external
+candidate*, not as trusted data. Capture its declared card metadata (licence,
+provenance/citation, task categories, size, last-updated, PII statement) into a
+candidate record and assess it first. A clean, openly-licensed HF dataset with a
+card and a no-PII statement can reach `knowledge_candidate`; an HF dataset whose
+card omits the licence or PII status, or whose origin is unclear, lands in
+`needs_review` — never silently trusted. The lane only reads declared metadata;
+it does not pull the dataset.
+
+```bash
+# assess a file of declared candidate metadata (assessment-only; writes nothing)
+python app/workbench.py data-intake assess --candidate demos/data_intake_candidates.jsonl
+
+# write an assessment report (the only durable write; off unless --out is given)
+python app/workbench.py data-intake assess --candidate demos/data_intake_candidates.jsonl \
+    --out reports/intake_report.json
+
+# a fixed --now makes freshness checks reproducible
+python app/workbench.py data-intake assess --candidate demos/data_intake_candidates.jsonl \
+    --now 2026-06-04T00:00:00+00:00
+```
+
+Worked examples from `demos/data_intake_candidates.jsonl`:
+
+| Candidate | Outcome | Why |
+|---|---|---|
+| `openqa/public-qa` (CC-BY, known provenance, card, no PII) | **accepted** → `approved_for_knowledge` | clean on every dimension |
+| `synth/eval-instructions` (Apache-2.0, synthetic, eval use) | **eval** → `approved_for_eval` (`synthetic_examples`) | synthetic + eval intent; never trusted knowledge |
+| `legacy/old-news` (CC-BY but last updated 2018) | **eval** → `approved_for_eval` | too stale for trusted knowledge |
+| `scrape/no-licence` (no declared licence) | **review** → `needs_review` | missing licence; a human must classify it |
+| `misc/unknown-origin` (provenance "unknown") | **review** → `needs_review` | origin not established |
+| `forum/threads` (PII status not verified) | **review** → `needs_review` | undeclared PII held back |
+| a candidate that **declares personal data** | **blocked** → no import | declared personal data is never imported |
+
+| File | What v6.2A adds |
+|---|---|
+| `src/agent/data_intake.py` | the read-only lane: `ExternalDatasetCandidate`, `DataIntakeFinding`, `DataIntakeAssessment`, the `DataIntakeDecision` 5-way classification, the `IntakeLane` routing buckets (`eval_only`, `knowledge_candidate`, `synthetic_examples`, `benchmark`, `quarantine`, `blocked`), the `FindingCode` reason codes, pure per-dimension assessors with a worst-finding-wins `assess_candidate`, `load_candidates`, the explicit-only `write_assessment_report`, and deterministic markdown renderers; imports no memory/registry/proposal writer |
+| `app/workbench.py` | the `data-intake assess --candidate PATH [--out PATH] [--now ISO]` CLI (reads declared metadata; prints a deterministic report; writes nothing unless `--out` is given) |
+| `demos/data_intake_candidates.jsonl` | seven worked candidates: open-licensed QA, synthetic eval, missing-licence, non-commercial, possible-PII, unknown-provenance, and stale |
+| `evals/test_data_intake.py` | open-licensed dataset can be eval; knowledge only with good provenance and intended use; missing licence, unknown provenance, possible/declared PII, and non-commercial/research-only licences never auto-enter knowledge; eval is distinct from knowledge; deterministic; stdout writes nothing and `--out` writes only the report; the module imports no writer |
+
+**Limitations and non-goals.** v6.2A is assessment only. It does **not** download
+datasets, import rows, build packs, or change retrieval/ranking/grounding/chat
+routing; it does **not** write the memory ledger, the source registry, or any
+proposal queue; and it never auto-promotes external data into trusted knowledge.
+The classification is derived deterministically from *declared* metadata — it is
+only as honest as the metadata it is given, which is exactly why undeclared PII,
+unknown provenance, and missing licences are held back rather than trusted.
+
+## v6.3 Hugging Face Metadata Adapter (metadata inspection only; nothing downloaded)
+
+v6.3 adds a thin, deterministic **adapter** that turns Hugging Face-style dataset
+*card metadata* into an `ExternalDatasetCandidate` and runs it through the
+existing v6.2 Clean Data Intake Lane. The adapter maps declared fields and
+applies conservative risk inference, then **delegates the decision** to the
+intake lane — so the intake lane stays the single source of truth and v6.3 adds
+no new decision logic of its own.
+
+**Why inspect metadata before download?** A Hugging Face dataset can be large,
+gated, non-commercially licensed, or carry personal data. Downloading first and
+asking questions later is exactly the wrong order. v6.3 reads only what the
+dataset *card declares about itself* — licence, tags, languages, task
+categories, size category, provenance signals (citation/homepage), freshness,
+and gating — and classifies the dataset **before** a single row is fetched. It
+**downloads nothing and streams no rows.**
+
+**How Hugging Face datasets are classified.** The adapter maps card metadata to
+candidate fields and infers risk conservatively:
+
+| Hugging Face metadata | Maps to / infers |
+|---|---|
+| `id` / `dataset_id` | `dataset_id`, `publisher` (namespace), `source_url` |
+| `card_data.license` / `license` / `license:` tag | `licence` (intake judges missing / unknown / non-commercial / research-only) |
+| `pretty_name` | `title` |
+| `description` | `description` (dataset card) |
+| `task_categories`, `language`, `size_categories` | `task_categories`, `language`, `size_hint` |
+| `citation` / `homepage` | provenance signals (absent ⇒ provenance unverified) |
+| `gated` / `private` | access-restricted ⇒ provenance unverified ⇒ **needs_review** |
+| personal-data tags (`pii`, `personal-data`, …) | `contains_personal_data` undeclared ⇒ **possible PII** |
+| medical / legal / finance domain tags | sensitive personal domain ⇒ **needs_review** |
+| `synthetic` tag | `is_synthetic` ⇒ **synthetic_examples** eval lane, never knowledge |
+| `benchmark` / `leaderboard` tag | benchmark ⇒ **benchmark** eval lane, never knowledge |
+| `last_modified` / `created_at` | `last_updated` (freshness) |
+
+**Eval use vs knowledge use.** As in v6.2, `approved_for_eval` is a distinct,
+weaker tier than `approved_for_knowledge`. A synthetic, benchmark, or
+non-commercial Hugging Face dataset can be a fair *eval* input but is never
+trusted *knowledge* automatically. By construction, a **gated, private, missing-
+licence, unknown-provenance, or possible-PII** dataset can never auto-classify as
+`approved_for_knowledge` — the worst-finding-wins rule routes it to
+`needs_review` or the eval tier instead.
+
+```bash
+# assess Hugging Face metadata before any download (metadata-only; writes nothing)
+python app/workbench.py hf-data assess-metadata --metadata demos/hf_dataset_metadata_examples.jsonl
+
+# write an assessment report (the only durable write; off unless --out is given)
+python app/workbench.py hf-data assess-metadata --metadata demos/hf_dataset_metadata_examples.jsonl \
+    --out reports/hf_intake_report.json
+```
+
+Worked examples from `demos/hf_dataset_metadata_examples.jsonl`:
+
+| Hugging Face dataset | Outcome | Why |
+|---|---|---|
+| `openqa/public-qa` (Apache-2.0, cited, no PII) | **safe** → `approved_for_knowledge` | clean on every dimension |
+| `synth/eval-instructions` (synthetic tag) | **eval** → `approved_for_eval` (`synthetic_examples`) | synthetic; never trusted knowledge |
+| `bench/reasoning-suite` (benchmark tag) | **eval** → `approved_for_eval` (`benchmark`) | a benchmark test set, not knowledge |
+| `research/nc-corpus` (CC-BY-NC) | **eval** → `approved_for_eval` | non-commercial; eval-only |
+| `scrape/unlicensed-pairs` (no licence) | **review** → `needs_review` | missing licence |
+| `vendor/gated-instructions` (`gated`) | **review** → `needs_review` | gated; provenance unverifiable |
+| `forum/user-threads` (`pii` tags) | **review** → `needs_review` | possible personal data held back |
+| `misc/unknown-origin` (no citation/homepage) | **review** → `needs_review` | provenance not established |
+| a dataset that **declares personal data** | **blocked** → no import | declared personal data is never imported |
+
+| File | What v6.3 adds |
+|---|---|
+| `src/agent/hf_data_adapter.py` | `HuggingFaceDatasetMetadata`, `HuggingFaceAdapterResult`, the pure `hf_metadata_to_candidate`, conservative risk inference, `assess_hf_metadata` / `assess_hf_metadata_records`, `load_hf_metadata`, and deterministic renderers; imports no writer and no dataset-download client |
+| `app/workbench.py` | the `hf-data assess-metadata --metadata PATH [--out PATH] [--now ISO]` CLI (reads declared metadata, prints a deterministic report, writes nothing unless `--out` is given) |
+| `demos/hf_dataset_metadata_examples.jsonl` | eight worked Hugging Face metadata records (open, synthetic, benchmark, missing-licence, non-commercial, gated, possible-PII, unknown-provenance) |
+| `evals/test_hf_data_adapter.py` | open licence maps to a candidate; missing licence, gated, private, possible PII, and non-commercial never auto-enter knowledge; synthetic ⇒ eval-only; benchmark ⇒ eval; eval distinct from knowledge; deterministic; no network; stdout writes nothing and `--out` writes only the report; the module imports no writer/downloader |
+
+**Limitations and non-goals.** v6.3 is metadata inspection only. It does **not**
+download datasets or stream rows; it does **not** write the memory ledger, the
+source registry, or any proposal; it does **not** change retrieval, ranking,
+grounding, or chat routing; and it never marks a Hugging Face dataset as trusted
+knowledge automatically. The classification is only as honest as the declared
+card metadata — which is exactly why gated, private, unlicensed, unverified, and
+possibly-personal datasets are held for human review rather than trusted.
+
 ## License
 
 To be decided.
+

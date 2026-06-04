@@ -1595,6 +1595,134 @@ def _chat_cli(argv: list[str]) -> int:
     return 0
 
 
+def _data_intake_cli(argv: list[str]) -> int:
+    """Assess external dataset candidates before they may enter eval/knowledge (v6.2A).
+
+    Reads only the *declared metadata* in a JSON/JSONL candidate file; it
+    **downloads nothing** and is assessment-only. Each candidate is classified as
+    ``approved_for_eval``, ``approved_for_knowledge``, ``needs_review``,
+    ``quarantine``, or ``blocked`` and a deterministic report is printed. No
+    durable state is written unless an explicit ``--out`` path is given, and even
+    then only an assessment report is written — never memory, the source
+    registry, or a proposal. Usage::
+
+        python app/workbench.py data-intake assess --candidate PATH [--out PATH] [--now ISO]
+    """
+    from datetime import datetime
+
+    from agent.data_intake import (
+        assess_candidates,
+        load_candidates,
+        render_intake_assessment_markdown,
+        render_intake_summary_markdown,
+        write_assessment_report,
+    )
+
+    parser = argparse.ArgumentParser(
+        prog="workbench.py data-intake assess",
+        description="Assess external dataset candidates' declared metadata "
+                    "before intake (assessment-only; nothing is downloaded and "
+                    "no durable state is written unless --out is given).")
+    parser.add_argument("subcommand", choices=["assess"],
+                        help="data-intake subcommand")
+    parser.add_argument("--candidate", required=True,
+                        help="path to a JSON or JSONL file of candidate metadata")
+    parser.add_argument("--out", default=None,
+                        help="optional path to write the JSON assessment report "
+                             "(the only durable write; off by default)")
+    parser.add_argument("--now", default=None,
+                        help="optional ISO timestamp used for freshness checks")
+    args = parser.parse_args(argv)
+
+    now = None
+    if args.now:
+        try:
+            now = datetime.fromisoformat(args.now.replace("Z", "+00:00"))
+        except ValueError:
+            print(f"[data-intake] invalid --now timestamp {args.now!r}",
+                  file=sys.stderr)
+            return 2
+
+    candidates = load_candidates(args.candidate)
+    assessments = assess_candidates(candidates, now=now)
+
+    for assessment in assessments:
+        print(render_intake_assessment_markdown(assessment))
+        print()
+    if len(assessments) > 1:
+        print(render_intake_summary_markdown(assessments))
+
+    if args.out:
+        report = assessments[0] if len(assessments) == 1 else assessments
+        path = write_assessment_report(report, args.out)
+        print(f"\n[data-intake] wrote assessment report to {path}")
+    return 0
+
+
+def _hf_data_cli(argv: list[str]) -> int:
+    """Assess Hugging Face-style dataset card metadata via the v6.2 intake lane (v6.3).
+
+    Reads only *declared card metadata* from a local JSON/JSONL file, converts
+    each record to an :class:`ExternalDatasetCandidate`, and runs the existing
+    v6.2 data intake assessment. It is **metadata inspection only**: it downloads
+    no datasets, streams no rows, writes no memory ledger, writes no source
+    registry, and creates no proposal. It writes to disk only when an explicit
+    ``--out`` path is given, and even then writes only the assessment report.
+    Usage::
+
+        python app/workbench.py hf-data assess-metadata --metadata PATH [--out PATH] [--now ISO]
+    """
+    from datetime import datetime
+
+    from agent.data_intake import write_assessment_report
+    from agent.hf_data_adapter import (
+        assess_hf_metadata_records,
+        load_hf_metadata,
+        render_hf_adapter_markdown,
+        render_hf_adapter_summary_markdown,
+    )
+
+    parser = argparse.ArgumentParser(
+        prog="workbench.py hf-data assess-metadata",
+        description="Assess Hugging Face-style dataset card metadata before any "
+                    "download (metadata-only; nothing is downloaded and no "
+                    "durable state is written unless --out is given).")
+    parser.add_argument("subcommand", choices=["assess-metadata"],
+                        help="hf-data subcommand")
+    parser.add_argument("--metadata", required=True,
+                        help="path to a JSON or JSONL Hugging Face metadata file")
+    parser.add_argument("--out", default=None,
+                        help="optional path to write the JSON assessment report "
+                             "(the only durable write; off by default)")
+    parser.add_argument("--now", default=None,
+                        help="optional ISO timestamp used for freshness checks")
+    args = parser.parse_args(argv)
+
+    now = None
+    if args.now:
+        try:
+            now = datetime.fromisoformat(args.now.replace("Z", "+00:00"))
+        except ValueError:
+            print(f"[hf-data] invalid --now timestamp {args.now!r}", file=sys.stderr)
+            return 2
+
+    records = load_hf_metadata(args.metadata)
+    results = assess_hf_metadata_records(records, now=now)
+
+    for result in results:
+        print(render_hf_adapter_markdown(result))
+        print()
+    if len(results) > 1:
+        print(render_hf_adapter_summary_markdown(results))
+
+    if args.out:
+        assessments = [result.assessment for result in results]
+        report = assessments[0] if len(assessments) == 1 else assessments
+        path = write_assessment_report(report, args.out)
+        print(f"\n[hf-data] wrote assessment report to {path}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     argv = sys.argv[1:] if argv is None else argv
     if argv and argv[0] == "value-sprint":
@@ -1607,6 +1735,10 @@ def main(argv: list[str] | None = None) -> int:
         return _memory_proposals_cli(argv[1:])
     if argv and argv[0] == "chat":
         return _chat_cli(argv[1:])
+    if argv and argv[0] == "data-intake":
+        return _data_intake_cli(argv[1:])
+    if argv and argv[0] == "hf-data":
+        return _hf_data_cli(argv[1:])
     parser = argparse.ArgumentParser(description="Concept Memory Workbench v1.1")
     parser.add_argument("--ledger", default=str(_DEFAULT_LEDGER),
                         help="path to the JSONL memory ledger")
