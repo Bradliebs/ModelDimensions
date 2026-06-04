@@ -33,6 +33,9 @@ from typing import List
 
 from .assistant_composer import (
     _CITATION_RE,
+    JUDGEMENT_LABEL,
+    SECTION_FACTUAL,
+    SECTION_JUDGEMENT,
     ComposedAnswer,
     ComposerMode,
     GroundingPackage,
@@ -50,6 +53,10 @@ UNLABELLED_MODEL_PRIOR = "unlabelled_model_prior"
 MODE_MISMATCH = "mode_mismatch"
 DROPPED_STALE_CAUTION = "dropped_stale_caution"
 UNSUPPORTED_SPAN = "unsupported_span"
+# v2.7 consultant-report checks (no-op unless the answer carries a report).
+UNLABELLED_JUDGEMENT = "unlabelled_judgement"
+CITED_JUDGEMENT = "cited_judgement"
+UNSUPPORTED_REPORT_CLAIM = "unsupported_report_claim"
 
 
 @dataclass(frozen=True)
@@ -155,6 +162,36 @@ def check_answer(package: GroundingPackage,
                     UNSUPPORTED_SPAN,
                     f"span {span.text!r} cited to {span.citation_id} is not a "
                     "verbatim substring of that evidence item"))
+
+    # Consultant-report partition (v2.7): the report carrier — not the prose — is
+    # the source of truth for each section's kind. A *factual* section must carry
+    # only citation-bound, verbatim spans; a *judgement* section must be labelled
+    # and contain no citation marker. No-op when ``answer.report`` is None.
+    report = getattr(answer, "report", None)
+    if report is not None:
+        evidence_text = {e.citation_id: e.text for e in package.evidence}
+        for section in report.sections:
+            if section.kind == SECTION_FACTUAL:
+                for span in section.spans:
+                    source = evidence_text.get(span.citation_id)
+                    if source is None or span.text not in source:
+                        violations.append(GuardViolation(
+                            UNSUPPORTED_REPORT_CLAIM,
+                            f"factual section {section.title!r} claim "
+                            f"{span.text!r} cited to {span.citation_id} is not "
+                            "a verbatim substring of that evidence item"))
+            elif section.kind == SECTION_JUDGEMENT:
+                judgement = section.judgement_text or ""
+                if not judgement.startswith(JUDGEMENT_LABEL):
+                    violations.append(GuardViolation(
+                        UNLABELLED_JUDGEMENT,
+                        f"judgement section {section.title!r} is not labelled "
+                        f"with {JUDGEMENT_LABEL!r}"))
+                if _CITATION_RE.search(judgement):
+                    violations.append(GuardViolation(
+                        CITED_JUDGEMENT,
+                        f"judgement section {section.title!r} contains a "
+                        "citation marker; judgement must be uncited"))
 
     verdict = "ACCEPT" if not violations else "REJECT"
     return GuardReport(verdict=verdict, violations=violations)

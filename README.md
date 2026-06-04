@@ -1647,6 +1647,64 @@ to the template, and the value-sprint CLI defaults to `--composer template`.
 | `app/workbench.py` | `value-sprint run --composer {template,extractive}` (default `template`) |
 | `evals/test_extractive_composer.py` | distinct bound spans, verbatim guarantee, guard rejection + safe recomposition, byte-identical non-grounded modes, single-source degradation, and `max_spans_per_item` bounds |
 
+## v2.7 Deterministic consultant-report composer
+
+v2.6 tightened *what* a grounded answer quotes; v2.7 changes *how* it is laid
+out. The opt-in `ConsultantReportComposer` structures the same frozen
+`GroundingPackage` into a nine-section consultant report. It is **not** an
+abstractive report writer and generates no prose of its own beyond fixed
+section scaffolding — it is a deterministic structuring tool that partitions a
+report into two structurally typed section kinds:
+
+* **Factual sections** (`Executive summary`, `Current state`, `Evidence`) are
+  delegated to the v2.6 extractive span selector. They carry only
+  citation-bound, **verbatim** spans — each span is a contiguous substring of
+  the evidence it cites — so the report can never cite a source the template
+  would not. The grounded citation set equals the template's: a value sprint
+  reports an **identical `grounded_count` between template and report runs**.
+* **Judgement sections** (`Risks`, `Options`, `Recommendation`, `Assumptions`,
+  `Open questions`, `Next actions`) are structurally typed, prefixed with the
+  mandatory `[JUDGEMENT — not grounded in evidence]` label, and contain **zero
+  citation markers**. Derived risk / open-question text is sanitised so a
+  citation marker can never leak into a judgement block. The `Recommendation`
+  section never fabricates a conclusion: it **degrades to a labelled
+  placeholder** (`author judgement required`).
+
+The `ReportStructure` carrier on `ComposedAnswer` is the **source of truth for
+section type** — the guard reads each section's `kind`, never the rendered
+prose. After composition the `AnswerGuard` enforces the partition:
+
+* `UNSUPPORTED_REPORT_CLAIM` — a factual span that is not a verbatim substring
+  of its cited evidence;
+* `UNLABELLED_JUDGEMENT` — a judgement section missing the mandatory label;
+* `CITED_JUDGEMENT` — a judgement section containing a citation marker.
+
+`enforce()` recomposes to the safe `TemplateComposer` on any rejection (the
+template answer carries no `report`, so the report checks are a no-op there).
+
+**Limitations (by design).** The composer is extractive-only: it never
+synthesises new factual prose, never generates a grounded recommendation, and
+never uses the SLM for judgement. Judgement sections are scaffolding for a human
+author, not machine-authored analysis. Non-grounded modes (refusal, conflict,
+model-prior, pack-summary) are delegated to the template verbatim
+(byte-identical output); only the recorded `composer_backend` differs.
+
+```text
+workbench> query-assist --report how does pydantic validate input   # opt-in
+workbench> value-sprint run --composer report                       # template is default
+```
+
+The composer is **opt-in everywhere**: `answer_query` defaults to the template,
+and the value-sprint CLI defaults to `--composer template`.
+
+| File | What it adds |
+|---|---|
+| `src/slm/assistant_composer.py` | `ReportSection`, `ReportStructure`, `ComposedAnswer.report`, and `ConsultantReportComposer` (nine-section factual/judgement partition, extractive factual delegation, labelled uncited judgement, placeholder recommendation, template delegation for non-grounded modes) |
+| `src/slm/answer_guard.py` | `UNSUPPORTED_REPORT_CLAIM`, `UNLABELLED_JUDGEMENT`, `CITED_JUDGEMENT` checks driven by the `ReportStructure` carrier (no-op when `report` is `None`) |
+| `src/agent/value_sprint_harness.py` | report metrics on `SprintRow` (`report_factual_section_count`, `report_cited_claim_count`, `report_judgement_block_count`, `report_unlabelled_judgement_count`) and `SprintSummary.report_unlabelled_judgement_count` |
+| `app/workbench.py` | `query-assist --report <text>` and `value-sprint run --composer {template,extractive,report}` (default `template`) |
+| `evals/test_consultant_report_composer.py` | section partition, verbatim+cited factual spans, labelled+uncited judgement, no-drift vs template, guard rejection of unlabelled/cited judgement and unsupported claims with safe recomposition, placeholder recommendation, and byte-identical non-grounded modes |
+
 ## License
 
 To be decided.

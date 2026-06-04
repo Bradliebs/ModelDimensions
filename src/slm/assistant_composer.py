@@ -141,6 +141,60 @@ class AnswerSpan:
         }
 
 
+# Structural section kinds for a consultant report (v2.7). The kind is the
+# *source of truth* for how a section is governed — never inferred by parsing
+# the rendered prose. A "factual" section carries citation-bound spans (verbatim
+# substrings of allowed evidence); a "judgement" section carries labelled,
+# uncited analysis.
+SECTION_FACTUAL = "factual"
+SECTION_JUDGEMENT = "judgement"
+
+# Every judgement block is prefixed with this exact label so it can never be
+# read as a grounded finding. The AnswerGuard requires the label and forbids any
+# citation marker inside a judgement section.
+JUDGEMENT_LABEL = "[JUDGEMENT — not grounded in evidence]"
+
+
+@dataclass(frozen=True)
+class ReportSection:
+    """One section of a consultant report, typed by ``kind``.
+
+    A ``SECTION_FACTUAL`` section carries ``spans`` only: each span is a verbatim
+    substring of the evidence item it cites (the v2.6 invariant). A
+    ``SECTION_JUDGEMENT`` section carries ``judgement_text`` only: labelled,
+    uncited prose. ``kind`` is structural, not derived from the text — the guard
+    reads it from here, never by parsing the rendered report.
+    """
+
+    title: str
+    kind: str  # SECTION_FACTUAL | SECTION_JUDGEMENT
+    spans: List[AnswerSpan] = field(default_factory=list)
+    judgement_text: Optional[str] = None
+
+    def to_dict(self) -> dict:
+        return {
+            "title": self.title,
+            "kind": self.kind,
+            "spans": [s.to_dict() for s in self.spans],
+            "judgement_text": self.judgement_text,
+        }
+
+
+@dataclass(frozen=True)
+class ReportStructure:
+    """The structured carrier for a consultant report.
+
+    Holds the ordered, typed sections. This is the source of truth the guard and
+    the value-sprint metrics read; the rendered ``ComposedAnswer.text`` is a
+    derived view of it, never the other way round.
+    """
+
+    sections: List[ReportSection] = field(default_factory=list)
+
+    def to_dict(self) -> dict:
+        return {"sections": [s.to_dict() for s in self.sections]}
+
+
 @dataclass
 class ComposedAnswer:
     """A rendered answer. Structural fields mirror the package, never the SLM."""
@@ -157,6 +211,10 @@ class ComposedAnswer:
     # template and SLM composers); populated by the extractive composer so each
     # bullet maps to exactly one allowed evidence item.
     spans: List[AnswerSpan] = field(default_factory=list)
+    # Optional structured consultant report (v2.7). ``None`` for every composer
+    # except the consultant report composer, so all report-aware guard checks
+    # and metrics are no-ops on ordinary answers.
+    report: Optional["ReportStructure"] = None
 
     def to_dict(self) -> dict:
         return {
@@ -169,6 +227,7 @@ class ComposedAnswer:
             "refused": self.refused,
             "fell_back": self.fell_back,
             "spans": [s.to_dict() for s in self.spans],
+            "report": self.report.to_dict() if self.report else None,
         }
 
 
@@ -486,4 +545,171 @@ class ExtractiveMultiChunkComposer(AssistantComposer):
         for span in spans:
             tag = f" [{span.source_name}]" if span.source_name else ""
             lines.append(f"  - {span.text}{tag} [{span.citation_id}]")
+        return "\n".join(lines)
+
+
+class ConsultantReportComposer(AssistantComposer):
+    """Opt-in composer that structures grounded evidence as a consultant report.
+
+    This is **not** an abstractive report writer. It is a deterministic
+    *structuring* tool with a hard partition between two section kinds:
+
+    - **factual** sections (Executive summary, Current state, Evidence) are built
+      from citation-bound, verbatim spans — delegated to
+      :class:`ExtractiveMultiChunkComposer`, so every claim is a substring of the
+      evidence it cites and is guard-enforced exactly as in v2.6;
+    - **judgement** sections (Risks, Options, Recommendation, Assumptions, Open
+      questions, Next actions) carry labelled, **uncited** analysis. With no
+      model in the loop the composer never fabricates a conclusion: each
+      judgement block is either mechanically derived from the package
+      (``cautions`` / ``conflict_context``) or degrades to a labelled
+      placeholder. An unsupported recommendation is labelled and uncited, never
+      presented as a grounded finding.
+
+    The :class:`ReportStructure` carrier on the answer is the source of truth for
+    section kind; the rendered prose is a derived view of it. The
+    :class:`~slm.answer_guard.AnswerGuard` reads that carrier — it never infers a
+    section's kind from the text. As with every composer, only ``GROUNDED``
+    answers are reshaped; refusal, conflict, model-prior and pack-summary answers
+    are delegated to the template byte-for-byte.
+    """
+
+    name = "consultant"
+
+    def __init__(self, *, fallback: Optional[TemplateComposer] = None,
+                 extractive: Optional["ExtractiveMultiChunkComposer"] = None):
+        self._template = fallback or TemplateComposer()
+        self._extractive = extractive or ExtractiveMultiChunkComposer(
+            fallback=self._template)
+
+    def compose(self, package: GroundingPackage) -> ComposedAnswer:
+        if package.mode != ComposerMode.GROUNDED:
+            # Non-grounded modes are byte-identical to the template; only the
+            # recorded backend name changes.
+            answer = self._template.compose(package)
+            answer.composer_backend = self.name
+            return answer
+        sections = self._build_sections(package)
+        spans = [span for section in sections
+                 if section.kind == SECTION_FACTUAL for span in section.spans]
+        body = self._render_report(package, sections)
+        text = _append_cautions(body, package)
+        return ComposedAnswer(
+            text=text,
+            mode=package.mode,
+            citations=_citations_for(package),
+            composer_backend=self.name,
+            model_prior_labelled=False,
+            informational_only=package.informational_only,
+            refused=package.refused,
+            fell_back=False,
+            spans=spans,
+            report=ReportStructure(sections=sections),
+        )
+
+    # -- section construction --
+
+    def _build_sections(self, package: GroundingPackage) -> List[ReportSection]:
+        relevant_spans = self._extractive._select_spans(package)
+        evidence_spans = self._evidence_spans(package)
+        return [
+            ReportSection(title="Executive summary", kind=SECTION_FACTUAL,
+                          spans=relevant_spans[:1]),
+            ReportSection(title="Current state", kind=SECTION_FACTUAL,
+                          spans=relevant_spans),
+            ReportSection(title="Evidence", kind=SECTION_FACTUAL,
+                          spans=evidence_spans),
+            ReportSection(title="Risks", kind=SECTION_JUDGEMENT,
+                          judgement_text=self._risks_text(package)),
+            ReportSection(title="Options", kind=SECTION_JUDGEMENT,
+                          judgement_text=self._placeholder("Options")),
+            ReportSection(title="Recommendation", kind=SECTION_JUDGEMENT,
+                          judgement_text=self._recommendation_text(package)),
+            ReportSection(title="Assumptions", kind=SECTION_JUDGEMENT,
+                          judgement_text=self._placeholder("Assumptions")),
+            ReportSection(title="Open questions", kind=SECTION_JUDGEMENT,
+                          judgement_text=self._open_questions_text(package)),
+            ReportSection(title="Next actions", kind=SECTION_JUDGEMENT,
+                          judgement_text=self._placeholder("Next actions")),
+        ]
+
+    def _evidence_spans(self, package: GroundingPackage) -> List[AnswerSpan]:
+        """One leading-sentence span per evidence item, so every allowed source
+        appears at least once. Each span is a verbatim substring of its source.
+        """
+        spans: List[AnswerSpan] = []
+        for item in package.evidence:
+            sentences = _split_sentences(item.text)
+            lead = sentences[0] if sentences else item.text
+            spans.append(AnswerSpan(
+                text=lead,
+                citation_id=item.citation_id,
+                source_name=item.source_name,
+            ))
+        return spans
+
+    # -- judgement construction (labelled, uncited, never fabricated) --
+
+    def _label(self, body: str) -> str:
+        """Prefix a judgement body with the mandatory label and strip any
+        citation marker, so a judgement block can never read as grounded.
+        """
+        return f"{JUDGEMENT_LABEL}\n{_CITATION_RE.sub('', body).strip()}"
+
+    def _placeholder(self, what: str) -> str:
+        return self._label(
+            f"{what} require author judgement; none can be derived from the "
+            "allowed evidence alone.")
+
+    def _risks_text(self, package: GroundingPackage) -> str:
+        notes: List[str] = [f"- {c}" for c in package.cautions]
+        if package.historical_note:
+            notes.append(f"- {package.historical_note}")
+        for item in package.conflict_context:
+            notes.append(
+                "- A near-miss was rejected by the verifier and is not "
+                f"grounded: {item.text}")
+        body = "\n".join(notes) if notes else (
+            "No evidence-derived risks identified; author judgement required.")
+        return self._label(body)
+
+    def _recommendation_text(self, package: GroundingPackage) -> str:
+        # Deterministic and model-free: never fabricate a recommendation. Degrade
+        # to a labelled placeholder; the grounded basis to act on lives in the
+        # factual sections above.
+        return self._label(
+            "No recommendation can be derived from the allowed evidence; author "
+            "judgement required. The factual sections above are evidence-bound "
+            "and may inform that judgement.")
+
+    def _open_questions_text(self, package: GroundingPackage) -> str:
+        notes = [
+            f"- What resolves the rejected near-miss: {item.text}"
+            for item in package.conflict_context
+        ]
+        body = "\n".join(notes) if notes else (
+            "No open questions derived from evidence; author judgement "
+            "required.")
+        return self._label(body)
+
+    # -- rendering --
+
+    def _render_report(self, package: GroundingPackage,
+                       sections: List[ReportSection]) -> str:
+        lead = ("Consultant report (deterministic; factual sections are "
+                "evidence-bound, judgement sections are labelled and uncited):")
+        if package.informational_only:
+            lead = "Informational only (not professional advice). " + lead
+        lines = [lead]
+        for section in sections:
+            lines.append("")
+            lines.append(f"## {section.title}")
+            if section.kind == SECTION_FACTUAL:
+                if not section.spans:
+                    lines.append("  (no grounded evidence for this section)")
+                for span in section.spans:
+                    tag = f" [{span.source_name}]" if span.source_name else ""
+                    lines.append(f"  - {span.text}{tag} [{span.citation_id}]")
+            else:
+                lines.append(section.judgement_text or "")
         return "\n".join(lines)

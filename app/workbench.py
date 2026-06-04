@@ -220,6 +220,7 @@ Commands:
   query-all <text>      query memory and knowledge, kept clearly separated
   query-assist <text>   compose a readable answer over the audit (template)
   query-assist --slm <text>  same, using the optional local SLM (falls back safely)
+  query-assist --report <text>  same, structured as a deterministic consultant report
   backend               show the active knowledge retrieval backend
   packs                 list project packs (isolated workspaces)
   pack-create <name>    create a new project pack
@@ -627,15 +628,21 @@ def _repl(service: WorkbenchService,
             print(_format_combined(service.query_all(arg)))
         elif cmd in {"query-assist", "query_assist"}:
             use_slm = False
+            composer = None
             text = arg
             if text.startswith("--slm"):
                 use_slm = True
                 text = text[len("--slm"):].strip()
+            elif text.startswith("--report"):
+                from slm.assistant_composer import ConsultantReportComposer
+                composer = ConsultantReportComposer()
+                text = text[len("--report"):].strip()
             if not text:
-                print("  usage: query-assist [--slm] <text>")
+                print("  usage: query-assist [--slm|--report] <text>")
                 continue
             print(_format_assistant(
-                service.answer_query(text, use_slm=use_slm)))
+                service.answer_query(text, use_slm=use_slm,
+                                     composer=composer)))
         elif cmd == "backend":
             name = service.knowledge_backend_name()
             print(f"  knowledge retrieval backend = {name}")
@@ -937,7 +944,10 @@ def _build_sprint_service(pack_name: str, backend: str, *, seed: bool):
 
 def _value_sprint_cli(argv: list[str]) -> int:
     from agent import value_sprint_harness as vsh
-    from slm.assistant_composer import ExtractiveMultiChunkComposer
+    from slm.assistant_composer import (
+        ConsultantReportComposer,
+        ExtractiveMultiChunkComposer,
+    )
 
     parser = argparse.ArgumentParser(
         prog="workbench.py value-sprint",
@@ -951,10 +961,13 @@ def _value_sprint_cli(argv: list[str]) -> int:
                      choices=["deterministic", "hybrid"],
                      help="knowledge retrieval backend (default deterministic)")
     run.add_argument("--composer", default="template",
-                     choices=["template", "extractive"],
+                     choices=["template", "extractive", "report"],
                      help="answer composer: 'template' echoes whole chunks "
                           "(default); 'extractive' quotes the most relevant "
-                          "verbatim span from each source")
+                          "verbatim span from each source; 'report' structures "
+                          "the evidence as a deterministic consultant report "
+                          "(factual sections cited, judgement sections "
+                          "labelled and uncited)")
     run.add_argument("--queries", default=str(_VALUE_SPRINT_QUERIES),
                      help="path to the value sprint query JSONL")
     run.add_argument("--no-seed", dest="seed", action="store_false",
@@ -987,8 +1000,12 @@ def _value_sprint_cli(argv: list[str]) -> int:
     if args.action == "run":
         service = _build_sprint_service(args.pack, args.backend, seed=args.seed)
         queries = vsh.load_queries(args.queries)
-        composer = (ExtractiveMultiChunkComposer()
-                    if args.composer == "extractive" else None)
+        if args.composer == "extractive":
+            composer = ExtractiveMultiChunkComposer()
+        elif args.composer == "report":
+            composer = ConsultantReportComposer()
+        else:
+            composer = None
         rows = vsh.run_sprint(service, queries, retrieval_backend=args.backend,
                               composer=composer)
         summary = vsh.summarize(rows)
@@ -1006,6 +1023,11 @@ def _value_sprint_cli(argv: list[str]) -> int:
         print(f"[value-sprint] composer={args.composer} "
               f"multi-source-grounded={summary.multi_source_grounded_count} "
               f"spans={sum(r.span_count for r in rows)}")
+        if args.composer == "report":
+            print("[value-sprint] "
+                  f"report-cited-claims={sum(r.report_cited_claim_count for r in rows)} "
+                  f"report-judgement-blocks={sum(r.report_judgement_block_count for r in rows)} "
+                  f"unlabelled-judgement={summary.report_unlabelled_judgement_count}")
         print(f"[value-sprint] wrote {args.out_md}")
         print(f"[value-sprint] wrote {args.out_jsonl}")
         if args.emit_proposals:

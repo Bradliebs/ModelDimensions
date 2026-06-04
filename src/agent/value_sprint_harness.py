@@ -42,7 +42,13 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import List, Optional
 
-from slm.assistant_composer import AssistantComposer, ComposerMode
+from slm.assistant_composer import (
+    JUDGEMENT_LABEL,
+    SECTION_FACTUAL,
+    SECTION_JUDGEMENT,
+    AssistantComposer,
+    ComposerMode,
+)
 
 from .memory_proposals import MemoryProposal, ProposalKind, ProposalStatus
 from .workbench_service import WorkbenchService
@@ -169,6 +175,15 @@ class SprintRow:
     # whole-chunk template composer; >=1 per source for the extractive one).
     synthesis_breadth: int = 0
     span_count: int = 0
+    # v2.7 consultant-report measurement. All 0 unless the report composer ran.
+    # ``report_factual_section_count`` / ``report_judgement_block_count`` are
+    # the section partition; ``report_cited_claim_count`` is the number of
+    # citation-bound spans across factual sections; ``report_unlabelled_
+    # judgement_count`` is an integrity counter that must stay 0.
+    report_factual_section_count: int = 0
+    report_cited_claim_count: int = 0
+    report_judgement_block_count: int = 0
+    report_unlabelled_judgement_count: int = 0
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -191,6 +206,9 @@ class SprintSummary:
     # v2.6: grounded answers that draw on >=2 distinct sources — the queries an
     # extractive multi-chunk composer can synthesise rather than echo.
     multi_source_grounded_count: int = 0
+    # v2.7 integrity counter: judgement blocks emitted without the mandatory
+    # label, summed across rows. Must be 0 — the guard rejects any such answer.
+    report_unlabelled_judgement_count: int = 0
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -361,6 +379,24 @@ def emit_memory_proposals(rows: List["SprintRow"], *,
     return added
 
 
+def _report_metrics(report) -> tuple[int, int, int, int]:
+    """Derive consultant-report metrics from an answer's report carrier.
+
+    Returns ``(factual_section_count, cited_claim_count, judgement_block_count,
+    unlabelled_judgement_count)``. All zeros when ``report`` is None (every
+    non-report answer), so the metrics are inert outside report mode.
+    """
+    if report is None:
+        return (0, 0, 0, 0)
+    factual = [s for s in report.sections if s.kind == SECTION_FACTUAL]
+    judgement = [s for s in report.sections if s.kind == SECTION_JUDGEMENT]
+    cited_claims = sum(len(s.spans) for s in factual)
+    unlabelled = sum(
+        1 for s in judgement
+        if not (s.judgement_text or "").startswith(JUDGEMENT_LABEL))
+    return (len(factual), cited_claims, len(judgement), unlabelled)
+
+
 def run_query(service: WorkbenchService, spec: SprintQuery, *,
               retrieval_backend: str,
               composer: Optional[AssistantComposer] = None) -> SprintRow:
@@ -406,6 +442,9 @@ def run_query(service: WorkbenchService, spec: SprintQuery, *,
         snippet = snippet[:157] + "..."
     synthesis_breadth = citations if grounded else 0
     span_count = len(getattr(result.answer, "spans", None) or [])
+    (report_factual_section_count, report_cited_claim_count,
+     report_judgement_block_count, report_unlabelled_judgement_count) = (
+        _report_metrics(getattr(result.answer, "report", None)))
 
     return SprintRow(
         query=spec.query,
@@ -431,6 +470,10 @@ def run_query(service: WorkbenchService, spec: SprintQuery, *,
         rejected_reason=rejected_reason,
         synthesis_breadth=synthesis_breadth,
         span_count=span_count,
+        report_factual_section_count=report_factual_section_count,
+        report_cited_claim_count=report_cited_claim_count,
+        report_judgement_block_count=report_judgement_block_count,
+        report_unlabelled_judgement_count=report_unlabelled_judgement_count,
     )
 
 
@@ -463,6 +506,8 @@ def summarize(rows: List[SprintRow]) -> SprintSummary:
             if _row_expectation_met(r)),
         multi_source_grounded_count=sum(
             1 for r in rows if grounded(r) and r.synthesis_breadth >= 2),
+        report_unlabelled_judgement_count=sum(
+            r.report_unlabelled_judgement_count for r in rows),
     )
 
 
