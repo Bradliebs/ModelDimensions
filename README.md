@@ -2195,6 +2195,75 @@ python app/workbench.py source-registry proposal-review review srcprop-xxxxxxxxx
 | `app/workbench.py` | the `source-registry proposal-review {import-proposals,list,review}` CLI group (writes only the `--queue` file) |
 | `evals/test_source_registry_review_queue.py` | proposals import as pending, idempotent re-import, deterministic list/CLI, every allowed transition, invalid transitions failing cleanly, approved-not-applied, `applied` staying false, review writing only the queue file, registry byte-identical, `save_registry` never called, knowledge sources unchanged, no MemoryLedger writes, and v3.0 eval + v2.7 report contracts unchanged alongside review |
 
+## v5.0 Memory proposal quality (typed, evidence-bound, approval-gated)
+
+v5.0 raises the **quality** of candidate memory proposals so a human reviewer
+sees typed, evidence-bound, reviewable claims that are clearly separated from
+non-approvable junk. It is **proposal-quality only**: it writes nothing to the
+`MemoryLedger`, auto-approves nothing, and changes no retrieval, ranking,
+source-selection, grounding, or composer behaviour. A proposal becomes a real
+memory only when a human approves it and the workbench writes it through the
+frozen v1.0 `add_memory` path — a step v5.0 never performs.
+
+Earlier v2.5B memory proposals were safe but sometimes low-value placeholders or
+operator-task text rather than approvable factual claims. v5.0 fixes that by
+classifying every candidate into a **type**, binding factual claims to evidence,
+and surfacing everything else with an explicit reason instead of dropping it.
+
+**Proposal types.** The first four are *factual memory* (could become durable
+memory once a human approves). `TODO` / `OPEN_QUESTION` / `SOURCE_GAP` are valid
+and reviewable but deliberately **not** factual memory. `INVALID_CANDIDATE` is
+never approvable — it is how non-claims are surfaced *with a reason*.
+
+| type | factual memory? | evidence required? | approvable as memory? |
+|---|---|---|---|
+| `FACT` | yes | yes | yes (when supported) |
+| `DECISION` | yes | yes | yes (when evidenced) |
+| `PROJECT_STATE` | yes | yes | yes (when evidenced) |
+| `USER_PREFERENCE` | yes | no | yes (stable preference) |
+| `TODO` | no | no | no (tracked action item) |
+| `OPEN_QUESTION` | no | no | no (unresolved question) |
+| `SOURCE_GAP` | no | no | no (missing-evidence note) |
+| `INVALID_CANDIDATE` | no | n/a | no (vague / operator-task / unsupported) |
+
+**Classification rules** (deterministic, signal-based — lexical markers plus an
+evidence-binding check, not semantic):
+
+- `FACT` is a supported factual claim; `DECISION` records a decision already
+  evidenced; `PROJECT_STATE` describes current project/repo state with evidence.
+  All three are downgraded to `INVALID_CANDIDATE` when no evidence source and
+  supporting text are bound.
+- `USER_PREFERENCE` is a stable, reusable preference; it is approvable without a
+  document citation.
+- `TODO` is an action item, `OPEN_QUESTION` is unresolved, `SOURCE_GAP` flags
+  missing evidence — none is stored as truth.
+- `INVALID_CANDIDATE` covers vague/placeholder text, operator/agent instructions
+  (e.g. *"commit and push and run pytest"*), and unsupported assertions. These
+  are **surfaced with a reason, never silently discarded**, and are never
+  approvable as memory.
+
+Every proposal carries `requires_human_approval = True` and `status =
+"proposed"`. Proposal ids (`memprop-…`) are deterministic and stable across
+reclassification (the id excludes the type), and rendering/export are
+deterministic. The only file this slice writes is the explicit proposal export
+passed to `--out`; the memory ledger and bank are never touched (the module
+imports no ledger/bank write path at all).
+
+```text
+# review the typed proposals (deterministic Markdown; nothing written)
+python app/workbench.py memory-proposals list demos/memory_proposal_candidates.jsonl
+
+# build them and export as JSONL (the only file written; never the ledger)
+python app/workbench.py memory-proposals build demos/memory_proposal_candidates.jsonl --out reports/memory_proposals.jsonl
+```
+
+| File | What it adds |
+|---|---|
+| `src/agent/memory_proposal_quality.py` | `MemoryProposalType` constants + type sets, frozen `RawMemoryCandidate` / `MemoryProposalQuality`, the deterministic `classify_candidate` / `build_proposal` / `build_memory_proposals`, predicates (`is_factual_memory_type`, `is_tracked_non_factual_type`, `is_approvable_as_memory`), and deterministic load / render / JSONL-export / `write_memory_proposals` (the only writer; never the ledger) |
+| `demos/memory_proposal_candidates.jsonl` | a 10-candidate seed covering every type, including the three `INVALID_CANDIDATE` sub-reasons (vague, operator-task, unsupported) |
+| `app/workbench.py` | the `memory-proposals {list,build}` CLI group (writes only the `--out` file) |
+| `evals/test_memory_proposal_quality.py` | typed classification, evidence-bound facts/decisions/project-state, preferences approvable without evidence, vague/operator/unsupported → `INVALID_CANDIDATE` with a reason, deterministic ids/render/export, always `requires_human_approval` / `proposed`, no MemoryLedger write (spy + import purity), and the v3.0 retrieval path unchanged alongside proposal building |
+
 ## License
 
 To be decided.

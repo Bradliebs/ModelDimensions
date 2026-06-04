@@ -244,6 +244,8 @@ Commands:
   source-registry proposal-review import-proposals <proposals.jsonl> [--queue path]  queue proposals for review (review-state only; not applied)
   source-registry proposal-review list [--queue path]  list proposal review state (read-only)
   source-registry proposal-review review <id> --status approved|rejected|deferred [--note t] [--reviewer r] [--queue path]  record a review decision (approved != applied)
+  memory-proposals list [candidates.jsonl]  show typed, evidence-bound memory proposals for review (read-only; no memory written)
+  memory-proposals build [candidates.jsonl] [--out path]  build typed memory proposals (markdown, or JSONL via --out; no memory written)
   hf-inspect <dataset_id>  preview a Hugging Face dataset's licence/decision
   hf-import <dataset_id> --pack <pack>  import a small governed HF sample
   demo                  run the Friday -> Monday near-miss example
@@ -1066,6 +1068,7 @@ _RETRIEVAL_REPORT_PATH_CASES = ROOT / "demos" / "retrieval_report_path_cases.jso
 _RETRIEVAL_HARDCORPUS_CASES = ROOT / "demos" / "retrieval_hardcorpus_cases.jsonl"
 _SOURCE_REGISTRY_DEFAULT = ROOT / "demos" / "source_registry.jsonl"
 _PROPOSAL_QUEUE_DEFAULT = ROOT / "reports" / "source_proposal_review_queue.jsonl"
+_MEMORY_CANDIDATES_DEFAULT = ROOT / "demos" / "memory_proposal_candidates.jsonl"
 
 def _retrieval_eval_cli(argv: list[str]) -> int:
     """Run the v3.0 retrieval evaluation harness (read-only, measurement only).
@@ -1339,6 +1342,53 @@ def _proposal_review_cli(argv: list[str]) -> int:
     return 0
 
 
+def _memory_proposals_cli(argv: list[str]) -> int:
+    """Build typed, evidence-bound memory proposals for review (v5.0).
+
+    ``list`` prints a deterministic Markdown review of the candidates (typed,
+    with an approvable flag and any invalid reason); ``build`` builds proposals
+    and either prints them as Markdown or, with ``--out``, writes them as JSONL.
+    This is proposal-quality only: candidates are classified and scored but no
+    memory is ever written. Every proposal requires human approval, and
+    vague/operator-task/unsupported candidates are surfaced as
+    ``INVALID_CANDIDATE`` (never approvable, never silently dropped). The memory
+    ledger is never touched, and no retrieval/ranking/grounding/composer/source
+    behaviour is changed.
+    """
+    from agent import memory_proposal_quality as mpq
+
+    parser = argparse.ArgumentParser(
+        prog="workbench.py memory-proposals",
+        description="Build typed, evidence-bound memory proposals for human "
+                    "review (proposal-quality only; no memory is written).")
+    parser.add_argument(
+        "action", choices=["list", "build"],
+        help="list the typed proposals as Markdown, or build them (Markdown by "
+             "default, or JSONL with --out)")
+    parser.add_argument(
+        "candidates", nargs="?", default=str(_MEMORY_CANDIDATES_DEFAULT),
+        help="path to the raw memory-candidate JSONL")
+    parser.add_argument("--out", default=None,
+                        help="for 'build': write proposals to this JSONL file "
+                             "instead of printing them (the only file this "
+                             "command may write; never the memory ledger)")
+    args = parser.parse_args(argv)
+
+    candidates = mpq.load_memory_candidates(args.candidates)
+    proposals = mpq.build_memory_proposals(candidates)
+
+    if args.action == "build" and args.out:
+        mpq.write_memory_proposals(proposals, args.out)
+        approvable = sum(1 for p in proposals if mpq.is_approvable_as_memory(p))
+        print(f"[memory-proposals] wrote {len(proposals)} proposal(s) to "
+              f"{args.out} ({approvable} approvable as memory; no memory "
+              f"written; all require human approval)")
+        return 0
+
+    print(mpq.render_memory_proposals_markdown(proposals))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     argv = sys.argv[1:] if argv is None else argv
     if argv and argv[0] == "value-sprint":
@@ -1347,6 +1397,8 @@ def main(argv: list[str] | None = None) -> int:
         return _retrieval_eval_cli(argv[1:])
     if argv and argv[0] == "source-registry":
         return _source_registry_cli(argv[1:])
+    if argv and argv[0] == "memory-proposals":
+        return _memory_proposals_cli(argv[1:])
     parser = argparse.ArgumentParser(description="Concept Memory Workbench v1.1")
     parser.add_argument("--ledger", default=str(_DEFAULT_LEDGER),
                         help="path to the JSONL memory ledger")
