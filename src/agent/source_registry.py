@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
@@ -920,3 +920,328 @@ def write_proposals(proposals: List[SourceUpdateProposal],
     out_path = Path(path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(proposals_to_jsonl(proposals), encoding="utf-8")
+
+
+# -----------------------------------------------------------------------------
+# v4.3 — Source proposal review queue (review-state only; approved != applied)
+# -----------------------------------------------------------------------------
+# This layer lets a human triage the v4.2 maintenance proposals — marking each
+# approved, rejected, or deferred — WITHOUT applying anything. It is strictly
+# review-state management:
+#
+#   * it mutates NO registry file (``save_registry`` is still the only registry
+#     writer, and is never called from here),
+#   * it mutates NO source/knowledge file and writes NO memory ledger,
+#   * it changes NO retrieval/ranking/source-selection/grounding/composer
+#     behaviour, and
+#   * ``applied`` is always ``False`` and ``applied_at`` always ``None`` in
+#     v4.3 — **approved does not mean applied.** A proposal may be approved for
+#     future action, but v4.3 never performs that action.
+#
+# The only file this layer writes is the explicit review-queue JSONL passed to
+# :func:`save_review_queue` (used by import and review). Every queue entry keeps
+# a full ``proposal_snapshot`` so a review is auditable on its own.
+
+
+class ReviewStatus:
+    """Stable string codes for where a proposal sits in human review."""
+
+    PENDING = "pending"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+    DEFERRED = "deferred"
+
+
+_REVIEW_STATUSES = frozenset({
+    ReviewStatus.PENDING, ReviewStatus.APPROVED,
+    ReviewStatus.REJECTED, ReviewStatus.DEFERRED,
+})
+
+# Allowed review-status transitions. ``approved`` and ``rejected`` are terminal
+# in v4.3 — no reopen step is implemented, so a rejected proposal never silently
+# becomes approved, and an approved proposal never means applied. Re-opening a
+# settled decision would be a separate, explicit future step.
+_ALLOWED_REVIEW_TRANSITIONS: Dict[str, frozenset] = {
+    ReviewStatus.PENDING: frozenset({
+        ReviewStatus.APPROVED, ReviewStatus.REJECTED, ReviewStatus.DEFERRED}),
+    ReviewStatus.DEFERRED: frozenset({
+        ReviewStatus.APPROVED, ReviewStatus.REJECTED}),
+    ReviewStatus.APPROVED: frozenset(),
+    ReviewStatus.REJECTED: frozenset(),
+}
+
+
+def review_status_transition_allowed(current: str, new: str) -> bool:
+    """Whether ``current -> new`` is a permitted review transition (pure)."""
+    return new in _ALLOWED_REVIEW_TRANSITIONS.get(current, frozenset())
+
+
+@dataclass(frozen=True)
+class SourceProposalReview:
+    """One review record for one v4.2 proposal. Review-state only; inert.
+
+    It records a human's *decision* about a proposal — approve, reject, defer —
+    and never the application of that decision. ``applied`` is always ``False``
+    and ``applied_at`` always ``None`` in v4.3: approving a proposal authorises a
+    future change, it does not make one. ``proposal_snapshot`` keeps the full
+    originating proposal so the queue is auditable without the registry.
+    """
+
+    proposal_id: str
+    source_id: str
+    proposal_type: str
+    finding_code: str
+    review_status: str = ReviewStatus.PENDING
+    reviewer: str = ""
+    reviewed_at: Optional[str] = None
+    review_note: str = ""
+    applied: bool = False
+    applied_at: Optional[str] = None
+    proposal_snapshot: dict = field(default_factory=dict)
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+
+    def to_dict(self) -> dict:
+        return {
+            "proposal_id": self.proposal_id,
+            "source_id": self.source_id,
+            "proposal_type": self.proposal_type,
+            "finding_code": self.finding_code,
+            "review_status": self.review_status,
+            "reviewer": self.reviewer,
+            "reviewed_at": self.reviewed_at,
+            "review_note": self.review_note,
+            "applied": self.applied,
+            "applied_at": self.applied_at,
+            "proposal_snapshot": self.proposal_snapshot,
+            "created_at": self.created_at,
+            "updated_at": self.updated_at,
+            "_record": "source_proposal_review",
+        }
+
+    def to_json(self) -> str:
+        return json.dumps(self.to_dict(), ensure_ascii=False)
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "SourceProposalReview":
+        return cls(
+            proposal_id=str(data["proposal_id"]),
+            source_id=str(data.get("source_id", "")),
+            proposal_type=str(data.get("proposal_type", "")),
+            finding_code=str(data.get("finding_code", "")),
+            review_status=str(data.get("review_status", ReviewStatus.PENDING)),
+            reviewer=str(data.get("reviewer", "")),
+            reviewed_at=data.get("reviewed_at"),
+            review_note=str(data.get("review_note", "")),
+            applied=bool(data.get("applied", False)),
+            applied_at=data.get("applied_at"),
+            proposal_snapshot=dict(data.get("proposal_snapshot") or {}),
+            created_at=data.get("created_at"),
+            updated_at=data.get("updated_at"),
+        )
+
+    @classmethod
+    def pending_from_proposal(cls, proposal: dict, *,
+                              created_at: Optional[str] = None,
+                              ) -> "SourceProposalReview":
+        """Build a fresh ``pending`` review from a proposal dict (snapshot kept)."""
+        return cls(
+            proposal_id=str(proposal["proposal_id"]),
+            source_id=str(proposal.get("source_id", "")),
+            proposal_type=str(proposal.get("proposal_type", "")),
+            finding_code=str(proposal.get("finding_code", "")),
+            review_status=ReviewStatus.PENDING,
+            proposal_snapshot=dict(proposal),
+            created_at=created_at,
+            updated_at=created_at,
+        )
+
+
+# -- queue load / save --------------------------------------------------------
+
+def load_proposal_dicts(path: str | Path) -> List[dict]:
+    """Load v4.2 proposal records (raw dicts) from a JSONL file (pure read).
+
+    ``#`` lines are comments. This reads proposals so they can be queued for
+    review; it touches nothing else.
+    """
+    dicts: List[dict] = []
+    for line in Path(path).read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        dicts.append(json.loads(line))
+    return dicts
+
+
+def load_review_queue(path: str | Path) -> List[SourceProposalReview]:
+    """Load the review queue from JSONL (a missing file is an empty queue).
+
+    A pure read: ``#`` lines are comments, and absence of the file simply means
+    no proposals have been imported yet.
+    """
+    p = Path(path)
+    if not p.exists():
+        return []
+    reviews: List[SourceProposalReview] = []
+    for line in p.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        reviews.append(SourceProposalReview.from_dict(json.loads(line)))
+    return reviews
+
+
+def _sorted_queue(reviews) -> List[SourceProposalReview]:
+    """Deterministic queue order: by ``proposal_id``."""
+    return sorted(reviews, key=lambda r: r.proposal_id)
+
+
+def save_review_queue(reviews: List[SourceProposalReview],
+                      path: str | Path) -> None:
+    """Write the review queue to JSONL (sorted by proposal_id; deterministic).
+
+    This is the **only** writer in the review layer. It touches *only* the queue
+    path — never the registry (``save_registry`` stays the sole registry writer
+    and is not called here) and never any source or memory file.
+    """
+    out = Path(path)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    with out.open("w", encoding="utf-8") as handle:
+        for review in _sorted_queue(reviews):
+            handle.write(review.to_json() + "\n")
+
+
+# -- queue operations (all pure; persistence is the caller's explicit save) ---
+
+def import_proposals_to_queue(proposals: List[dict],
+                              existing: List[SourceProposalReview], *,
+                              created_at: Optional[str] = None,
+                              ) -> List[SourceProposalReview]:
+    """Merge proposal dicts into a review queue as ``pending`` records.
+
+    Idempotent: existing reviews are preserved unchanged (keyed by
+    ``proposal_id``), and only proposals whose id is not already queued are
+    added. Deterministic: returns the merged queue sorted by ``proposal_id``, so
+    re-importing the same proposals is a no-op and saves byte-identically. Pure —
+    it writes nothing.
+    """
+    by_id = {r.proposal_id: r for r in existing}
+    for proposal in proposals:
+        pid = str(proposal["proposal_id"])
+        if pid in by_id:
+            continue
+        by_id[pid] = SourceProposalReview.pending_from_proposal(
+            proposal, created_at=created_at)
+    return _sorted_queue(by_id.values())
+
+
+def review_proposal(review: SourceProposalReview, new_status: str, *,
+                    reviewer: Optional[str] = None,
+                    note: Optional[str] = None,
+                    reviewed_at: Optional[str] = None,
+                    updated_at: Optional[str] = None,
+                    ) -> SourceProposalReview:
+    """Return a new review with ``new_status`` applied (review-state only).
+
+    Validates the transition against :data:`_ALLOWED_REVIEW_TRANSITIONS` and
+    raises ``ValueError`` cleanly on an unknown or disallowed status — the input
+    review (frozen) is never mutated, so a failed transition leaves state intact.
+    ``applied``/``applied_at`` are held at ``False``/``None``: **approved does not
+    mean applied** in v4.3.
+    """
+    if new_status not in _REVIEW_STATUSES:
+        raise ValueError(f"unknown review status {new_status!r}")
+    if not review_status_transition_allowed(review.review_status, new_status):
+        raise ValueError(
+            f"invalid review transition {review.review_status!r} -> "
+            f"{new_status!r} for proposal {review.proposal_id}")
+    return replace(
+        review,
+        review_status=new_status,
+        reviewer=review.reviewer if reviewer is None else reviewer,
+        reviewed_at=review.reviewed_at if reviewed_at is None else reviewed_at,
+        review_note=review.review_note if note is None else note,
+        updated_at=review.updated_at if updated_at is None else updated_at,
+        applied=False,
+        applied_at=None,
+    )
+
+
+def apply_review_to_queue(reviews: List[SourceProposalReview], proposal_id: str,
+                          new_status: str, *, reviewer: Optional[str] = None,
+                          note: Optional[str] = None,
+                          reviewed_at: Optional[str] = None,
+                          updated_at: Optional[str] = None,
+                          ) -> List[SourceProposalReview]:
+    """Apply a review transition to one queued proposal, returning a new queue.
+
+    Pure: builds a new list (same membership), replacing only the targeted
+    review and re-sorting deterministically. Raises ``ValueError`` if
+    ``proposal_id`` is not queued. Writes nothing — persistence is the caller's
+    explicit :func:`save_review_queue`.
+    """
+    found = False
+    updated: List[SourceProposalReview] = []
+    for review in reviews:
+        if review.proposal_id == proposal_id:
+            updated.append(review_proposal(
+                review, new_status, reviewer=reviewer, note=note,
+                reviewed_at=reviewed_at, updated_at=updated_at))
+            found = True
+        else:
+            updated.append(review)
+    if not found:
+        raise ValueError(f"no review for proposal_id {proposal_id!r}")
+    return _sorted_queue(updated)
+
+
+def render_review_queue_markdown(reviews: List[SourceProposalReview]) -> str:
+    """Render a deterministic Markdown view of the review queue. No side effects.
+
+    Output depends only on the (deterministically sorted) reviews, so the same
+    queue renders identical text every time. Nothing is written.
+    """
+    counts: Dict[str, int] = {}
+    for r in reviews:
+        counts[r.review_status] = counts.get(r.review_status, 0) + 1
+    ordered = _sorted_queue(reviews)
+
+    lines: List[str] = []
+    lines.append("# Source proposal review queue")
+    lines.append("")
+    lines.append("Human review state for source-update proposals (v4.3). "
+                 "Reviewing records a decision only: **approved does not mean "
+                 "applied** — nothing here changes the registry, source files, "
+                 "retrieval, ranking, grounding, or memory. `applied` stays "
+                 "false in v4.3.")
+    lines.append("")
+    lines.append(f"- reviews: {len(ordered)}")
+    applied_n = sum(1 for r in ordered if r.applied)
+    lines.append(f"- applied: {applied_n} (always 0 in v4.3)")
+    lines.append("")
+
+    lines.append("## Summary by status")
+    lines.append("")
+    if counts:
+        for status in sorted(counts):
+            lines.append(f"- {status}: {counts[status]}")
+    else:
+        lines.append("- (no reviews)")
+    lines.append("")
+
+    lines.append("## Reviews")
+    lines.append("")
+    if ordered:
+        lines.append("| review_status | proposal_id | source_id | "
+                     "proposal_type | finding_code | applied |")
+        lines.append("|---|---|---|---|---|---|")
+        for r in ordered:
+            lines.append(
+                f"| {r.review_status} | {r.proposal_id} | {r.source_id} | "
+                f"{r.proposal_type} | {r.finding_code} | "
+                f"{str(r.applied).lower()} |")
+    else:
+        lines.append("No reviews — import proposals to populate the queue.")
+    lines.append("")
+    return "\n".join(lines)

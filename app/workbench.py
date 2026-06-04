@@ -241,6 +241,9 @@ Commands:
   source-registry inspect <id> [--registry path]  show one source's metadata (read-only)
   source-registry audit [--registry path]  report source lifecycle/metadata risk (read-only)
   source-registry propose-updates [--registry path] [--out path]  generate source-maintenance proposals (read-only; not applied)
+  source-registry proposal-review import-proposals <proposals.jsonl> [--queue path]  queue proposals for review (review-state only; not applied)
+  source-registry proposal-review list [--queue path]  list proposal review state (read-only)
+  source-registry proposal-review review <id> --status approved|rejected|deferred [--note t] [--reviewer r] [--queue path]  record a review decision (approved != applied)
   hf-inspect <dataset_id>  preview a Hugging Face dataset's licence/decision
   hf-import <dataset_id> --pack <pack>  import a small governed HF sample
   demo                  run the Friday -> Monday near-miss example
@@ -1062,7 +1065,7 @@ _RETRIEVAL_EVAL_CASES = ROOT / "demos" / "retrieval_eval_cases.jsonl"
 _RETRIEVAL_REPORT_PATH_CASES = ROOT / "demos" / "retrieval_report_path_cases.jsonl"
 _RETRIEVAL_HARDCORPUS_CASES = ROOT / "demos" / "retrieval_hardcorpus_cases.jsonl"
 _SOURCE_REGISTRY_DEFAULT = ROOT / "demos" / "source_registry.jsonl"
-
+_PROPOSAL_QUEUE_DEFAULT = ROOT / "reports" / "source_proposal_review_queue.jsonl"
 
 def _retrieval_eval_cli(argv: list[str]) -> int:
     """Run the v3.0 retrieval evaluation harness (read-only, measurement only).
@@ -1200,6 +1203,9 @@ def _source_registry_cli(argv: list[str]) -> int:
     """
     from agent import source_registry as sr
 
+    if argv and argv[0] == "proposal-review":
+        return _proposal_review_cli(argv[1:])
+
     parser = argparse.ArgumentParser(
         prog="workbench.py source-registry",
         description="Inspect source metadata (read-only). The registry annotates "
@@ -1249,6 +1255,87 @@ def _source_registry_cli(argv: list[str]) -> int:
               file=sys.stderr)
         return 1
     print(sr.render_entry_markdown(entry, entries))
+    return 0
+
+
+def _proposal_review_cli(argv: list[str]) -> int:
+    """Triage v4.2 source-update proposals (review-state only; v4.3).
+
+    ``import-proposals <proposals_jsonl>`` creates ``pending`` review records
+    (idempotent: duplicate proposal_ids are skipped); ``list`` prints a
+    deterministic queue view; ``review <proposal_id> --status ...`` records an
+    approve/reject/defer decision. Each command writes at most the one review
+    queue file: the registry and source files are never modified, no memory
+    ledger is written, and no retrieval/ranking/grounding/composer behaviour is
+    touched. **Approved does not mean applied** — ``applied`` stays false in
+    v4.3 and nothing is applied automatically.
+    """
+    from agent import source_registry as sr
+
+    parser = argparse.ArgumentParser(
+        prog="workbench.py source-registry proposal-review",
+        description="Review source-update proposals (review-state only; "
+                    "approved != applied; nothing is applied).")
+    parser.add_argument(
+        "subaction", choices=["list", "review", "import-proposals"],
+        help="list the queue, review one proposal, or import proposals as "
+             "pending review records")
+    parser.add_argument(
+        "target", nargs="?", default=None,
+        help="proposal_id (for 'review') or proposals JSONL path (for "
+             "'import-proposals')")
+    parser.add_argument("--queue", default=str(_PROPOSAL_QUEUE_DEFAULT),
+                        help="path to the review queue JSONL (the only file "
+                             "these commands may write)")
+    parser.add_argument("--status",
+                        choices=["approved", "rejected", "deferred"],
+                        default=None, help="for 'review': the decision to record")
+    parser.add_argument("--note", default=None,
+                        help="for 'review': an optional review note")
+    parser.add_argument("--reviewer", default=None,
+                        help="for 'review': who recorded the decision")
+    parser.add_argument("--reviewed-at", default=None, dest="reviewed_at",
+                        help="for 'review': an explicit ISO review timestamp")
+    args = parser.parse_args(argv)
+
+    queue = sr.load_review_queue(args.queue)
+
+    if args.subaction == "list":
+        print(sr.render_review_queue_markdown(queue))
+        return 0
+
+    if args.subaction == "import-proposals":
+        if not args.target:
+            print("[source-registry] import-proposals requires a proposals "
+                  "JSONL path", file=sys.stderr)
+            return 2
+        proposals = sr.load_proposal_dicts(args.target)
+        merged = sr.import_proposals_to_queue(proposals, queue)
+        new_count = len(merged) - len(queue)
+        sr.save_review_queue(merged, args.queue)
+        print(f"[source-registry] imported {len(proposals)} proposal(s) into "
+              f"{args.queue} ({new_count} new; registry unchanged; nothing "
+              f"applied)")
+        return 0
+
+    # review
+    if not args.target:
+        print("[source-registry] review requires a proposal_id", file=sys.stderr)
+        return 2
+    if not args.status:
+        print("[source-registry] review requires --status "
+              "approved|rejected|deferred", file=sys.stderr)
+        return 2
+    try:
+        updated = sr.apply_review_to_queue(
+            queue, args.target, args.status, reviewer=args.reviewer,
+            note=args.note, reviewed_at=args.reviewed_at)
+    except ValueError as exc:
+        print(f"[source-registry] {exc}", file=sys.stderr)
+        return 1
+    sr.save_review_queue(updated, args.queue)
+    print(f"[source-registry] proposal-review {args.target} -> {args.status} "
+          f"(queue updated; registry unchanged; not applied)")
     return 0
 
 

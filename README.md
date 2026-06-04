@@ -2138,6 +2138,63 @@ generator yields **5 proposals** — two `review_stale_source`, one
 | `app/workbench.py` | the `source-registry propose-updates [--out path]` read-only CLI action |
 | `evals/test_source_registry_proposals.py` | finding→proposal-type mapping, settled/advisory findings producing none, clean registry → no proposals, determinism, stable ids, every proposal requires approval, `save_registry` never called, registry byte-identical, `list_knowledge_sources` unchanged, no MemoryLedger writes, CLI stdout writes no files, `--out` writes only the proposal file, and v4.1 audit + v3.0 eval + v2.7 report contracts unchanged alongside generation |
 
+## v4.3 Source proposal review queue (review-state only; approved ≠ applied)
+
+v4.2 *generates* maintenance proposals; v4.3 lets a human **triage** them —
+marking each approved, rejected, or deferred — without applying anything. It is
+strictly review-state management: it mutates **no** registry file, **no** source
+or knowledge file, writes **no** memory ledger, and changes **no** retrieval,
+ranking, source-selection, grounding, composer, or memory behaviour.
+
+**Approved does not mean applied.** A proposal can be approved *for future
+action*, but v4.3 never performs that action. Every review record keeps
+`applied=false` and `applied_at=null`, and nothing is ever applied
+automatically. Approving authorises a future change; it does not make one.
+Actually changing the registry or source files remains a separate, explicit,
+human step that v4.3 does not perform.
+
+The only file this layer writes is the explicit **review queue** JSONL passed to
+`--queue` (used by `import-proposals` and `review`). `save_registry` stays the
+only registry writer and is never called here. Every queue entry preserves a
+full `proposal_snapshot` of the originating v4.2 proposal, so a review is
+auditable on its own.
+
+Each review record holds `proposal_id`, `source_id`, `proposal_type`,
+`finding_code`, `review_status` (`pending` / `approved` / `rejected` /
+`deferred`), `reviewer`, `reviewed_at`, `review_note`, `applied` (always
+`false`), `applied_at` (always `null`), `proposal_snapshot`, and deterministic
+`created_at` / `updated_at` (unset by default).
+
+**Allowed review-status transitions** (anything else fails cleanly with no
+mutation):
+
+| from | to |
+|---|---|
+| `pending` | `approved`, `rejected`, `deferred` |
+| `deferred` | `approved`, `rejected` |
+
+`approved` and `rejected` are terminal in v4.3: a rejected proposal does **not**
+silently become approved (re-opening would be a separate, explicit future step),
+and an approved proposal never means applied.
+
+```text
+# queue the v4.2 proposals as pending review records (idempotent; only writes the queue)
+python app/workbench.py source-registry propose-updates --out reports/source_proposals.jsonl
+python app/workbench.py source-registry proposal-review import-proposals reports/source_proposals.jsonl --queue reports/source_proposal_review_queue.jsonl
+
+# list the review state (deterministic; read-only)
+python app/workbench.py source-registry proposal-review list --queue reports/source_proposal_review_queue.jsonl
+
+# record a decision (approved != applied; registry untouched, nothing applied)
+python app/workbench.py source-registry proposal-review review srcprop-xxxxxxxxxx --status approved --reviewer me --note "looks right" --queue reports/source_proposal_review_queue.jsonl
+```
+
+| File | What it adds |
+|---|---|
+| `src/agent/source_registry.py` | `ReviewStatus` codes + `_ALLOWED_REVIEW_TRANSITIONS`, frozen `SourceProposalReview`, queue load/save (`load_review_queue` / `save_review_queue`, the only writer), the idempotent `import_proposals_to_queue`, the pure `review_proposal` / `apply_review_to_queue` transitions, and deterministic `render_review_queue_markdown` |
+| `app/workbench.py` | the `source-registry proposal-review {import-proposals,list,review}` CLI group (writes only the `--queue` file) |
+| `evals/test_source_registry_review_queue.py` | proposals import as pending, idempotent re-import, deterministic list/CLI, every allowed transition, invalid transitions failing cleanly, approved-not-applied, `applied` staying false, review writing only the queue file, registry byte-identical, `save_registry` never called, knowledge sources unchanged, no MemoryLedger writes, and v3.0 eval + v2.7 report contracts unchanged alongside review |
+
 ## License
 
 To be decided.
