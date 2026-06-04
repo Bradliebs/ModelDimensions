@@ -1798,6 +1798,221 @@ def _pdf_intake_cli(argv: list[str]) -> int:
     return 0
 
 
+def _pdf_preview_cli(argv: list[str]) -> int:
+    """Preview extracted PDF text and proposed chunks before any import (v6.5).
+
+    Shows exactly what extracted PDF text and proposed chunks would look like
+    BEFORE any knowledge-pack creation or retrieval indexing. It is strictly a
+    **preview**: it reuses the v6.4 governed intake assessment, then layers
+    page-quality diagnostics and deterministic chunk proposals on top. It
+    performs no OCR, calls no LLM, summarises nothing, and creates or updates
+    no knowledge pack, retrieval index, source registry, memory ledger, or
+    proposal. ``preview_ready_for_import`` is advisory only and never approves
+    anything. Output goes to stdout (bounded Markdown). It writes to disk only
+    when an explicit ``--out`` path is given, and even then writes only the
+    preview report; full extracted text is persisted only with
+    ``--format json --out``. Usage::
+
+        python app/workbench.py pdf-preview inspect --pdf PATH
+            [--chunk-size N] [--overlap N] [--max-chunk-size N] [--merge-pages]
+            [--format json|markdown] [--out PATH] [--source-url URL]
+            [--owner NAME] [--permission TEXT] [--intended-use USE]
+            [--authority LEVEL] [--now ISO]
+    """
+    from datetime import datetime
+
+    from agent.pdf_chunk_preview import (
+        DEFAULT_CHUNK_SIZE,
+        DEFAULT_OVERLAP,
+        MAX_CHUNK_SIZE,
+        chunk_preview_to_json,
+        preview_pdf_chunks,
+        render_chunk_preview_markdown,
+        write_chunk_preview_report,
+    )
+
+    parser = argparse.ArgumentParser(
+        prog="workbench.py pdf-preview inspect",
+        description="Preview extracted PDF text and proposed chunks "
+                    "(preview-only; no OCR, no LLM, and no knowledge pack, "
+                    "retrieval index, registry, memory, or proposal changes; "
+                    "no durable write unless --out is given).")
+    parser.add_argument("subcommand", choices=["inspect"],
+                        help="pdf-preview subcommand")
+    parser.add_argument("--pdf", required=True, help="path to a local PDF file")
+    parser.add_argument("--chunk-size", type=int, default=DEFAULT_CHUNK_SIZE,
+                        help=f"target chunk size in characters (default {DEFAULT_CHUNK_SIZE})")
+    parser.add_argument("--overlap", type=int, default=DEFAULT_OVERLAP,
+                        help=f"chunk overlap in characters (default {DEFAULT_OVERLAP})")
+    parser.add_argument("--max-chunk-size", type=int, default=MAX_CHUNK_SIZE,
+                        help=f"maximum chunk size in characters (default {MAX_CHUNK_SIZE})")
+    parser.add_argument("--merge-pages", action="store_true",
+                        help="allow chunks to span page boundaries (off by default; "
+                             "page-crossing chunks are flagged when enabled)")
+    parser.add_argument("--format", choices=["markdown", "json"], default="markdown",
+                        help="output format (default markdown)")
+    parser.add_argument("--source-url", default="",
+                        help="declared provenance: the source URL the PDF came from")
+    parser.add_argument("--owner", default="",
+                        help="declared owner of the document")
+    parser.add_argument("--permission", default="",
+                        help="declared permission or licence to use the document")
+    parser.add_argument("--intended-use", default="",
+                        help="declared intended use (e.g. knowledge_candidate, eval)")
+    parser.add_argument("--authority", default="",
+                        help="declared authority level (e.g. internal, official)")
+    parser.add_argument("--out", default=None,
+                        help="optional path to write the preview report (the only "
+                             "durable write; off by default). Full text is persisted "
+                             "only with --format json.")
+    parser.add_argument("--now", default=None,
+                        help="optional ISO timestamp used for freshness checks")
+    args = parser.parse_args(argv)
+
+    now = None
+    if args.now:
+        try:
+            now = datetime.fromisoformat(args.now.replace("Z", "+00:00"))
+        except ValueError:
+            print(f"[pdf-preview] invalid --now timestamp {args.now!r}", file=sys.stderr)
+            return 2
+
+    preview = preview_pdf_chunks(
+        args.pdf,
+        chunk_size=args.chunk_size,
+        overlap=args.overlap,
+        max_chunk_size=args.max_chunk_size,
+        respect_page_boundaries=not args.merge_pages,
+        source_url=args.source_url,
+        owner=args.owner,
+        permission=args.permission,
+        intended_use=args.intended_use,
+        authority_level=args.authority,
+        now=now,
+    )
+
+    if args.format == "json":
+        print(chunk_preview_to_json(preview))
+    else:
+        print(render_chunk_preview_markdown(preview))
+
+    if args.out:
+        path = write_chunk_preview_report(preview, args.out, fmt=args.format)
+        print(f"\n[pdf-preview] wrote preview report to {path}")
+    return 0
+
+
+def _pdf_pack_cli(argv: list[str]) -> int:
+    """Validate or import an approved PDF chunk preview into a knowledge pack (v6.6).
+
+    This is the narrow, explicit, human-approved pack *write* path. It consumes
+    the structured v6.5 preview (``pdf_chunk_preview`` JSON, exported with full
+    text) and a structured approval bound to the source file hash and a
+    deterministic preview fingerprint. ``validate`` and ``import --dry-run``
+    write nothing; only ``import --write`` with an explicit ``--out`` directory
+    creates the pack, and it fails closed if the target already exists. It never
+    performs OCR, calls an LLM, rewrites chunk text, updates a retrieval index,
+    writes memory, or mutates the source registry. Usage::
+
+        python app/workbench.py pdf-pack validate
+            --preview PATH --approval PATH --pack-id PACK_ID
+
+        python app/workbench.py pdf-pack import
+            --preview PATH --approval PATH --pack-id PACK_ID --out PATH [--dry-run]
+
+        python app/workbench.py pdf-pack import
+            --preview PATH --approval PATH --pack-id PACK_ID --out PATH --write
+    """
+    from datetime import datetime
+
+    from agent.pdf_pack_importer import (
+        PdfImportRequest,
+        import_pdf_pack,
+        load_approval,
+        load_preview,
+        render_import_result_markdown,
+        render_validation_markdown,
+        validate_import,
+    )
+
+    parser = argparse.ArgumentParser(
+        prog="workbench.py pdf-pack",
+        description="Validate or import an approved PDF chunk preview into a "
+                    "knowledge pack (human-approved write path; validate and "
+                    "dry-run write nothing; --write is required to create files; "
+                    "no OCR, no LLM, no retrieval/memory/registry changes).")
+    parser.add_argument("subcommand", choices=["validate", "import"],
+                        help="pdf-pack subcommand")
+    parser.add_argument("--preview", required=True,
+                        help="path to a v6.5 chunk preview JSON (with full text)")
+    parser.add_argument("--approval", required=True,
+                        help="path to a structured PDF import approval JSON")
+    parser.add_argument("--pack-id", required=True,
+                        help="target knowledge pack id (lowercase identifier)")
+    parser.add_argument("--out", default=None,
+                        help="explicit pack directory to create (required for import "
+                             "--write; the import write path)")
+    parser.add_argument("--dry-run", action="store_true",
+                        help="validate and show what would be imported, writing "
+                             "nothing (default for import)")
+    parser.add_argument("--write", action="store_true",
+                        help="explicitly create the pack files (required to write; "
+                             "fails closed if --out already exists)")
+    parser.add_argument("--pack-version", default=None,
+                        help="optional pack version label (default 1.0)")
+    parser.add_argument("--description", default="",
+                        help="optional pack description")
+    parser.add_argument("--now", default=None,
+                        help="optional ISO timestamp used for the import timestamp")
+    args = parser.parse_args(argv)
+
+    now = None
+    if args.now:
+        try:
+            now = datetime.fromisoformat(args.now.replace("Z", "+00:00"))
+        except ValueError:
+            print(f"[pdf-pack] invalid --now timestamp {args.now!r}", file=sys.stderr)
+            return 2
+
+    try:
+        preview = load_preview(args.preview)
+        approval = load_approval(args.approval)
+    except (OSError, ValueError) as exc:
+        print(f"[pdf-pack] could not load inputs: {exc}", file=sys.stderr)
+        return 2
+
+    if args.subcommand == "validate":
+        validation = validate_import(
+            preview,
+            approval,
+            pack_id=args.pack_id,
+            pack_dir=args.out,
+        )
+        print(render_validation_markdown(validation))
+        return 0 if validation.valid else 1
+
+    if args.write and not args.out:
+        print("[pdf-pack] import --write requires --out PATH", file=sys.stderr)
+        return 2
+
+    from agent.pdf_pack_importer import DEFAULT_PACK_VERSION
+
+    request = PdfImportRequest(
+        preview=preview,
+        approval=approval,
+        pack_id=args.pack_id,
+        pack_dir=args.out,
+        write=bool(args.write),
+        pack_version=args.pack_version or DEFAULT_PACK_VERSION,
+        description=args.description,
+    )
+    result = import_pdf_pack(request, now=now)
+    print(render_import_result_markdown(result))
+    if args.write:
+        return 0 if result.written else 1
+    return 0 if result.validation.valid else 1
+
+
 def main(argv: list[str] | None = None) -> int:
     argv = sys.argv[1:] if argv is None else argv
     if argv and argv[0] == "value-sprint":
@@ -1816,6 +2031,10 @@ def main(argv: list[str] | None = None) -> int:
         return _hf_data_cli(argv[1:])
     if argv and argv[0] == "pdf-intake":
         return _pdf_intake_cli(argv[1:])
+    if argv and argv[0] == "pdf-preview":
+        return _pdf_preview_cli(argv[1:])
+    if argv and argv[0] == "pdf-pack":
+        return _pdf_pack_cli(argv[1:])
     parser = argparse.ArgumentParser(description="Concept Memory Workbench v1.1")
     parser.add_argument("--ledger", default=str(_DEFAULT_LEDGER),
                         help="path to the JSONL memory ledger")

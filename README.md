@@ -2833,6 +2833,209 @@ provenance and permission — which is exactly why unprovenanced, unpermitted,
 encrypted, scanned, and possibly-personal PDFs are held for human review rather
 than trusted. The next planned slice is **PDF Parse Quality + Chunk Preview**.
 
+## v6.5 PDF Parse Quality + Chunk Preview (preview only; no OCR, no import)
+
+v6.5 adds a deterministic, **read-only** layer that shows exactly what extracted
+PDF text and proposed chunks would look like *before* any knowledge-pack creation
+or retrieval indexing. It reuses the v6.4 governed intake assessment for the file
+hash, text-layer status, OCR requirement, extraction-quality band, and the
+governance decision, then layers page-quality diagnostics and deterministic chunk
+proposals on top. Nothing here is ever approved automatically.
+
+**Intake approval vs chunk preview.** v6.4 answers *"is this PDF allowed in?"*;
+v6.5 answers *"if it were allowed in, what would the chunks look like, and how
+clean is the text?"*. They are separate steps: a clean v6.4 decision is necessary
+but **not sufficient** for `preview_ready_for_import`, and `preview_ready_for_import`
+is advisory only — it approves, registers, packs, and indexes nothing.
+
+**Page-to-chunk traceability.** Every page (`PdfPageText`) carries the source file
+hash, file name, 1-based page number, character offsets, and extraction method.
+Pages are extracted in order and empty pages are never silently dropped; only line
+endings are normalised (no destructive whitespace cleanup, no OCR, no rewriting).
+Every proposed chunk (`PdfChunkProposal`) carries a deterministic id
+(`pdfchk-<sha1(file_hash|chunk_size|overlap|page_range|offsets)[:10]>`, stable
+across repeated previews of the same file and settings), its page range, character
+offsets, a page-crossing flag, and its warning codes.
+
+**Page-quality metrics (`PdfPageQuality`).** Character/word/line counts, average
+line length, empty-line ratio, suspicious-whitespace ratio, replacement- and
+non-printable-character counts, repeated-line count, likely header/footer count,
+sentence-fragment count, short-line ratio, text density, and a deterministic
+quality band (`good`/`acceptable`/`poor`/`unusable`) from documented, easy-to-change
+thresholds. Sparse pages can never score better than `poor`.
+
+**Chunking.** Defaults are `--chunk-size 1000`, `--overlap 150`, `--max-chunk-size
+1500` (characters). Boundaries prefer paragraph breaks, then sentence ends, then
+whitespace, and never split a word. By default chunks are **page-bounded** (they
+never merge unrelated pages); `--merge-pages` allows page-crossing chunks, which
+are then flagged. Chunk warnings (`PdfChunkWarning`) cover: `chunk_too_short`,
+`chunk_too_long`, `chunk_fragmented`, `chunk_starts_mid_sentence`,
+`chunk_ends_mid_sentence`, `chunk_repeated_header`, `chunk_repeated_footer`,
+`chunk_duplicate`, `chunk_near_duplicate` (conservative Jaccard ≥ 0.85),
+`chunk_table_risk`, `chunk_multicolumn_risk`, `chunk_sparse`,
+`chunk_boilerplate_heavy`, `chunk_malformed_unicode`, `chunk_possible_pii`,
+`chunk_confidential_marker`, `chunk_crosses_page_boundary`,
+`chunk_low_source_quality`, and `chunk_requires_human_review`.
+
+**`preview_ready_for_import` is advisory only.** It is `True` only when v6.4 did
+not block, a usable text layer is present, extraction quality is `acceptable` or
+`good`, no OCR is required, no possible-PII/confidentiality finding is unresolved,
+unusable and poor pages stay within documented thresholds, and at least one chunk
+meets the quality minimums. It never approves, registers, writes a pack, or updates
+retrieval.
+
+```bash
+python app/workbench.py pdf-preview inspect --pdf report.pdf
+python app/workbench.py pdf-preview inspect --pdf report.pdf --chunk-size 1000 --overlap 150
+python app/workbench.py pdf-preview inspect --pdf report.pdf --format markdown
+python app/workbench.py pdf-preview inspect --pdf report.pdf --merge-pages
+python app/workbench.py pdf-preview inspect --pdf report.pdf --format json --out preview.json
+```
+
+Sample Markdown output (bounded):
+
+```text
+# PDF Chunk Preview (PREVIEW ONLY — NOT APPROVED FOR IMPORT)
+
+> This is a read-only parse-quality and chunk preview. No knowledge pack,
+> retrieval index, source registry, or memory state has been created or changed.
+
+- File: report.pdf
+- Pages: 3
+- Intake decision: approved_for_knowledge
+- Preview ready for import (advisory only): True
+...
+```
+
+**Text-persistence safeguards.** stdout shows bounded Markdown and writes no files.
+A report is written only when `--out` is given, and full extracted text is
+persisted only with `--format json --out`; the Markdown report contains bounded
+previews only and no temporary preview files are created.
+
+| Surface | Responsibility |
+| --- | --- |
+| `src/agent/pdf_chunk_preview.py` | `PdfPageText`/`PdfPageQuality`/`PdfChunkWarning`/`PdfChunkProposal`/`PdfChunkPreview`/`PdfChunkPreviewSummary`, `PdfChunkWarningCode`, `extract_pdf_pages`, `analyse_page_quality`, `detect_repeated_headers_footers`, `detect_duplicate_pages`, `propose_pdf_chunks`, `assess_chunk_quality`, `calculate_preview_summary`, deterministic renderers, and `write_chunk_preview_report` (the only durable write); reuses the v6.4 `assess_pdf_intake`/`sample_pdf_text`/`PdfIntakeResult`; imports no memory/source/proposal writer, no retrieval/pack writer, and no OCR/LLM/download client |
+| `app/workbench.py` | the `pdf-preview inspect --pdf PATH [--chunk-size N] [--overlap N] [--max-chunk-size N] [--merge-pages] [--format json\|markdown] [--out PATH] [--source-url URL] [--owner NAME] [--permission TEXT] [--intended-use USE] [--authority LEVEL] [--now ISO]` CLI |
+| `evals/test_pdf_chunk_preview.py` | programmatically generated single-literal PDF fixtures; page order/number traceability, deterministic chunk ids, repeated header/footer detection, duplicate and conservative near-duplicate chunks, sparse/poor pages lowering readiness, word-safe and paragraph-preferred boundaries, page-crossing labels under `--merge-pages`, fragmented and table-risk warnings, possible-PII and confidential markers forcing review, no-text-layer/OCR-required/blocked-intake never preview-ready, identical repeated runs, stdout writes nothing, `--out` writes only the report; the module imports no writer/retrieval/OCR/LLM client and touches no network |
+
+**Limitations and non-goals.** v6.5 is preview only. It does **not** create or
+update a knowledge pack; it does **not** create or update a retrieval index; it
+does **not** write the source registry, the memory ledger, or any proposal; it
+does **not** perform OCR, call an LLM, or summarise/paraphrase extracted text; it
+does **not** change ranking, grounding, or chat routing; and it never marks a
+previewed chunk as approved. The extraction is the same minimal stdlib reader as
+v6.4, so the page-quality and chunk diagnostics are conservative advisory signals,
+not a full layout-aware extractor. The next planned slice is **Approved
+PDF-to-Knowledge-Pack Import**.
+
+## v6.6 Approved PDF-to-Knowledge-Pack Import (human-approved write path)
+
+v6.6 adds the narrow, explicit, human-approved path that turns an
+already-reviewed v6.5 chunk preview into a deterministic knowledge pack on disk.
+It is the controlled pack **write** path and nothing more. It consumes the
+structured v6.5 preview (the `pdf_chunk_preview` JSON, exported with full text);
+it never re-parses the PDF, performs OCR, or calls an LLM, and it never rewrites,
+summarises, merges, or splits chunk text.
+
+**Preview readiness is not approval.** The v6.5 summary flag
+`preview_ready_for_import` is advisory only. v6.6 imports nothing without a
+separate, structured human approval. An accepted PDF intake is likewise not a
+knowledge approval — both gates must be cleared explicitly.
+
+**Approval is bound to the source and the preview.** An approval record names:
+
+| Field | Meaning |
+| --- | --- |
+| `approval_id`, `approved_by`, `approved_at` | who approved, when (identity is required) |
+| `source_file_hash` | the exact PDF hash the approval was granted against |
+| `preview_fingerprint` | a deterministic fingerprint of the preview's chunk geometry |
+| `approved_chunk_ids` | the exact preview chunk ids authorised for import |
+| `rejected_chunk_ids` | chunks explicitly excluded (a chunk may not be both) |
+| `intended_pack_id` | the pack id the approval is scoped to |
+| `source_title`, `authority_level`, `provenance`, `permission_or_licence`, `domain`, `intended_use` | declared lineage for the resulting pack |
+| `allow_confidential` | explicit policy switch; confidential-marked chunks import only when `True` |
+| `approved_chunk_content_hashes` | optional per-chunk tamper check against the preview text |
+
+**Preview fingerprint.** `compute_preview_fingerprint` hashes the preview
+version, file hash, chunk parameters, and each chunk's id, page span, character
+offsets, and sorted warning codes (chunk *text* is not included). The fingerprint
+is `pdfprev-<16 hex>`. If the PDF is re-chunked or re-extracted, the fingerprint
+changes and the approval no longer applies.
+
+**Source hash validation.** The approval's `source_file_hash` must equal the
+preview's `file_hash`. A changed PDF invalidates the approval (status
+`source_changed`); a changed preview invalidates it (status `preview_changed`).
+
+**Exact-chunk approval, fail-closed.** Only the named `approved_chunk_ids` are
+imported, in preview order. Unknown chunk ids, chunks that are both approved and
+rejected, chunks whose text no longer matches the preview, and chunks whose
+content hash does not match an `approved_chunk_content_hashes` entry all fail
+closed. Blocking PDF conditions (blocked intake, no text layer, OCR required) and
+blocking chunk warnings (malformed unicode, low source quality,
+human-review-required) prevent import. Possible-PII chunks and confidential-marked
+chunks are rejected unless excluded from the approved set (PII) or explicitly
+permitted via `allow_confidential` (confidential).
+
+**Dry-run by default; `--write` is mandatory.** `validate` and `import --dry-run`
+write nothing. `import --write` requires an explicit `--out` directory and creates
+**only** two files — `manifest.json` and `knowledge.jsonl` — using an atomic
+temp-then-rename write. An existing target path fails closed (status
+`target_exists`); a write failure leaves no partial pack behind (status
+`write_failed`).
+
+**Pack lineage.** Every imported chunk preserves full lineage: source file
+name/hash, preview fingerprint, original preview chunk id, page span, character
+offsets, extraction method, warning codes, approval id/actor/timestamp, declared
+provenance and permission, a deterministic `content_hash`
+(`sha256:<hex>` over the exact text), and the importer version. The chunk records
+use the existing retrieval-compatible `chunk` schema plus these additive fields,
+so existing pack readers ignore the extra lineage. The manifest carries a stable
+`manifest_hash` that excludes wall-clock timestamps, so a pack's content identity
+is timestamp-independent.
+
+**No automatic retrieval indexing.** The importer writes pack *files* directly
+with a bounded JSONL writer. It does **not** import or invoke the retrieval/pack
+system (no `WorkbenchService`, no `PackRegistry`), so it builds no retrieval
+geometry, ranking, or grounding. Indexing a written pack remains a separate,
+later step.
+
+### CLI
+
+```bash
+# Validate an approval against a preview (writes nothing).
+python app/workbench.py pdf-pack validate \
+  --preview preview.json --approval approval.json --pack-id my_pdf_pack
+
+# Show exactly what would be imported, writing nothing (default).
+python app/workbench.py pdf-pack import \
+  --preview preview.json --approval approval.json --pack-id my_pdf_pack \
+  --out packs/built/my_pdf_pack --dry-run
+
+# Create the pack files (explicit; fails closed if --out already exists).
+python app/workbench.py pdf-pack import \
+  --preview preview.json --approval approval.json --pack-id my_pdf_pack \
+  --out packs/built/my_pdf_pack --write
+```
+
+A `validate` run reports the bound source hash and preview fingerprint, the
+importable chunk ids, the excluded chunk ids, and any blocking findings. A
+`--write` run additionally reports the manifest hash and the two written paths.
+
+### Components
+
+| File | Role |
+| --- | --- |
+| `src/agent/pdf_pack_importer.py` | approval/validation/import models, `compute_preview_fingerprint`, `validate_import`, `import_pdf_pack`, atomic pack writer, markdown renderers; imports no writer/retrieval/registry/proposal/OCR/LLM client |
+| `app/workbench.py` | the `pdf-pack validate` and `pdf-pack import` CLI (`--preview`, `--approval`, `--pack-id`, `--out`, `--dry-run`, `--write`, `--now`) |
+| `evals/test_pdf_pack_importer.py` | readiness-is-not-approval, source-hash and preview-fingerprint binding, exact-chunk/rejected/unknown handling, changed-preview and changed-PDF invalidation, blocking-warning/PII/confidential gating, text immutability, page lineage, deterministic content/manifest hashes, validate/dry-run write nothing, `--write` creates only the intended files, existing-target and write-failure safety, no memory/registry/retrieval mutation, import-purity and no-network checks, and the CLI surface |
+
+**Limitations and non-goals.** v6.6 writes pack files only. It does **not** index
+the pack, change ranking/grounding/chat routing, write the memory ledger, mutate
+the source registry, or create/apply any proposal. It performs no OCR and no LLM
+call. To roll back an import, delete the created pack directory — because the
+importer touches nothing else, removal is complete and local. The next planned
+slice is **Imported PDF Retrieval Evaluation**.
+
 ## License
 
 To be decided.
