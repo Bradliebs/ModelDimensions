@@ -36,6 +36,7 @@ Honest boundaries (see the README for the full version):
 """
 from __future__ import annotations
 
+import hashlib
 import json
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -43,6 +44,7 @@ from typing import List, Optional
 
 from slm.assistant_composer import ComposerMode
 
+from .memory_proposals import MemoryProposal, ProposalKind, ProposalStatus
 from .workbench_service import WorkbenchService
 
 # -- expected-outcome taxonomy (operator's prior expectation per query) -------
@@ -285,6 +287,68 @@ def extract_pack_gap(spec: SprintQuery, *, grounded: bool) -> Optional[PackGapPr
         suggested_memory=suggested,
         affected_query=spec.query,
     )
+
+
+# -- v2.5B: opt-in memory capture from missing-decision gaps ------------------
+
+def pack_gap_to_memory_proposal(
+        gap: PackGapProposal) -> Optional[MemoryProposal]:
+    """Convert a missing-decision pack gap into a *PENDING* memory proposal.
+
+    Proposal-only and opt-in. This mints a reviewable candidate memory from a
+    value-sprint gap whose ``suggested_source_type`` is ``"memory_proposal"``
+    (a missing project decision, not missing knowledge). Knowledge-source gaps
+    return ``None`` and stay report-only.
+
+    The returned proposal is ``PENDING`` and ``written=False``: it is **not** a
+    fact. It becomes a memory only if a human approves it and the workbench
+    writes it through the frozen ``add_memory`` path. This function never
+    approves, never writes, and never touches the MemoryLedger or the bank.
+    """
+    if gap.suggested_source_type != "memory_proposal":
+        return None
+    digest = hashlib.sha1(
+        f"packgap|{gap.affected_query}".encode("utf-8")).hexdigest()[:10]
+    return MemoryProposal(
+        proposal_id=f"packgap-{digest}",
+        canonical_text=gap.suggested_memory,
+        source_file="(value-sprint pack gap)",
+        kind=ProposalKind.DECISION,
+        confidence=0.3,
+        reason=("value-sprint missing-decision gap; a candidate only — requires "
+                "human approval before it can be written as a memory"),
+        status=ProposalStatus.PENDING,
+    )
+
+
+def emit_memory_proposals(rows: List["SprintRow"], *,
+                          queue_path: str | Path) -> List[MemoryProposal]:
+    """Opt-in: route missing-decision pack gaps into a sprint-scoped queue.
+
+    For every row carrying a ``memory_proposal``-type pack gap, mint a PENDING
+    :class:`MemoryProposal` and add it to a :class:`ProposalQueue` at
+    ``queue_path`` — a **sprint-scoped** file, deliberately separate from the
+    pack's real proposal queue so auto-generated suggestions never mix with the
+    human-authored queue until an operator promotes them.
+
+    Knowledge-source gaps are skipped. Nothing is approved or written; the queue
+    only accumulates PENDING candidates for human review. The queue's id-based
+    deduplication makes re-running idempotent. Returns the proposals newly added.
+    """
+    from .proposal_queue import ProposalQueue
+
+    queue = ProposalQueue(queue_path, load_existing=True)
+    added: List[MemoryProposal] = []
+    for row in rows:
+        gap_dict = row.suggested_pack_update
+        if not gap_dict:
+            continue
+        proposal = pack_gap_to_memory_proposal(PackGapProposal(**gap_dict))
+        if proposal is None:
+            continue
+        if queue.add(proposal):
+            added.append(proposal)
+    return added
 
 
 def run_query(service: WorkbenchService, spec: SprintQuery, *,

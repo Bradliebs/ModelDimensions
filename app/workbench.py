@@ -958,6 +958,16 @@ def _value_sprint_cli(argv: list[str]) -> int:
                                              / "value_sprint_latest.md"))
     run.add_argument("--out-jsonl", default=str(_VALUE_SPRINT_DIR
                                                 / "value_sprint_latest.jsonl"))
+    run.add_argument("--emit-memory-proposals", dest="emit_proposals",
+                     action="store_true", default=False,
+                     help="opt-in: route missing-decision pack gaps into a "
+                          "sprint-scoped proposal queue (PENDING only, never "
+                          "written; default off)")
+    run.add_argument("--proposals-queue",
+                     default=str(_VALUE_SPRINT_DIR
+                                 / "value_sprint_proposals.jsonl"),
+                     help="sprint-scoped proposal queue path (only written when "
+                          "--emit-memory-proposals is set)")
 
     rep = sub.add_parser("report",
                          help="re-render Markdown from a sprint JSONL report")
@@ -986,6 +996,11 @@ def _value_sprint_cli(argv: list[str]) -> int:
               f"guard-rejects={summary.guard_reject_count}")
         print(f"[value-sprint] wrote {args.out_md}")
         print(f"[value-sprint] wrote {args.out_jsonl}")
+        if args.emit_proposals:
+            added = vsh.emit_memory_proposals(
+                rows, queue_path=args.proposals_queue)
+            print(f"[value-sprint] emitted {len(added)} memory proposal(s) "
+                  f"(PENDING — not written) to {args.proposals_queue}")
         return 0
 
     # report: re-render Markdown from a (possibly operator-edited) JSONL.

@@ -1552,6 +1552,49 @@ surfaces as a conflict, and the model-prior row stays explicitly labelled.
 | `packs/m365_coding_assistant/sources/*.md` | Seven additive claim-shaped paragraphs under the existing sources |
 | `evals/test_pack_enrichment_v25a.py` | Each enriched gap query grounds on the correct source/domain under hybrid; stale flag preserved; out-of-domain still refuses; Purview-threshold never leads on the Power Fx source |
 
+## v2.5B Memory Capture from Pack Gaps (proposal-only, opt-in)
+
+v2.5A closed the *knowledge*-shaped gaps by adding sources. The one gap that
+remained is a different class: a missing **project decision** (the data-residency
+review vendor), which lives in memory, not in a knowledge source — no amount of
+source enrichment can answer it. v2.5B gives that gap a safe, reviewable landing
+path without weakening any trust boundary.
+
+The value sprint already classifies each gap (`extract_pack_gap`) as either a
+`knowledge_source` gap or a `memory_proposal` gap. v2.5B adds a small adapter,
+`pack_gap_to_memory_proposal`, that turns a `memory_proposal` gap into a
+**PENDING** `MemoryProposal` (kind `decision`, low confidence). Knowledge-source
+gaps return `None` and stay report-only.
+
+```pwsh
+# default: report-only, advisory — no proposal queue is created
+python app/workbench.py value-sprint run --backend hybrid
+
+# opt-in: also route missing-decision gaps into a sprint-scoped queue
+python app/workbench.py value-sprint run --backend hybrid --emit-memory-proposals
+```
+
+**An emitted proposal is not a fact.** It is a candidate only. It never touches
+the MemoryLedger or the bank. It becomes a memory *only* when a human approves it
+and the workbench writes it through the frozen `add_memory` path
+(`approve_proposal` → `write_approved_proposals`). The emit path stops at
+`queue.add` — it never approves and never writes. Emitted proposals land in a
+**sprint-scoped** queue file (`reports/value_sprint_proposals.jsonl` by default),
+deliberately separate from the pack's real proposal queue, so auto-generated
+suggestions never mix with the human-authored queue until an operator promotes
+them. The deterministic proposal id (minted from the affected query) makes
+re-running idempotent.
+
+This changes no verifier, grounding, lifecycle, refusal, pack-isolation, SLM,
+AnswerGuard, EvidenceRanker, or SufficiencyGate behaviour, and the default sprint
+remains advisory/report-only.
+
+| File | What it adds |
+|---|---|
+| `src/agent/value_sprint_harness.py` | `pack_gap_to_memory_proposal` adapter (memory_proposal gaps only) and the opt-in `emit_memory_proposals` sprint-scoped queue writer |
+| `app/workbench.py` | `value-sprint run --emit-memory-proposals` / `--proposals-queue` opt-in flags (default off) |
+| `evals/test_value_sprint_memory_capture.py` | PENDING conversion, knowledge-gap skip, no-ledger-write, refusal-before-approval, approval-and-write-required, idempotency, and default-sprint-creates-no-queue |
+
 ## License
 
 To be decided.
