@@ -237,6 +237,8 @@ Commands:
   retrieval-eval [--pack p] [--backend hybrid]  measure retrieval quality (read-only baseline)
   retrieval-eval --probe-report-path  localise where relevance bleed enters the report path (read-only)
   retrieval-eval --probe-hygiene  classify wrong-source candidates on a harder near-neighbour corpus (read-only)
+  source-registry list [--registry path]  list source metadata entries (read-only)
+  source-registry inspect <id> [--registry path]  show one source's metadata (read-only)
   hf-inspect <dataset_id>  preview a Hugging Face dataset's licence/decision
   hf-import <dataset_id> --pack <pack>  import a small governed HF sample
   demo                  run the Friday -> Monday near-miss example
@@ -1057,6 +1059,7 @@ def _value_sprint_cli(argv: list[str]) -> int:
 _RETRIEVAL_EVAL_CASES = ROOT / "demos" / "retrieval_eval_cases.jsonl"
 _RETRIEVAL_REPORT_PATH_CASES = ROOT / "demos" / "retrieval_report_path_cases.jsonl"
 _RETRIEVAL_HARDCORPUS_CASES = ROOT / "demos" / "retrieval_hardcorpus_cases.jsonl"
+_SOURCE_REGISTRY_DEFAULT = ROOT / "demos" / "source_registry.jsonl"
 
 
 def _retrieval_eval_cli(argv: list[str]) -> int:
@@ -1176,12 +1179,58 @@ def _retrieval_eval_cli(argv: list[str]) -> int:
     return 0
 
 
+# ---------- v4.0 source registry CLI (read-only metadata) ----------
+
+def _source_registry_cli(argv: list[str]) -> int:
+    """Inspect the source registry (read-only metadata; v4.0).
+
+    ``list`` prints a deterministic table of every entry with its stored and
+    *computed* effective freshness status; ``inspect <id>`` prints one entry's
+    full metadata. Both are pure reads: nothing is written, and no retrieval,
+    ranking, source-selection, grounding, composer, or memory behaviour is
+    touched. The registry annotates sources; it never becomes the evidence.
+    """
+    from agent import source_registry as sr
+
+    parser = argparse.ArgumentParser(
+        prog="workbench.py source-registry",
+        description="Inspect source metadata (read-only). The registry annotates "
+                    "sources; it changes no retrieval/ranking/grounding logic.")
+    parser.add_argument("action", choices=["list", "inspect"],
+                        help="list all entries or inspect a single source_id")
+    parser.add_argument("source_id", nargs="?", default=None,
+                        help="the source_id to inspect (required for 'inspect')")
+    parser.add_argument("--registry", default=str(_SOURCE_REGISTRY_DEFAULT),
+                        help="path to the source registry JSONL")
+    args = parser.parse_args(argv)
+
+    entries = sr.load_registry(args.registry)
+
+    if args.action == "list":
+        print(sr.render_registry_markdown(entries))
+        return 0
+
+    if not args.source_id:
+        print("[source-registry] inspect requires a source_id", file=sys.stderr)
+        return 2
+    index = sr.index_by_id(entries)
+    entry = index.get(args.source_id)
+    if entry is None:
+        print(f"[source-registry] no entry for source_id {args.source_id!r}",
+              file=sys.stderr)
+        return 1
+    print(sr.render_entry_markdown(entry, entries))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     argv = sys.argv[1:] if argv is None else argv
     if argv and argv[0] == "value-sprint":
         return _value_sprint_cli(argv[1:])
     if argv and argv[0] == "retrieval-eval":
         return _retrieval_eval_cli(argv[1:])
+    if argv and argv[0] == "source-registry":
+        return _source_registry_cli(argv[1:])
     parser = argparse.ArgumentParser(description="Concept Memory Workbench v1.1")
     parser.add_argument("--ledger", default=str(_DEFAULT_LEDGER),
                         help="path to the JSONL memory ledger")

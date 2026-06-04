@@ -1956,6 +1956,64 @@ workbench> query-assist --report how does pydantic validate input   # opt-in; na
 | `src/slm/assistant_composer.py` | additive `ReportSection.intro`, closed `_NARRATIVE_FACTUAL_FRAMES` / `_JUDGEMENT_TRANSITION` frames, a `narrative` flag on `ConsultantReportComposer` (default on), evidence-sufficiency-aware `_recommendation_text`, render of intro framing, and the pure `NarrativeMetrics` / `report_narrative_metrics` |
 | `evals/test_consultant_narrative.py` | no citation/grounding drift, judgement stays labelled+uncited, framing introduces no unsupported claim (with a tampered-intro counter-test), recommendation safe degradation across evidence sufficiency, v2.8 fluency metrics intact, template-default/report-opt-in, and a full narrative report passing the guard |
 
+## v4.0 Source registry foundation (read-only metadata)
+
+The retrieval evals (v3.0–v3.0.2) measure *how* sources are retrieved; v4.0 adds
+a place to record *what a source is* — its authority, freshness, ownership,
+review status, supersession, and notes — **separately from the source text**.
+It is a metadata and inspection layer only.
+
+**The registry is metadata, not truth.** A registry entry *describes* a source;
+it never replaces the source text and never decides what a query is answered
+with. The evidence is still the imported knowledge chunk. v4.0 changes **no**
+retrieval, ranking, source-selection, grounding, composer, or memory behaviour —
+loading, inspecting, and computing a freshness status are all pure reads. The
+only writer (`save_registry`) is an explicit human-called API; it is never
+invoked automatically, and the CLI never writes. A later slice *may* let the
+registry influence retrieval; in v4.0 it does not, and that boundary is the
+point of the foundation.
+
+**Registry schema** (one self-describing JSON object per line; `#` lines are
+comments). Only `source_id` is required — every other field defaults safely so a
+sparse, hand-written entry loads without error:
+
+| field | meaning |
+|---|---|
+| `source_id` | **required** stable id (e.g. `src:least-privilege`) |
+| `title` | human-readable name |
+| `source_type` | e.g. `markdown`, `url`, `manual` |
+| `authority_level` | `official` / `reputable` / `community` / `unknown` (validated) |
+| `owner` | accountable team or person |
+| `created_at` / `last_reviewed_at` | ISO date or datetime |
+| `freshness_policy` | label, e.g. `static`, `review-quarterly`, `volatile` |
+| `stale_after_days` | review window used to *compute* staleness |
+| `topics` | subject tags |
+| `linked_decisions` | related decision ids |
+| `supersedes` / `superseded_by` | lineage links between source ids |
+| `status` | `active` / `stale` / `deprecated` / `draft` (validated) |
+| `notes` | free text |
+
+An invalid `status` or `authority_level` (or a missing `source_id`) fails cleanly
+with a `ValueError`. **Effective freshness is computed, never stored:**
+`compute_effective_status(entry)` returns `deprecated`/`draft` as-is, and
+otherwise reports `stale` when `last_reviewed_at` is older than `stale_after_days`
+— without mutating the frozen entry or the file. `supersession_warnings` reports
+dangling or asymmetric lineage links; it never repairs them.
+
+```text
+# read-only inspection (deterministic; nothing is written)
+python app/workbench.py source-registry list
+python app/workbench.py source-registry inspect src:power-platform-governance-v2
+python app/workbench.py source-registry list --registry demos/source_registry.jsonl
+```
+
+| File | What it adds |
+|---|---|
+| `src/agent/source_registry.py` | `AuthorityLevel` / `SourceStatus` enums, the frozen `SourceRegistryEntry` (validated `from_dict`, `to_dict`/`to_json`), `load_registry` / `save_registry`, pure `compute_effective_status` / `supersession_warnings` / `index_by_id`, and deterministic `render_registry_markdown` / `render_entry_markdown` |
+| `demos/source_registry.jsonl` | a 6-entry demo registry (active/stale/deprecated/draft + a supersedes/superseded_by pair) |
+| `app/workbench.py` | the `source-registry {list,inspect}` read-only CLI |
+| `evals/test_source_registry.py` | valid-entry loading, safe defaults, clean validation failures, supersession representation + warnings, stale computed without mutation, v3.0 eval baseline and v2.7 report citation contract unchanged alongside a loaded registry, no MemoryLedger writes, no source-file mutation, and deterministic CLI rendering |
+
 ## License
 
 To be decided.
