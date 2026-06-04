@@ -236,6 +236,7 @@ Commands:
   pack-report <pack>    show a pack's curated sources and chunk counts
   retrieval-eval [--pack p] [--backend hybrid]  measure retrieval quality (read-only baseline)
   retrieval-eval --probe-report-path  localise where relevance bleed enters the report path (read-only)
+  retrieval-eval --probe-hygiene  classify wrong-source candidates on a harder near-neighbour corpus (read-only)
   hf-inspect <dataset_id>  preview a Hugging Face dataset's licence/decision
   hf-import <dataset_id> --pack <pack>  import a small governed HF sample
   demo                  run the Friday -> Monday near-miss example
@@ -1055,6 +1056,7 @@ def _value_sprint_cli(argv: list[str]) -> int:
 
 _RETRIEVAL_EVAL_CASES = ROOT / "demos" / "retrieval_eval_cases.jsonl"
 _RETRIEVAL_REPORT_PATH_CASES = ROOT / "demos" / "retrieval_report_path_cases.jsonl"
+_RETRIEVAL_HARDCORPUS_CASES = ROOT / "demos" / "retrieval_hardcorpus_cases.jsonl"
 
 
 def _retrieval_eval_cli(argv: list[str]) -> int:
@@ -1070,6 +1072,11 @@ def _retrieval_eval_cli(argv: list[str]) -> int:
     full report path — raw candidates -> selected evidence -> final report
     citations — and reports the first stage at which a forbidden source/term
     appears (or "not reproduced"). Still entirely read-only.
+
+    With ``--probe-hygiene`` (v3.0.2) it runs the harder near-neighbour corpus
+    and classifies every retrieved candidate into the wrong-source taxonomy
+    (forbidden_bleed / on_topic_neighbour / ambiguous / expected_gap) plus
+    chunk/source hygiene diagnostics. Still entirely read-only.
     """
     from agent import retrieval_eval_harness as reh
 
@@ -1091,6 +1098,10 @@ def _retrieval_eval_cli(argv: list[str]) -> int:
     parser.add_argument("--probe-report-path", action="store_true",
                         help="trace the full report path and localise the stage "
                              "where relevance bleed is introduced (read-only)")
+    parser.add_argument("--probe-hygiene", action="store_true",
+                        help="run the harder near-neighbour corpus and classify "
+                             "every candidate into the wrong-source taxonomy "
+                             "with chunk/source hygiene diagnostics (read-only)")
     parser.add_argument("--out-md", default=None,
                         help="optional path to write a Markdown report")
     parser.add_argument("--out-jsonl", default=None,
@@ -1099,6 +1110,28 @@ def _retrieval_eval_cli(argv: list[str]) -> int:
 
     # seed=False: no memory writes; this exercises the knowledge path only.
     service = _build_sprint_service(args.pack, args.backend, seed=False)
+
+    if args.probe_hygiene:
+        cases_path = args.cases or str(_RETRIEVAL_HARDCORPUS_CASES)
+        cases = reh.load_cases(cases_path)
+        results = reh.run_hygiene(service, cases)
+        summary = reh.summarize_hygiene(results)
+        print(reh.render_hygiene_markdown(
+            results, summary, pack_label=args.pack,
+            backend_label=args.backend))
+        if args.out_md or args.out_jsonl:
+            reh.write_hygiene_reports(
+                results, summary,
+                md_path=args.out_md or (ROOT / "reports"
+                                        / "hardcorpus_hygiene_latest.md"),
+                jsonl_path=args.out_jsonl or (ROOT / "reports"
+                                              / "hardcorpus_hygiene_latest.jsonl"),
+                pack_label=args.pack, backend_label=args.backend)
+            if args.out_md:
+                print(f"[hygiene-probe] wrote {args.out_md}")
+            if args.out_jsonl:
+                print(f"[hygiene-probe] wrote {args.out_jsonl}")
+        return 0
 
     if args.probe_report_path:
         cases_path = args.cases or str(_RETRIEVAL_REPORT_PATH_CASES)

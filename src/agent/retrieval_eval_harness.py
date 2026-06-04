@@ -76,6 +76,19 @@ class RetrievalEvalCase:
     minimum_hit_k: int = 1
     tags: List[str] = field(default_factory=list)
     case_id: str = ""
+    # v3.0.2 optional classification/hygiene fields. All defaulted so every
+    # v3.0 / v3.0.1 case loads unchanged. They drive the hygiene probe only —
+    # the v3.0 scorer and the v3.0.1 report-path probe never read them.
+    #   expected_topic_terms     terms that *legitimately* belong to this topic
+    #   allowed_neighbour_sources sources that are on-topic neighbours, not bleed
+    #   expected_gap             True when no authoritative source should exist
+    #   query_shape              direct | value_sprint | report | decision_lookup
+    #   classification_notes     human context for the wrong-source taxonomy
+    expected_topic_terms: List[str] = field(default_factory=list)
+    allowed_neighbour_sources: List[str] = field(default_factory=list)
+    expected_gap: bool = False
+    query_shape: str = "direct"
+    classification_notes: str = ""
 
     @property
     def has_expected(self) -> bool:
@@ -94,6 +107,12 @@ class RetrievalEvalCase:
             minimum_hit_k=int(data.get("minimum_hit_k", 1)),
             tags=list(data.get("tags") or []),
             case_id=str(data.get("case_id", "")),
+            expected_topic_terms=list(data.get("expected_topic_terms") or []),
+            allowed_neighbour_sources=list(
+                data.get("allowed_neighbour_sources") or []),
+            expected_gap=bool(data.get("expected_gap", False)),
+            query_shape=str(data.get("query_shape", "direct")),
+            classification_notes=str(data.get("classification_notes", "")),
         )
 
     def to_dict(self) -> dict:
@@ -782,6 +801,400 @@ def write_probe_reports(results: List[ReportPathCaseResult],
     md_path.write_text(
         render_probe_markdown(results, summary, pack_label=pack_label,
                               backend_label=backend_label),
+        encoding="utf-8")
+    with jsonl_path.open("w", encoding="utf-8") as handle:
+        handle.write(json.dumps({"summary": summary.to_dict()}) + "\n")
+        for r in results:
+            handle.write(json.dumps(r.to_dict()) + "\n")
+
+
+# =============================================================================
+# v3.0.2 Harder corpus + source/chunk hygiene probe — classification only
+# =============================================================================
+#
+# The v3.0 harness measures raw retrieval; the v3.0.1 probe localises bleed
+# across the report path. Both found the historical off-topic Copilot Studio
+# caution does *not* reproduce, and that the non-zero ``wrong_source_rate`` is
+# made of *other retrieved sources* — but neither distinguishes a **forbidden
+# bleed** from a **legitimate on-topic neighbour**. This layer adds that
+# classification plus chunk/source hygiene diagnostics, so a non-expected
+# candidate is sorted into one of four buckets:
+#
+#   forbidden_bleed    — matches a forbidden source or a forbidden topic term
+#   on_topic_neighbour — not expected, but an allowed neighbour source or shares
+#                        an expected topic term (legitimate adjacent evidence)
+#   ambiguous          — neither clearly forbidden nor clearly on-topic
+#   expected_gap       — a known no-answer case; retrieval surfaced something the
+#                        system must not present as an authoritative source
+#
+# Every call is a read of the frozen ``query_knowledge`` path. This layer changes
+# no retrieval, ranking, source-selection, grounding, composer, report-rendering,
+# or memory behaviour; it only observes and classifies. A clean result (no
+# forbidden bleed reproduced) is recorded honestly, never forced into a failure.
+
+CLASS_EXPECTED = "expected"
+CLASS_FORBIDDEN_BLEED = "forbidden_bleed"
+CLASS_ON_TOPIC_NEIGHBOUR = "on_topic_neighbour"
+CLASS_AMBIGUOUS = "ambiguous"
+CLASS_EXPECTED_GAP = "expected_gap"
+
+_WRONG_SOURCE_CLASSES = (
+    CLASS_FORBIDDEN_BLEED, CLASS_ON_TOPIC_NEIGHBOUR,
+    CLASS_AMBIGUOUS, CLASS_EXPECTED_GAP,
+)
+
+
+def _matched_topic_terms(case: RetrievalEvalCase, candidate: dict) -> List[str]:
+    """Expected topic terms present in a candidate's text or source name."""
+    text = str(candidate.get("text") or "").lower()
+    name = str(candidate.get("source_name") or "").lower()
+    return [t for t in case.expected_topic_terms
+            if t.lower() in text or t.lower() in name]
+
+
+def _forbidden_terms_found(case: RetrievalEvalCase,
+                           candidate: dict) -> List[str]:
+    """Forbidden topic terms present in a candidate's text."""
+    text = str(candidate.get("text") or "").lower()
+    return [t for t in case.forbidden_topic_terms if t.lower() in text]
+
+
+def _candidate_is_forbidden(case: RetrievalEvalCase, candidate: dict) -> bool:
+    """Whether a candidate trips a forbidden source or forbidden topic term."""
+    if any(_source_matches(src, candidate) for src in case.forbidden_sources):
+        return True
+    return bool(_forbidden_terms_found(case, candidate))
+
+
+def classify_candidate(case: RetrievalEvalCase, candidate: dict) -> str:
+    """Sort one retrieved candidate into the wrong-source taxonomy.
+
+    An expected candidate is ``expected`` (a hit, not a wrong source). Otherwise
+    the order is: forbidden bleed first (it dominates), then a gap case marks
+    every non-forbidden candidate ``expected_gap`` (the system must not pass it
+    off as authoritative), then an allowed-neighbour source or a shared expected
+    topic term makes it an ``on_topic_neighbour``, else ``ambiguous``.
+    """
+    if case.has_expected and _candidate_matches_case(case, candidate):
+        return CLASS_EXPECTED
+    if _candidate_is_forbidden(case, candidate):
+        return CLASS_FORBIDDEN_BLEED
+    if case.expected_gap:
+        return CLASS_EXPECTED_GAP
+    if any(_source_matches(src, candidate)
+           for src in case.allowed_neighbour_sources):
+        return CLASS_ON_TOPIC_NEIGHBOUR
+    if _matched_topic_terms(case, candidate):
+        return CLASS_ON_TOPIC_NEIGHBOUR
+    return CLASS_AMBIGUOUS
+
+
+@dataclass(frozen=True)
+class CandidateDiagnostic:
+    """Per-candidate hygiene + classification record (read-only observation)."""
+
+    rank: int
+    source_name: str
+    chunk_id: str
+    classification: str
+    topic_density: Optional[float]          # matched / total expected terms
+    matched_topic_terms: List[str]
+    forbidden_terms_found: List[str]
+    contains_forbidden_terms: bool
+    is_mixed_topic: bool                     # expected AND forbidden term present
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+
+@dataclass(frozen=True)
+class HygieneCaseResult:
+    """Per-case classification + chunk/source hygiene for one query."""
+
+    case_id: str
+    query: str
+    query_shape: str
+    expected_gap: bool
+    passed: bool
+    reason: str
+    retrieved_chunk_count: int
+    first_hit_rank: Optional[int]
+    classification_counts: dict              # over non-expected candidates
+    mixed_topic_chunk_count: int
+    chunk_with_forbidden_terms_count: int
+    chunk_topic_density: Optional[float]     # mean per-candidate density
+    source_topic_overlap: Optional[float]    # expected-source chunks on-topic
+    candidates: List[CandidateDiagnostic] = field(default_factory=list)
+    tags: List[str] = field(default_factory=list)
+
+    @property
+    def forbidden_bleed_count(self) -> int:
+        return self.classification_counts.get(CLASS_FORBIDDEN_BLEED, 0)
+
+    def to_dict(self) -> dict:
+        return {
+            "case_id": self.case_id,
+            "query": self.query,
+            "query_shape": self.query_shape,
+            "expected_gap": self.expected_gap,
+            "passed": self.passed,
+            "reason": self.reason,
+            "retrieved_chunk_count": self.retrieved_chunk_count,
+            "first_hit_rank": self.first_hit_rank,
+            "classification_counts": dict(self.classification_counts),
+            "mixed_topic_chunk_count": self.mixed_topic_chunk_count,
+            "chunk_with_forbidden_terms_count":
+                self.chunk_with_forbidden_terms_count,
+            "chunk_topic_density": self.chunk_topic_density,
+            "source_topic_overlap": self.source_topic_overlap,
+            "candidates": [c.to_dict() for c in self.candidates],
+            "tags": list(self.tags),
+        }
+
+
+@dataclass(frozen=True)
+class HygieneSummary:
+    """Aggregate wrong-source taxonomy + hygiene tallies across all cases."""
+
+    case_count: int
+    pass_count: int
+    fail_count: int
+    wrong_source_classification: dict        # bucket -> total candidate count
+    mixed_topic_chunk_count: int
+    chunk_with_forbidden_terms_count: int
+    mean_chunk_topic_density: Optional[float]
+    mean_source_topic_overlap: Optional[float]
+    value_sprint_query_pass_rate: Optional[float]
+    gap_case_pass_rate: Optional[float]
+    forbidden_bleed_reproduced: bool
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+
+def diagnose_case(service: WorkbenchService,
+                  case: RetrievalEvalCase) -> HygieneCaseResult:
+    """Classify every retrieved candidate and measure chunk/source hygiene.
+
+    Read-only: a single ``query_knowledge`` call, then pure measurement over the
+    ordered candidates. No state is mutated.
+    """
+    audit = service.query_knowledge(case.query)
+    candidates = list(audit.candidates)
+
+    diagnostics: List[CandidateDiagnostic] = []
+    counts = {name: 0 for name in _WRONG_SOURCE_CLASSES}
+    first_hit_rank: Optional[int] = None
+    densities: List[float] = []
+    mixed = 0
+    forbidden_chunks = 0
+    expected_source_chunks = 0
+    expected_source_on_topic = 0
+
+    for idx, cand in enumerate(candidates, start=1):
+        is_expected = case.has_expected and _candidate_matches_case(case, cand)
+        if is_expected and first_hit_rank is None:
+            first_hit_rank = idx
+        classification = classify_candidate(case, cand)
+        if classification != CLASS_EXPECTED:
+            counts[classification] += 1
+
+        matched = _matched_topic_terms(case, cand)
+        forbidden = _forbidden_terms_found(case, cand)
+        density: Optional[float] = (
+            len(matched) / len(case.expected_topic_terms)
+            if case.expected_topic_terms else None)
+        if density is not None:
+            densities.append(density)
+        is_mixed = bool(matched and forbidden)
+        if is_mixed:
+            mixed += 1
+        if forbidden:
+            forbidden_chunks += 1
+        if case.expected_sources and any(
+                _source_matches(src, cand) for src in case.expected_sources):
+            expected_source_chunks += 1
+            if matched:
+                expected_source_on_topic += 1
+
+        diagnostics.append(CandidateDiagnostic(
+            rank=idx,
+            source_name=str(cand.get("source_name") or ""),
+            chunk_id=_norm_chunk_id(str(cand.get("chunk_id") or "")),
+            classification=classification,
+            topic_density=density,
+            matched_topic_terms=matched,
+            forbidden_terms_found=forbidden,
+            contains_forbidden_terms=bool(forbidden),
+            is_mixed_topic=is_mixed,
+        ))
+
+    chunk_topic_density = _mean(densities)
+    source_topic_overlap: Optional[float] = (
+        expected_source_on_topic / expected_source_chunks
+        if (expected_source_chunks and case.expected_topic_terms) else None)
+
+    # Pass logic: forbidden bleed always fails. A normal case also needs its
+    # expected source within minimum_hit_k; a gap case has nothing to hit and
+    # passes as long as nothing forbidden bled in.
+    forbidden_count = counts[CLASS_FORBIDDEN_BLEED]
+    reasons: List[str] = []
+    hit_ok = True
+    if not case.expected_gap and case.has_expected and case.minimum_hit_k > 0:
+        hit_ok = (first_hit_rank is not None
+                  and first_hit_rank <= case.minimum_hit_k)
+        if not hit_ok:
+            where = (f"rank {first_hit_rank}" if first_hit_rank is not None
+                     else "not retrieved")
+            reasons.append(
+                f"expected source missing within top-{case.minimum_hit_k} "
+                f"({where})")
+    if forbidden_count:
+        reasons.append(f"forbidden bleed x{forbidden_count}")
+    passed = hit_ok and forbidden_count == 0
+    if passed:
+        reason = ("gap case — no forbidden bleed" if case.expected_gap
+                  else "clean — expected hit, no forbidden bleed")
+    else:
+        reason = "; ".join(reasons)
+
+    return HygieneCaseResult(
+        case_id=case.case_id or case.query[:40],
+        query=case.query,
+        query_shape=case.query_shape,
+        expected_gap=case.expected_gap,
+        passed=passed,
+        reason=reason,
+        retrieved_chunk_count=len(candidates),
+        first_hit_rank=first_hit_rank,
+        classification_counts=counts,
+        mixed_topic_chunk_count=mixed,
+        chunk_with_forbidden_terms_count=forbidden_chunks,
+        chunk_topic_density=chunk_topic_density,
+        source_topic_overlap=source_topic_overlap,
+        candidates=diagnostics,
+        tags=list(case.tags),
+    )
+
+
+def run_hygiene(service: WorkbenchService,
+                cases: List[RetrievalEvalCase]) -> List[HygieneCaseResult]:
+    """Diagnose every case through the frozen retrieval path (read-only)."""
+    return [diagnose_case(service, case) for case in cases]
+
+
+def summarize_hygiene(results: List[HygieneCaseResult]) -> HygieneSummary:
+    """Aggregate per-case classification + hygiene into corpus-level tallies."""
+    counts = {name: 0 for name in _WRONG_SOURCE_CLASSES}
+    for r in results:
+        for name in _WRONG_SOURCE_CLASSES:
+            counts[name] += r.classification_counts.get(name, 0)
+
+    vs_cases = [r for r in results if r.query_shape == "value_sprint"]
+    gap_cases = [r for r in results if r.expected_gap]
+    densities = [r.chunk_topic_density for r in results
+                 if r.chunk_topic_density is not None]
+    overlaps = [r.source_topic_overlap for r in results
+                if r.source_topic_overlap is not None]
+    return HygieneSummary(
+        case_count=len(results),
+        pass_count=sum(1 for r in results if r.passed),
+        fail_count=sum(1 for r in results if not r.passed),
+        wrong_source_classification=counts,
+        mixed_topic_chunk_count=sum(r.mixed_topic_chunk_count for r in results),
+        chunk_with_forbidden_terms_count=sum(
+            r.chunk_with_forbidden_terms_count for r in results),
+        mean_chunk_topic_density=_mean(densities),
+        mean_source_topic_overlap=_mean(overlaps),
+        value_sprint_query_pass_rate=(
+            _mean([1.0 if r.passed else 0.0 for r in vs_cases])
+            if vs_cases else None),
+        gap_case_pass_rate=(
+            _mean([1.0 if r.passed else 0.0 for r in gap_cases])
+            if gap_cases else None),
+        forbidden_bleed_reproduced=counts[CLASS_FORBIDDEN_BLEED] > 0,
+    )
+
+
+def render_hygiene_markdown(results: List[HygieneCaseResult],
+                            summary: HygieneSummary, *,
+                            pack_label: str, backend_label: str) -> str:
+    """Render the harder-corpus hygiene probe as Markdown (no side effects)."""
+    lines: List[str] = []
+    lines.append(f"# Harder-corpus hygiene probe — {pack_label} "
+                 f"({backend_label})")
+    lines.append("")
+    lines.append("Read-only classification of every retrieved candidate into "
+                 "the wrong-source taxonomy, plus chunk/source hygiene. Changes "
+                 "no retrieval/ranking/source/composer/grounding/memory "
+                 "behaviour.")
+    lines.append("")
+    lines.append("## Summary")
+    lines.append("")
+    lines.append(f"- cases: {summary.case_count} "
+                 f"(pass {summary.pass_count} / fail {summary.fail_count})")
+    if summary.forbidden_bleed_reproduced:
+        lines.append(
+            f"- **forbidden bleed reproduced**: yes "
+            f"({summary.wrong_source_classification[CLASS_FORBIDDEN_BLEED]} "
+            f"candidate(s))")
+    else:
+        lines.append("- **forbidden bleed reproduced**: no — every non-expected "
+                     "candidate is an on-topic neighbour, ambiguous, or an "
+                     "expected-gap surface")
+    wsc = summary.wrong_source_classification
+    lines.append(f"- wrong-source classification: "
+                 f"forbidden_bleed={wsc[CLASS_FORBIDDEN_BLEED]}, "
+                 f"on_topic_neighbour={wsc[CLASS_ON_TOPIC_NEIGHBOUR]}, "
+                 f"ambiguous={wsc[CLASS_AMBIGUOUS]}, "
+                 f"expected_gap={wsc[CLASS_EXPECTED_GAP]}")
+    lines.append(f"- mixed_topic_chunk_count: "
+                 f"{summary.mixed_topic_chunk_count}")
+    lines.append(f"- chunk_with_forbidden_terms_count: "
+                 f"{summary.chunk_with_forbidden_terms_count}")
+    lines.append(f"- mean_chunk_topic_density: "
+                 f"{_fmt_opt(summary.mean_chunk_topic_density)}")
+    lines.append(f"- mean_source_topic_overlap: "
+                 f"{_fmt_opt(summary.mean_source_topic_overlap)}")
+    lines.append(f"- value_sprint_query_pass_rate: "
+                 f"{_fmt_opt(summary.value_sprint_query_pass_rate)}")
+    lines.append(f"- gap_case_pass_rate: "
+                 f"{_fmt_opt(summary.gap_case_pass_rate)}")
+    lines.append("")
+    lines.append("## Cases")
+    lines.append("")
+    lines.append("| case | shape | result | first hit | f_bleed | neighbour | "
+                 "ambig | gap | mixed | density | src-overlap |")
+    lines.append("|---|---|---|---|---|---|---|---|---|---|---|")
+    for r in results:
+        verdict = "PASS" if r.passed else "FAIL"
+        rank = "—" if r.first_hit_rank is None else str(r.first_hit_rank)
+        c = r.classification_counts
+        lines.append(
+            f"| {r.case_id} | {r.query_shape} | {verdict} | {rank} | "
+            f"{c.get(CLASS_FORBIDDEN_BLEED, 0)} | "
+            f"{c.get(CLASS_ON_TOPIC_NEIGHBOUR, 0)} | "
+            f"{c.get(CLASS_AMBIGUOUS, 0)} | "
+            f"{c.get(CLASS_EXPECTED_GAP, 0)} | "
+            f"{r.mixed_topic_chunk_count} | "
+            f"{_fmt_opt(r.chunk_topic_density)} | "
+            f"{_fmt_opt(r.source_topic_overlap)} |")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def write_hygiene_reports(results: List[HygieneCaseResult],
+                          summary: HygieneSummary, *,
+                          md_path: str | Path, jsonl_path: str | Path,
+                          pack_label: str, backend_label: str) -> None:
+    """Write the hygiene Markdown and JSONL reports (only when asked)."""
+    md_path = Path(md_path)
+    jsonl_path = Path(jsonl_path)
+    md_path.parent.mkdir(parents=True, exist_ok=True)
+    jsonl_path.parent.mkdir(parents=True, exist_ok=True)
+    md_path.write_text(
+        render_hygiene_markdown(results, summary, pack_label=pack_label,
+                                backend_label=backend_label),
         encoding="utf-8")
     with jsonl_path.open("w", encoding="utf-8") as handle:
         handle.write(json.dumps({"summary": summary.to_dict()}) + "\n")

@@ -1830,6 +1830,75 @@ not optimisation: a clean result is recorded as-is, not forced into a failure.
 | `app/workbench.py` | the `retrieval-eval --probe-report-path` flag |
 | `evals/test_report_path_probe.py` | stage-metric shape, per-stage detection, determinism, non-mutation, and proof the v3.0 eval is unchanged alongside the probe |
 
+## v3.0.2 Harder corpus + source/chunk hygiene probe (classification only)
+
+The v3.0 harness measures raw retrieval and the v3.0.1 probe localises where
+bleed would enter the report path. Both found the historical off-topic Copilot
+Studio caution does **not** reproduce, and that the non-zero `wrong_source_rate`
+is made of *other retrieved sources* — but neither answers the next question:
+**is a non-expected candidate a forbidden bleed or a legitimate on-topic
+neighbour?** v3.0.2 adds that classification, plus chunk/source hygiene
+diagnostics, on a deliberately harder near-neighbour corpus. It is
+classification only: it changes no retrieval, ranking, source-selection,
+grounding, composer, report-rendering, or memory behaviour.
+
+**Wrong-source taxonomy** — every retrieved candidate that is not an expected
+hit is sorted into one bucket:
+
+| class | rule |
+|---|---|
+| `forbidden_bleed` | matches a forbidden source **or** a forbidden topic term (always dominates) |
+| `expected_gap` | a known no-answer case surfaced this candidate — the system must not present it as authoritative |
+| `on_topic_neighbour` | an allowed-neighbour source **or** shares an expected topic term — legitimate adjacent evidence |
+| `ambiguous` | neither clearly forbidden nor clearly on-topic |
+
+**New optional case fields** (additive; v3.0 / v3.0.1 cases load unchanged):
+`expected_topic_terms`, `allowed_neighbour_sources`, `expected_gap`,
+`query_shape` (`direct` / `value_sprint` / `report` / `decision_lookup`), and
+`classification_notes`.
+
+**Chunk/source hygiene** — per candidate: `topic_density` (matched ÷ total
+expected terms), `contains_forbidden_terms`, and `is_mixed_topic` (a chunk
+carrying both an expected **and** a forbidden term). Per corpus:
+`mixed_topic_chunk_count`, `chunk_with_forbidden_terms_count`,
+`mean_chunk_topic_density`, `mean_source_topic_overlap` (of expected-source
+chunks, the fraction that actually carry an expected term),
+`value_sprint_query_pass_rate`, `gap_case_pass_rate`, and the headline
+`forbidden_bleed_reproduced` flag.
+
+```text
+# classify wrong-source candidates on the harder corpus (read-only)
+python app/workbench.py retrieval-eval --probe-hygiene --backend hybrid
+
+# optional: also write reports (otherwise nothing is generated)
+python app/workbench.py retrieval-eval --probe-hygiene --backend hybrid \
+    --out-md reports/hardcorpus_hygiene_latest.md \
+    --out-jsonl reports/hardcorpus_hygiene_latest.jsonl
+```
+
+**Probe dataset** — `demos/retrieval_hardcorpus_cases.jsonl` (8 cases). Harder
+near-neighbours that share vocabulary on purpose: "connector" spans both Power
+Platform and Copilot Studio, and "DLP" spans both Purview and Power Platform.
+It covers all five target categories — forbidden bleed, legitimate on-topic
+neighbours, ambiguous candidates, expected no-answer/gap cases, and mixed-topic
+chunk/source hygiene — including short `value_sprint`-shaped queries.
+
+**Baseline finding (honest):** on `m365_coding_assistant` (hybrid) **forbidden
+bleed is still not reproduced** — even on the harder corpus,
+`forbidden_bleed = 0`, `mixed_topic_chunk_count = 0`, and all 8 cases pass.
+Every non-expected candidate classifies as an `on_topic_neighbour`, `ambiguous`,
+or `expected_gap` surface. The non-zero wrong-source signal from v3.0 is
+confirmed to be legitimate neighbouring evidence and gap surfaces, **not**
+forbidden bleed. The value of this slice is knowing the failure is not
+reproducible; a clean result is recorded as-is, never forced into a failure.
+
+| File | What it adds |
+|---|---|
+| `src/agent/retrieval_eval_harness.py` | additive `classify_candidate`, `CandidateDiagnostic`, `HygieneCaseResult`, `HygieneSummary`, `diagnose_case` / `run_hygiene` / `summarize_hygiene`, and a Markdown renderer (all read-only; v3.0 and v3.0.1 functions untouched; `RetrievalEvalCase` extended only with defaulted fields) |
+| `demos/retrieval_hardcorpus_cases.jsonl` | the 8-case harder near-neighbour corpus |
+| `app/workbench.py` | the `retrieval-eval --probe-hygiene` flag |
+| `evals/test_hardcorpus_hygiene.py` | field loading, taxonomy classification, bleed-vs-neighbour separation, gap handling, hygiene-metric shape, determinism, non-mutation, and proof the v3.0 eval and v3.0.1 probe are unchanged alongside it |
+
 ## License
 
 To be decided.
