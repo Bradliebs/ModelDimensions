@@ -239,6 +239,7 @@ Commands:
   retrieval-eval --probe-hygiene  classify wrong-source candidates on a harder near-neighbour corpus (read-only)
   source-registry list [--registry path]  list source metadata entries (read-only)
   source-registry inspect <id> [--registry path]  show one source's metadata (read-only)
+  source-registry audit [--registry path]  report source lifecycle/metadata risk (read-only)
   hf-inspect <dataset_id>  preview a Hugging Face dataset's licence/decision
   hf-import <dataset_id> --pack <pack>  import a small governed HF sample
   demo                  run the Friday -> Monday near-miss example
@@ -1186,9 +1187,11 @@ def _source_registry_cli(argv: list[str]) -> int:
 
     ``list`` prints a deterministic table of every entry with its stored and
     *computed* effective freshness status; ``inspect <id>`` prints one entry's
-    full metadata. Both are pure reads: nothing is written, and no retrieval,
+    full metadata; ``audit`` prints a deterministic lifecycle/metadata risk
+    report (v4.1). All are pure reads: nothing is written, and no retrieval,
     ranking, source-selection, grounding, composer, or memory behaviour is
-    touched. The registry annotates sources; it never becomes the evidence.
+    touched. The registry annotates sources; it never becomes the evidence, and
+    the audit never decides a source is false.
     """
     from agent import source_registry as sr
 
@@ -1196,8 +1199,9 @@ def _source_registry_cli(argv: list[str]) -> int:
         prog="workbench.py source-registry",
         description="Inspect source metadata (read-only). The registry annotates "
                     "sources; it changes no retrieval/ranking/grounding logic.")
-    parser.add_argument("action", choices=["list", "inspect"],
-                        help="list all entries or inspect a single source_id")
+    parser.add_argument("action", choices=["list", "inspect", "audit"],
+                        help="list all entries, inspect a single source_id, or "
+                             "audit lifecycle/metadata risk")
     parser.add_argument("source_id", nargs="?", default=None,
                         help="the source_id to inspect (required for 'inspect')")
     parser.add_argument("--registry", default=str(_SOURCE_REGISTRY_DEFAULT),
@@ -1208,6 +1212,11 @@ def _source_registry_cli(argv: list[str]) -> int:
 
     if args.action == "list":
         print(sr.render_registry_markdown(entries))
+        return 0
+
+    if args.action == "audit":
+        report = sr.audit_registry(entries)
+        print(sr.render_audit_markdown(report))
         return 0
 
     if not args.source_id:

@@ -2014,6 +2014,65 @@ python app/workbench.py source-registry list --registry demos/source_registry.js
 | `app/workbench.py` | the `source-registry {list,inspect}` read-only CLI |
 | `evals/test_source_registry.py` | valid-entry loading, safe defaults, clean validation failures, supersession representation + warnings, stale computed without mutation, v3.0 eval baseline and v2.7 report citation contract unchanged alongside a loaded registry, no MemoryLedger writes, no source-file mutation, and deterministic CLI rendering |
 
+## v4.1 Source registry audit / stale-source detector (read-only)
+
+v4.0 records *what a source is*; v4.1 adds a read-only **audit** that walks the
+registry and *reports* where its metadata carries lifecycle or integrity risk —
+stale, deprecated, draft, missing-metadata, and broken supersession links —
+**without mutating any entry, writing any file, or touching retrieval**.
+
+**The audit reports risk; it never decides a source is false.** Source text
+remains the evidence; registry metadata remains metadata. The audit is the same
+kind of pure read as `compute_effective_status` and `supersession_warnings`: it
+reads the entries (and a supplied `now` for freshness) and returns a report. It
+writes nothing — `save_registry` stays the only writer and is never called here
+— and changes **no** retrieval, ranking, source-selection, grounding, composer,
+or memory behaviour. No autonomous behaviour is introduced: a human runs it and
+reads the output.
+
+**Finding severities** — `error` (registry integrity broken), `warning` (a
+lifecycle/metadata gap needing review), `info` (a normal, intentional state
+worth surfacing):
+
+| code | severity | meaning |
+|---|---|---|
+| `stale_by_status` | warning | stored `status` is `stale` (flagged for review) |
+| `stale_by_policy` | warning | `last_reviewed_at` is older than `stale_after_days`; the *computed* effective status is stale while stored status is active |
+| `deprecated_source` | info | source is `deprecated` (retired from active use) |
+| `draft_source` | info | source is a `draft` (not yet ratified) |
+| `missing_last_reviewed_at` | warning | no review date; freshness cannot be assessed |
+| `missing_owner` | warning | no accountable owner recorded |
+| `missing_topics` | info | no topics; harder to classify/discover |
+| `unknown_authority_level` | info | `authority_level` is `unknown` (missing or unestablished) |
+| `dangling_supersedes` | error | `supersedes` points to a non-existent source id |
+| `dangling_superseded_by` | error | `superseded_by` points to a non-existent source id |
+| `asymmetric_supersession` | error | a one-sided lineage link (A→B without the matching B→A back-link) |
+| `active_source_superseded` | warning | an `active` source that something supersedes (likely should be deprecated) |
+| `deprecated_source_without_successor` | warning | a `deprecated` source that records no `superseded_by` successor |
+
+The model collapses a *missing* `authority_level` to `unknown`, so a missing or
+explicit-unknown authority both surface as `unknown_authority_level`.
+
+```text
+# read-only audit (deterministic; nothing is written)
+python app/workbench.py source-registry audit
+python app/workbench.py source-registry audit --registry demos/source_registry.jsonl
+```
+
+Findings are ordered deterministically by `(severity, code, source_id)` (errors
+first), and the report carries summary counts by severity and by code. On the
+bundled `demos/source_registry.jsonl` the audit returns **0 errors** and surfaces
+the demo's intentional risks — the long-expired community source as
+`stale_by_policy`, the deprecated v1 governance source as `deprecated_source`,
+and the unratified draft as `draft_source` + `missing_last_reviewed_at` +
+`unknown_authority_level`.
+
+| File | What it adds |
+|---|---|
+| `src/agent/source_registry.py` | `FindingSeverity` / `FindingCode` + `FINDING_SEVERITY` map, frozen `SourceRegistryFinding` and `SourceRegistryAuditReport`, the pure `audit_registry`, and deterministic `render_audit_markdown` |
+| `app/workbench.py` | the `source-registry audit` read-only CLI action |
+| `evals/test_source_registry_audit.py` | fresh-vs-stale detection, `stale_by_status`/`stale_by_policy`, deprecated/draft surfacing, missing-metadata, dangling/asymmetric/active-superseded/orphaned-deprecated supersession findings, determinism, read-only CLI, `save_registry` never called, no MemoryLedger writes, `list_knowledge_sources` unchanged, and v3.0 eval + v2.7 report contracts unchanged alongside an audit |
+
 ## License
 
 To be decided.

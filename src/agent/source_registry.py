@@ -328,3 +328,328 @@ def render_entry_markdown(entry: SourceRegistryEntry,
                 lines.append(f"- {w}")
     lines.append("")
     return "\n".join(lines)
+
+
+# -- v4.1 audit layer (read-only; reports lifecycle/metadata risk) -----------
+#
+# The audit walks the registry and *reports* findings about each source's
+# lifecycle (stale/deprecated/draft), its metadata completeness (owner, review
+# date, topics, authority), and its supersession integrity (dangling/asymmetric
+# links). It is the same kind of pure read as ``compute_effective_status`` and
+# ``supersession_warnings``: it never mutates an entry (frozen), never writes a
+# file (``save_registry`` stays the only writer and is never called here), and
+# never touches retrieval, ranking, source-selection, grounding, composer, or
+# memory. Crucially, the audit **does not decide a source is false** — source
+# text remains the evidence; this only flags where the *metadata* carries risk.
+
+
+class FindingSeverity(str, Enum):
+    """How much attention a finding warrants.
+
+    * ``error`` — a registry integrity problem (broken supersession lineage).
+    * ``warning`` — a lifecycle or metadata gap that needs human review.
+    * ``info`` — a normal, intentional state worth surfacing (deprecated/draft,
+      minor metadata completeness notes).
+    """
+
+    INFO = "info"
+    WARNING = "warning"
+    ERROR = "error"
+
+
+class FindingCode:
+    """Stable string codes for audit findings (grouped by what they describe).
+
+    Codes are plain strings so reports serialise readably and tests pin exact
+    values. :data:`FINDING_SEVERITY` maps each code to its severity.
+    """
+
+    # lifecycle / freshness
+    STALE_BY_POLICY = "stale_by_policy"
+    STALE_BY_STATUS = "stale_by_status"
+    DEPRECATED_SOURCE = "deprecated_source"
+    DRAFT_SOURCE = "draft_source"
+    # metadata completeness
+    MISSING_LAST_REVIEWED_AT = "missing_last_reviewed_at"
+    MISSING_OWNER = "missing_owner"
+    MISSING_TOPICS = "missing_topics"
+    UNKNOWN_AUTHORITY_LEVEL = "unknown_authority_level"
+    # supersession integrity
+    DANGLING_SUPERSEDES = "dangling_supersedes"
+    DANGLING_SUPERSEDED_BY = "dangling_superseded_by"
+    ASYMMETRIC_SUPERSESSION = "asymmetric_supersession"
+    ACTIVE_SOURCE_SUPERSEDED = "active_source_superseded"
+    DEPRECATED_SOURCE_WITHOUT_SUCCESSOR = "deprecated_source_without_successor"
+
+
+# Single source of truth for each code's severity. (The model collapses a
+# missing ``authority_level`` to ``unknown``, so a missing/explicit-unknown
+# authority both surface as ``unknown_authority_level`` — see README.)
+FINDING_SEVERITY: Dict[str, FindingSeverity] = {
+    FindingCode.STALE_BY_POLICY: FindingSeverity.WARNING,
+    FindingCode.STALE_BY_STATUS: FindingSeverity.WARNING,
+    FindingCode.DEPRECATED_SOURCE: FindingSeverity.INFO,
+    FindingCode.DRAFT_SOURCE: FindingSeverity.INFO,
+    FindingCode.MISSING_LAST_REVIEWED_AT: FindingSeverity.WARNING,
+    FindingCode.MISSING_OWNER: FindingSeverity.WARNING,
+    FindingCode.MISSING_TOPICS: FindingSeverity.INFO,
+    FindingCode.UNKNOWN_AUTHORITY_LEVEL: FindingSeverity.INFO,
+    FindingCode.DANGLING_SUPERSEDES: FindingSeverity.ERROR,
+    FindingCode.DANGLING_SUPERSEDED_BY: FindingSeverity.ERROR,
+    FindingCode.ASYMMETRIC_SUPERSESSION: FindingSeverity.ERROR,
+    FindingCode.ACTIVE_SOURCE_SUPERSEDED: FindingSeverity.WARNING,
+    FindingCode.DEPRECATED_SOURCE_WITHOUT_SUCCESSOR: FindingSeverity.WARNING,
+}
+
+# Deterministic ordering: errors first, then warnings, then info.
+_SEVERITY_RANK = {
+    FindingSeverity.ERROR: 0,
+    FindingSeverity.WARNING: 1,
+    FindingSeverity.INFO: 2,
+}
+
+
+@dataclass(frozen=True)
+class SourceRegistryFinding:
+    """One audit observation about one source. Pure data; no behaviour.
+
+    ``source_id`` is the source the finding is about, ``code`` is a stable
+    :class:`FindingCode` value, ``severity`` its mapped :class:`FindingSeverity`,
+    and ``message`` a human-readable explanation. A finding reports *metadata or
+    lifecycle risk*; it never asserts the source's content is wrong.
+    """
+
+    source_id: str
+    code: str
+    severity: FindingSeverity
+    message: str
+
+    def to_dict(self) -> dict:
+        return {
+            "source_id": self.source_id,
+            "code": self.code,
+            "severity": self.severity.value,
+            "message": self.message,
+            "_record": "source_registry_finding",
+        }
+
+
+@dataclass(frozen=True)
+class SourceRegistryAuditReport:
+    """The full result of auditing a registry. Deterministic and inert.
+
+    ``findings`` are pre-sorted (severity, code, source_id). ``counts_by_severity``
+    and ``counts_by_code`` are summary tallies. ``entry_count`` is how many
+    entries were audited. Building this report writes nothing and mutates nothing.
+    """
+
+    findings: List[SourceRegistryFinding]
+    counts_by_severity: Dict[str, int]
+    counts_by_code: Dict[str, int]
+    entry_count: int
+
+    @property
+    def error_count(self) -> int:
+        return self.counts_by_severity.get(FindingSeverity.ERROR.value, 0)
+
+    @property
+    def warning_count(self) -> int:
+        return self.counts_by_severity.get(FindingSeverity.WARNING.value, 0)
+
+    @property
+    def info_count(self) -> int:
+        return self.counts_by_severity.get(FindingSeverity.INFO.value, 0)
+
+    def findings_for(self, source_id: str) -> List[SourceRegistryFinding]:
+        return [f for f in self.findings if f.source_id == source_id]
+
+    def to_dict(self) -> dict:
+        return {
+            "entry_count": self.entry_count,
+            "counts_by_severity": dict(self.counts_by_severity),
+            "counts_by_code": dict(self.counts_by_code),
+            "findings": [f.to_dict() for f in self.findings],
+            "_record": "source_registry_audit_report",
+        }
+
+
+def _finding(source_id: str, code: str, message: str) -> SourceRegistryFinding:
+    """Build a finding, resolving severity from the code's mapping."""
+    return SourceRegistryFinding(
+        source_id=source_id,
+        code=code,
+        severity=FINDING_SEVERITY[code],
+        message=message,
+    )
+
+
+def audit_registry(entries: List[SourceRegistryEntry], *,
+                   now: Optional[datetime] = None) -> SourceRegistryAuditReport:
+    """Audit a registry and return a deterministic, read-only findings report.
+
+    Pure: it reads the entries (and the supplied ``now`` for freshness) and
+    returns a report. It never mutates an entry, never writes a file, and never
+    affects retrieval/ranking/grounding/composer/memory. Findings describe
+    *metadata and lifecycle risk only* — they never claim a source's text is
+    false.
+
+    Checks, per entry:
+
+    * **lifecycle / freshness** — ``stale_by_status`` (stored status is
+      ``stale``), ``stale_by_policy`` (review window expired so the *computed*
+      effective status is stale while stored status is active), ``deprecated_source``
+      and ``draft_source`` (surfacing those intentional states);
+    * **metadata completeness** — ``missing_last_reviewed_at``, ``missing_owner``,
+      ``missing_topics``, ``unknown_authority_level``;
+    * **supersession integrity** — ``dangling_supersedes`` /
+      ``dangling_superseded_by`` (link to a non-existent id),
+      ``asymmetric_supersession`` (a one-sided link), ``active_source_superseded``
+      (an ``active`` source something supersedes — likely should be deprecated),
+      and ``deprecated_source_without_successor`` (retired with no successor).
+    """
+    ids = index_by_id(entries)
+    findings: List[SourceRegistryFinding] = []
+
+    for entry in entries:
+        sid = entry.source_id
+
+        # -- lifecycle / freshness --
+        if entry.status is SourceStatus.STALE:
+            findings.append(_finding(
+                sid, FindingCode.STALE_BY_STATUS,
+                "stored status is 'stale'; source is flagged for review"))
+        elif compute_effective_status(entry, now=now) is SourceStatus.STALE:
+            findings.append(_finding(
+                sid, FindingCode.STALE_BY_POLICY,
+                f"last_reviewed_at is older than stale_after_days "
+                f"({entry.stale_after_days}); effective status computes stale"))
+
+        if entry.status is SourceStatus.DEPRECATED:
+            findings.append(_finding(
+                sid, FindingCode.DEPRECATED_SOURCE,
+                "source is deprecated (retired from active use)"))
+        if entry.status is SourceStatus.DRAFT:
+            findings.append(_finding(
+                sid, FindingCode.DRAFT_SOURCE,
+                "source is a draft (not yet ratified)"))
+
+        # -- metadata completeness --
+        if not entry.last_reviewed_at:
+            findings.append(_finding(
+                sid, FindingCode.MISSING_LAST_REVIEWED_AT,
+                "no last_reviewed_at recorded; freshness cannot be assessed"))
+        if not entry.owner:
+            findings.append(_finding(
+                sid, FindingCode.MISSING_OWNER,
+                "no owner recorded; source has no accountable owner"))
+        if not entry.topics:
+            findings.append(_finding(
+                sid, FindingCode.MISSING_TOPICS,
+                "no topics recorded; source is harder to classify/discover"))
+        if entry.authority_level is AuthorityLevel.UNKNOWN:
+            findings.append(_finding(
+                sid, FindingCode.UNKNOWN_AUTHORITY_LEVEL,
+                "authority_level is unknown (missing or unestablished)"))
+
+        # -- supersession integrity --
+        if entry.status is SourceStatus.ACTIVE and entry.superseded_by:
+            findings.append(_finding(
+                sid, FindingCode.ACTIVE_SOURCE_SUPERSEDED,
+                f"status is active but superseded_by "
+                f"{', '.join(entry.superseded_by)}; consider deprecating"))
+        if entry.status is SourceStatus.DEPRECATED and not entry.superseded_by:
+            findings.append(_finding(
+                sid, FindingCode.DEPRECATED_SOURCE_WITHOUT_SUCCESSOR,
+                "source is deprecated but records no superseded_by successor"))
+
+        for target in entry.supersedes:
+            if target not in ids:
+                findings.append(_finding(
+                    sid, FindingCode.DANGLING_SUPERSEDES,
+                    f"supersedes unknown source {target}"))
+            elif sid not in ids[target].superseded_by:
+                findings.append(_finding(
+                    sid, FindingCode.ASYMMETRIC_SUPERSESSION,
+                    f"supersedes {target}, but {target} does not record "
+                    f"superseded_by {sid}"))
+        for target in entry.superseded_by:
+            if target not in ids:
+                findings.append(_finding(
+                    sid, FindingCode.DANGLING_SUPERSEDED_BY,
+                    f"superseded_by unknown source {target}"))
+            elif sid not in ids[target].supersedes:
+                findings.append(_finding(
+                    sid, FindingCode.ASYMMETRIC_SUPERSESSION,
+                    f"superseded_by {target}, but {target} does not record "
+                    f"supersedes {sid}"))
+
+    findings.sort(key=lambda f: (_SEVERITY_RANK[f.severity], f.code, f.source_id))
+
+    counts_by_severity: Dict[str, int] = {}
+    counts_by_code: Dict[str, int] = {}
+    for finding in findings:
+        counts_by_severity[finding.severity.value] = (
+            counts_by_severity.get(finding.severity.value, 0) + 1)
+        counts_by_code[finding.code] = counts_by_code.get(finding.code, 0) + 1
+
+    return SourceRegistryAuditReport(
+        findings=findings,
+        counts_by_severity=counts_by_severity,
+        counts_by_code=counts_by_code,
+        entry_count=len(entries),
+    )
+
+
+def render_audit_markdown(report: SourceRegistryAuditReport) -> str:
+    """Render a deterministic Markdown view of an audit report. No side effects.
+
+    Output depends only on the report (itself already deterministic), so the same
+    registry audits to identical text every time. Nothing is written.
+    """
+    lines: List[str] = []
+    lines.append("# Source registry audit")
+    lines.append("")
+    lines.append("Read-only lifecycle/metadata risk report (v4.1). The audit "
+                 "flags metadata risk; it never decides a source is false, and "
+                 "it changes no retrieval/ranking/grounding behaviour.")
+    lines.append("")
+    lines.append(f"- entries audited: {report.entry_count}")
+    lines.append(f"- findings: {len(report.findings)} "
+                 f"(error {report.error_count}, warning {report.warning_count}, "
+                 f"info {report.info_count})")
+    lines.append("")
+
+    lines.append("## Summary by severity")
+    lines.append("")
+    if report.counts_by_severity:
+        for severity in (FindingSeverity.ERROR, FindingSeverity.WARNING,
+                         FindingSeverity.INFO):
+            count = report.counts_by_severity.get(severity.value, 0)
+            if count:
+                lines.append(f"- {severity.value}: {count}")
+    else:
+        lines.append("- (no findings)")
+    lines.append("")
+
+    lines.append("## Summary by code")
+    lines.append("")
+    if report.counts_by_code:
+        for code in sorted(report.counts_by_code):
+            lines.append(f"- {code}: {report.counts_by_code[code]}")
+    else:
+        lines.append("- (no findings)")
+    lines.append("")
+
+    lines.append("## Findings")
+    lines.append("")
+    if report.findings:
+        lines.append("| severity | code | source_id | message |")
+        lines.append("|---|---|---|---|")
+        for f in report.findings:
+            lines.append(
+                f"| {f.severity.value} | {f.code} | {f.source_id} | {f.message} |")
+    else:
+        lines.append("No findings — every source's lifecycle and metadata are "
+                     "complete and its supersession links are consistent.")
+    lines.append("")
+    return "\n".join(lines)
