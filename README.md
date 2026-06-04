@@ -2409,6 +2409,22 @@ mutate durable state even by accident. Memory and source proposals are emitted
 with `requires_human_approval=true` and `status="proposed"`; the orchestrator
 never applies them.
 
+The router is **question-aware** so it stays useful on real questions: a query
+that merely mentions an action word ("How do we *remove* the stale admin role?",
+"What's the best way to *deploy* least-privilege?") is answered or labelled as
+judgement, while only an imperative *command* ("delete the registry file") or a
+hard system directive ("apply the proposal", "write to the ledger") is refused
+as `unsupported_request`. This never weakens the contract — non-mutation is
+guaranteed structurally by the absent writer, so `unsupported_request` is a
+clarity message, not the safety mechanism.
+
+When a question cannot be grounded, `insufficient_evidence` is **constructive**
+rather than a dead end: it reads the frozen pipeline's audit (read-only) to give
+the relevance gate's specific reason and the closest covered source names
+("near-miss" topics, surfaced in `related_sources`) so the asker can narrow or
+rephrase. Nothing is retrieved, ranked, or written — only the existing audit is
+inspected.
+
 ```bash
 # answer a chat-style question over the active pack (read-only; nothing is written)
 python app/workbench.py chat ask "How do we set up least-privilege admin roles and PIM?"
@@ -2422,9 +2438,9 @@ python app/workbench.py chat ask "Audit the source registry and propose source u
 
 | File | What it adds |
 |---|---|
-| `src/agent/chat_orchestrator.py` | the read-only orchestrator: `ChatMode` answer modes, frozen `ChatIntent` / `ChatOrchestratorResult`, the deterministic `route_query` router, `ChatOrchestrator` (wires only to `answer_query`, the memory-proposal builder, and the source-update proposer — imports no writer), and `render_chat_result_markdown` |
+| `src/agent/chat_orchestrator.py` | the read-only orchestrator: `ChatMode` answer modes, frozen `ChatIntent` / `ChatOrchestratorResult`, the question-aware deterministic `route_query` router (hard vs. soft action markers), `ChatOrchestrator` (wires only to `answer_query`, the memory-proposal builder, and the source-update proposer — imports no writer), the read-only `_related_sources_from_audit` / `_insufficient_reason` near-miss helpers, and `render_chat_result_markdown` |
 | `app/workbench.py` | the `chat ask` CLI (builds the pack into a throwaway temp registry with no memory seeding, prints a deterministic Markdown result; writes nothing) |
-| `evals/test_chat_orchestrator.py` | router classification, evidence answer preserves citations, insufficient-evidence refusal names the gap, judgement always labelled (no unlabelled judgement leaks), memory/source instructions yield proposals only, `state_mutation_attempted` always false, `MemoryLedger.add` never called, source registry + memory review queue byte-identical, the v3.0 retrieval baseline unchanged alongside it, the orchestrator imports no writer, and deterministic CLI output |
+| `evals/test_chat_orchestrator.py` | router classification, action-word questions answered (not refused) while imperative commands still refused, evidence answer preserves citations, insufficient-evidence is constructive and names the gap + closest topics, judgement always labelled (no unlabelled judgement leaks), memory/source instructions yield proposals only, `state_mutation_attempted` always false, `MemoryLedger.add` never called, source registry + memory review queue byte-identical, the v3.0 retrieval baseline unchanged alongside it, the orchestrator imports no writer, and deterministic CLI output |
 
 ## License
 

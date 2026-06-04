@@ -100,6 +100,7 @@ class ChatOrchestratorResult:
     route_reason: str = ""
     proposed_memory: List[dict] = field(default_factory=list)
     proposed_source_updates: List[dict] = field(default_factory=list)
+    related_sources: List[str] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         return {
@@ -115,20 +116,42 @@ class ChatOrchestratorResult:
             "state_mutation_attempted": self.state_mutation_attempted,
             "intent_mode": self.intent_mode,
             "route_reason": self.route_reason,
+            "related_sources": list(self.related_sources),
         }
 
 
 # --------------------------------------------------------------------------- #
 # Deterministic first-pass router
 # --------------------------------------------------------------------------- #
-# Requests that would change durable state or run an action. The chat refuses
-# these (it can *propose*, never *apply*). Ordered first so safety wins ties.
-_UNSUPPORTED_MARKERS = (
-    "delete ", "drop ", "rm -", "remove the ", "execute ", "run pytest",
-    "deploy", "push to", "git commit", "git push", "commit and push",
-    "overwrite", "apply the proposal", "apply this proposal", "apply the update",
+# Imperative system actions that are never a knowledge question in this tool.
+# These are refused even when phrased as a question ("can you git push?") — chat
+# can *propose*, never *apply*. Ordered first so safety wins ties.
+_HARD_ACTION_MARKERS = (
+    "apply the proposal", "apply this proposal", "apply the update",
     "write to the ledger", "write to memory now", "approve and write",
     "save the registry", "update the registry file", "edit the registry",
+    "overwrite the registry", "rm -",
+)
+# Action words that ALSO appear in legitimate questions ("how do we remove the
+# stale role?", "what's the best way to deploy least-privilege?"). These are
+# refused only when the query is an imperative *command*, not when it asks how or
+# whether to do the thing — answering is non-mutating, so it is always safe.
+_SOFT_ACTION_MARKERS = (
+    "delete ", "drop ", "rm -", "remove the ", "execute ", "run pytest",
+    "deploy", "push to", "git commit", "git push", "commit and push",
+    "overwrite",
+)
+# Openers that mark a query as a knowledge or advice *question* rather than an
+# imperative command. A question is never refused as an action request; it routes
+# onward to an evidence answer or a labelled judgement.
+_QUESTION_OPENERS = (
+    "how ", "how's", "how do", "how can", "how should", "how would",
+    "what ", "what's", "what is", "what are", "why ", "why's",
+    "when ", "where ", "which ", "who ", "whose ",
+    "should i", "should we", "do we", "do you", "is it", "are there",
+    "can we", "could we",
+    "explain", "describe", "summarize", "summarise", "tell me", "give me",
+    "show me", "list ", "walk me through", "compare ", "outline ",
 )
 # "Remember this" style instructions -> a memory proposal only.
 _MEMORY_WRITE_MARKERS = (
@@ -162,13 +185,28 @@ _JUDGEMENT_MARKERS = (
 )
 
 
+def _is_question_like(low: str) -> bool:
+    """True when the query asks something rather than commanding an action.
+
+    A trailing ``?`` or a knowledge/advice opener (``how``/``what``/``should
+    we`` ...) marks the query as a question. Questions are answered, not refused
+    as action requests, even when they mention an action word.
+    """
+    if low.endswith("?"):
+        return True
+    return low.startswith(_QUESTION_OPENERS)
+
+
 def route_query(query: str) -> ChatIntent:
     """Classify a query into a first-pass answer mode (deterministic, lexical).
 
-    Precedence is safety-first: an action/mutation request is refused before any
-    answer is attempted; then memory-write and source-maintenance instructions
-    become proposals; then memory-context, report, and judgement framings; and
-    anything else is treated as a factual question for an evidence answer.
+    Precedence is safety-first: an action/mutation *command* is refused before
+    any answer is attempted; then memory-write and source-maintenance
+    instructions become proposals; then memory-context, report, and judgement
+    framings; and anything else is treated as a factual question for an evidence
+    answer. A real question that merely mentions an action word ("how do we
+    remove the stale role?") is answered, not refused — only an imperative
+    command ("delete the registry file") or a hard system directive is.
     """
     q = (query or "").strip()
     low = q.lower()
@@ -176,7 +214,8 @@ def route_query(query: str) -> ChatIntent:
     def has(markers) -> bool:
         return any(m in low for m in markers)
 
-    if has(_UNSUPPORTED_MARKERS):
+    question = _is_question_like(low)
+    if has(_HARD_ACTION_MARKERS) or (has(_SOFT_ACTION_MARKERS) and not question):
         return ChatIntent(
             query=q, mode=ChatMode.UNSUPPORTED_REQUEST,
             reason="request asks to change durable state or run an action")
@@ -242,6 +281,39 @@ def _has_memory_citation(citations: List[str]) -> bool:
 
 _EVIDENCE_GAP = ("No citable evidence was retrieved for this query from the "
                  "active knowledge pack, so no grounded answer can be given.")
+
+
+def _related_sources_from_audit(audit: dict, *, limit: int = 3) -> List[str]:
+    """The closest knowledge sources retrieval considered (read-only).
+
+    Reads only the audit the frozen pipeline already produced and returns the
+    distinct source names of the retrieved-but-not-grounding candidates, so an
+    unanswered question can point at the nearest covered topics. It never
+    retrieves, ranks, or mutates anything — it only inspects the audit dict.
+    """
+    know = (audit or {}).get("knowledge") or {}
+    names: List[str] = []
+    for cand in know.get("candidates") or []:
+        name = cand.get("source_name")
+        if name and name not in names:
+            names.append(name)
+        if len(names) >= limit:
+            break
+    return names
+
+
+def _insufficient_reason(audit: dict) -> str:
+    """The evidence-gap message, enriched with the relevance gate's reason.
+
+    The frozen relevance gate already recorded *why* the evidence was
+    insufficient; surfacing its ``sufficiency_reason`` makes the refusal
+    specific instead of generic. Read-only: it only reads the audit.
+    """
+    relevance = (audit or {}).get("relevance") or {}
+    reason = str(relevance.get("sufficiency_reason") or "").strip()
+    if reason:
+        return _EVIDENCE_GAP + " " + reason
+    return _EVIDENCE_GAP
 
 
 # --------------------------------------------------------------------------- #
@@ -334,12 +406,7 @@ class ChatOrchestrator:
             return self._judgement_result(intent, result, citations, grounded)
 
         if not grounded:
-            return ChatOrchestratorResult(
-                query=intent.query, mode=ChatMode.INSUFFICIENT_EVIDENCE,
-                answer_text="Insufficient grounded evidence to answer. "
-                            + _EVIDENCE_GAP,
-                refusal_reason=_EVIDENCE_GAP,
-                intent_mode=intent.mode, route_reason=intent.reason)
+            return self._insufficient_result(intent, result)
 
         mode = intent.mode
         if mode == ChatMode.MEMORY_CONTEXT and not _has_memory_citation(citations):
@@ -349,6 +416,30 @@ class ChatOrchestrator:
             query=intent.query, mode=mode, answer_text=answer_text,
             citations=citations,
             judgement_labelled=JUDGEMENT_LABEL in answer_text,
+            intent_mode=intent.mode, route_reason=intent.reason)
+
+    def _insufficient_result(self, intent: ChatIntent,
+                             result) -> ChatOrchestratorResult:
+        """Refuse with a constructive next step instead of a dead end.
+
+        The relevance gate's reason makes the gap specific, and the closest
+        retrieved (but not grounding) source names are surfaced so the asker can
+        narrow or rephrase. All of this is read from the audit the frozen
+        pipeline already produced — nothing is retrieved, ranked, or written.
+        """
+        audit = getattr(result, "audit", None) or {}
+        related = _related_sources_from_audit(audit)
+        reason = _insufficient_reason(audit)
+        answer_text = "Insufficient grounded evidence to answer directly. " + reason
+        if related:
+            answer_text += (" The closest topics in the active pack are: "
+                            + "; ".join(related)
+                            + ". Try narrowing the question to one of those, or "
+                            "rephrasing it.")
+        return ChatOrchestratorResult(
+            query=intent.query, mode=ChatMode.INSUFFICIENT_EVIDENCE,
+            answer_text=answer_text, refusal_reason=reason,
+            related_sources=related,
             intent_mode=intent.mode, route_reason=intent.reason)
 
     def _judgement_result(self, intent: ChatIntent, result,
@@ -396,6 +487,10 @@ def render_chat_result_markdown(result: ChatOrchestratorResult) -> str:
         lines.append("")
         lines.append("## Evidence gap")
         lines.append(result.refusal_reason)
+    if result.related_sources:
+        lines.append("")
+        lines.append("## Closest topics in the pack")
+        lines.extend(f"- {s}" for s in result.related_sources)
     if result.proposed_memory_count:
         lines.append("")
         lines.append(f"## Proposed memory records ({result.proposed_memory_count})"

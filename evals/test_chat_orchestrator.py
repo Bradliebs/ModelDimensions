@@ -327,3 +327,89 @@ def test_readme_documents_chat_orchestrator():
     assert "## v6.0" in text
     assert "chat" in text.lower()
     assert "read-only" in text.lower()
+
+
+# 15. real questions that mention an action word are answered, not refused. ---
+
+def test_action_word_questions_are_not_refused():
+    # "remove the" / "deploy" / "delete" appear here inside genuine questions;
+    # the router must answer them, not refuse them as action commands.
+    assert route_query(
+        "How do we remove the stale admin role using PIM?").mode == (
+            ChatMode.EVIDENCE_ANSWER)
+    assert route_query(
+        "What's the best approach to deploy least-privilege PIM?").mode == (
+            ChatMode.JUDGEMENT_ONLY)
+    assert route_query(
+        "Should we delete the break-glass account?").mode == (
+            ChatMode.JUDGEMENT_ONLY)
+
+
+# 16. imperative system commands and hard directives are still refused. -------
+
+def test_imperative_commands_still_refused():
+    for query in [
+        "Delete the registry file.",
+        "git push the release to origin.",
+        "Apply the proposal to memory.",
+        "Overwrite the registry with new owners.",
+        "Write to the ledger now.",
+    ]:
+        assert route_query(query).mode == ChatMode.UNSUPPORTED_REQUEST
+
+
+# 17. the near-miss helpers read only the audit (pure, read-only). -----------
+
+def test_related_sources_from_audit_reads_audit_only():
+    audit = {"knowledge": {"candidates": [
+        {"source_name": "Admin patterns", "chunk_id": "c1"},
+        {"source_name": "Admin patterns", "chunk_id": "c2"},
+        {"source_name": "PIM guide", "chunk_id": "c3"},
+        {"source_name": "Conditional access", "chunk_id": "c4"},
+        {"source_name": "Extra source", "chunk_id": "c5"},
+    ]}}
+    assert co._related_sources_from_audit(audit, limit=3) == [
+        "Admin patterns", "PIM guide", "Conditional access"]
+    # Missing / empty audits are handled without error.
+    assert co._related_sources_from_audit({}) == []
+    assert co._related_sources_from_audit({"knowledge": {}}) == []
+
+
+def test_insufficient_reason_includes_sufficiency_reason():
+    audit = {"relevance": {"sufficiency_reason": "no chunk addresses residency"}}
+    reason = co._insufficient_reason(audit)
+    assert "no chunk addresses residency" in reason
+    # Falls back to the generic gap when the gate gave no specific reason.
+    assert co._insufficient_reason({})
+
+
+# 18. insufficient-evidence is constructive: it surfaces closest topics. ------
+
+def test_insufficient_result_surfaces_related_sources(tmp_path, monkeypatch):
+    orch = _orchestrator(tmp_path, monkeypatch)
+    result = orch.answer(
+        "What is our decision on data residency and which Azure region stores "
+        "customer data?")
+    assert result.mode == ChatMode.INSUFFICIENT_EVIDENCE
+    assert result.refusal_reason  # still names the gap
+    # related_sources is always a list; any surfaced name appears in the answer.
+    assert isinstance(result.related_sources, list)
+    for name in result.related_sources:
+        assert name in result.answer_text
+    assert result.state_mutation_attempted is False
+
+
+# 19. the enhanced routing keeps durable state unmutated across the new paths.
+
+def test_enhanced_routing_keeps_state_unmutated(tmp_path, monkeypatch):
+    orch = _orchestrator(tmp_path, monkeypatch)
+    before = _REGISTRY.read_bytes()
+    for query in [
+        "How do we remove the stale admin role using PIM?",
+        "What's the best approach to deploy least-privilege PIM?",
+        "Should we delete the break-glass account?",
+        "What is our decision on data residency?",
+    ]:
+        result = orch.answer(query)
+        assert result.state_mutation_attempted is False
+    assert _REGISTRY.read_bytes() == before
