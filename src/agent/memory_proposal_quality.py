@@ -28,9 +28,9 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 
 # --------------------------------------------------------------------------- #
@@ -574,4 +574,329 @@ def render_memory_proposals_markdown(
             f"| {proposal.proposal_id} | {_TYPE_LABEL[proposal.proposal_type]} "
             f"| {approv} | {proposal.confidence} | {claim} "
             f"| {proposal.evidence_source_id} | {reason} |")
+    return "\n".join(lines)
+
+
+# --------------------------------------------------------------------------- #
+# v5.1 Memory proposal review queue (review-state only; approved != written)
+# --------------------------------------------------------------------------- #
+# This layer lets a human triage v5.0 memory proposals — approve, reject, or
+# defer them — without ever writing memory. It is review-state only:
+#
+# * the only file it writes is the explicit review-queue JSONL passed to
+#   :func:`save_memory_review_queue` (used by import and review);
+# * it still imports no ``MemoryLedger``/``MemoryBank``/``add_memory`` path, so
+#   nothing here can write durable memory by construction;
+# * **approved does not mean written** — ``written`` stays ``False`` and
+#   ``written_at`` stays ``None`` in v5.1. Approving a proposal authorises a
+#   future write; it does not perform one.
+#
+# Every queue entry keeps the full originating ``proposal_snapshot`` so a review
+# is auditable on its own.
+
+
+class MemoryReviewStatus:
+    """Stable string codes for where a memory proposal sits in human review."""
+
+    PENDING = "pending"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+    DEFERRED = "deferred"
+
+
+_MEMORY_REVIEW_STATUSES = frozenset({
+    MemoryReviewStatus.PENDING, MemoryReviewStatus.APPROVED,
+    MemoryReviewStatus.REJECTED, MemoryReviewStatus.DEFERRED,
+})
+
+# Allowed review-status transitions. ``approved`` and ``rejected`` are terminal
+# in v5.1 — there is no reopen step, so a rejected proposal never silently
+# becomes approved, and an approved proposal never means written.
+_ALLOWED_MEMORY_REVIEW_TRANSITIONS: Dict[str, frozenset] = {
+    MemoryReviewStatus.PENDING: frozenset({
+        MemoryReviewStatus.APPROVED, MemoryReviewStatus.REJECTED,
+        MemoryReviewStatus.DEFERRED}),
+    MemoryReviewStatus.DEFERRED: frozenset({
+        MemoryReviewStatus.APPROVED, MemoryReviewStatus.REJECTED}),
+    MemoryReviewStatus.APPROVED: frozenset(),
+    MemoryReviewStatus.REJECTED: frozenset(),
+}
+
+
+def memory_review_status_transition_allowed(current: str, new: str) -> bool:
+    """Whether ``current -> new`` is a permitted review transition (pure)."""
+    return new in _ALLOWED_MEMORY_REVIEW_TRANSITIONS.get(current, frozenset())
+
+
+@dataclass(frozen=True)
+class MemoryProposalReview:
+    """One review record for one v5.0 memory proposal. Review-state only; inert.
+
+    It records a human's *decision* about a memory proposal — approve, reject,
+    defer — and never the writing of that memory. ``written`` is always
+    ``False`` and ``written_at`` always ``None`` in v5.1: approving a proposal
+    authorises a future memory write, it does not make one. ``proposal_snapshot``
+    keeps the full originating proposal so the queue is auditable on its own.
+    """
+
+    proposal_id: str
+    proposal_type: str
+    claim: str
+    review_status: str = MemoryReviewStatus.PENDING
+    reviewer: str = ""
+    reviewed_at: Optional[str] = None
+    review_note: str = ""
+    written: bool = False
+    written_at: Optional[str] = None
+    proposal_snapshot: dict = field(default_factory=dict)
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+
+    def to_dict(self) -> dict:
+        return {
+            "proposal_id": self.proposal_id,
+            "proposal_type": self.proposal_type,
+            "claim": self.claim,
+            "review_status": self.review_status,
+            "reviewer": self.reviewer,
+            "reviewed_at": self.reviewed_at,
+            "review_note": self.review_note,
+            "written": self.written,
+            "written_at": self.written_at,
+            "proposal_snapshot": self.proposal_snapshot,
+            "created_at": self.created_at,
+            "updated_at": self.updated_at,
+            "_record": "memory_proposal_review",
+        }
+
+    def to_json(self) -> str:
+        return json.dumps(self.to_dict(), ensure_ascii=False, sort_keys=True)
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "MemoryProposalReview":
+        return cls(
+            proposal_id=str(data["proposal_id"]),
+            proposal_type=str(data.get("proposal_type", "")),
+            claim=str(data.get("claim", "")),
+            review_status=str(
+                data.get("review_status", MemoryReviewStatus.PENDING)),
+            reviewer=str(data.get("reviewer", "")),
+            reviewed_at=data.get("reviewed_at"),
+            review_note=str(data.get("review_note", "")),
+            written=bool(data.get("written", False)),
+            written_at=data.get("written_at"),
+            proposal_snapshot=dict(data.get("proposal_snapshot") or {}),
+            created_at=data.get("created_at"),
+            updated_at=data.get("updated_at"),
+        )
+
+    @classmethod
+    def pending_from_proposal(cls, proposal: dict, *,
+                              created_at: Optional[str] = None,
+                              ) -> "MemoryProposalReview":
+        """Build a fresh ``pending`` review from a proposal dict (snapshot kept)."""
+        return cls(
+            proposal_id=str(proposal["proposal_id"]),
+            proposal_type=str(proposal.get("proposal_type", "")),
+            claim=str(proposal.get("claim", "")),
+            review_status=MemoryReviewStatus.PENDING,
+            proposal_snapshot=dict(proposal),
+            created_at=created_at,
+            updated_at=created_at,
+        )
+
+
+# -- queue load / save --------------------------------------------------------
+
+def load_memory_proposal_dicts(path) -> List[dict]:
+    """Load v5.0 memory-proposal records (raw dicts) from a JSONL file (pure read).
+
+    ``#`` lines are comments. This reads proposals so they can be queued for
+    review; it touches nothing else.
+    """
+    dicts: List[dict] = []
+    file_path = Path(path)
+    if not file_path.exists():
+        return dicts
+    for line in file_path.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        dicts.append(json.loads(stripped))
+    return dicts
+
+
+def load_memory_review_queue(path) -> List[MemoryProposalReview]:
+    """Load the memory review queue from JSONL (a missing file is an empty queue).
+
+    A pure read: ``#`` lines are comments, and absence of the file simply means
+    no proposals have been imported yet.
+    """
+    file_path = Path(path)
+    if not file_path.exists():
+        return []
+    reviews: List[MemoryProposalReview] = []
+    for line in file_path.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        reviews.append(MemoryProposalReview.from_dict(json.loads(stripped)))
+    return reviews
+
+
+def _sorted_memory_queue(reviews) -> List[MemoryProposalReview]:
+    """Deterministic queue order: by ``proposal_id``."""
+    return sorted(reviews, key=lambda r: r.proposal_id)
+
+
+def save_memory_review_queue(reviews: List[MemoryProposalReview], path) -> None:
+    """Write the memory review queue to JSONL (sorted by proposal_id; deterministic).
+
+    This is the **only** writer in the review layer. It touches *only* the queue
+    path — never the memory ledger, the bank, or any source file, and it never
+    writes a memory.
+    """
+    out = Path(path)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    with out.open("w", encoding="utf-8") as handle:
+        for review in _sorted_memory_queue(reviews):
+            handle.write(review.to_json() + "\n")
+
+
+# -- queue operations (all pure; persistence is the caller's explicit save) ---
+
+def import_memory_proposals_to_queue(proposals: List[dict],
+                                     existing: List[MemoryProposalReview], *,
+                                     created_at: Optional[str] = None,
+                                     ) -> List[MemoryProposalReview]:
+    """Merge memory-proposal dicts into a review queue as ``pending`` records.
+
+    Idempotent: existing reviews are preserved unchanged (keyed by
+    ``proposal_id``), and only proposals whose id is not already queued are
+    added. Deterministic: returns the merged queue sorted by ``proposal_id``, so
+    re-importing the same proposals is a no-op and saves byte-identically while
+    preserving any existing approved/rejected/deferred state. Pure — it writes
+    nothing.
+    """
+    by_id = {r.proposal_id: r for r in existing}
+    for proposal in proposals:
+        pid = str(proposal["proposal_id"])
+        if pid in by_id:
+            continue
+        by_id[pid] = MemoryProposalReview.pending_from_proposal(
+            proposal, created_at=created_at)
+    return _sorted_memory_queue(by_id.values())
+
+
+def review_memory_proposal(review: MemoryProposalReview, new_status: str, *,
+                           reviewer: Optional[str] = None,
+                           note: Optional[str] = None,
+                           reviewed_at: Optional[str] = None,
+                           updated_at: Optional[str] = None,
+                           ) -> MemoryProposalReview:
+    """Return a new review with ``new_status`` applied (review-state only).
+
+    Validates the transition against
+    :data:`_ALLOWED_MEMORY_REVIEW_TRANSITIONS` and raises ``ValueError`` cleanly
+    on an unknown or disallowed status — the input review (frozen) is never
+    mutated, so a failed transition leaves state intact. ``written``/
+    ``written_at`` are held at ``False``/``None``: **approved does not mean
+    written** in v5.1.
+    """
+    if new_status not in _MEMORY_REVIEW_STATUSES:
+        raise ValueError(f"unknown review status {new_status!r}")
+    if not memory_review_status_transition_allowed(
+            review.review_status, new_status):
+        raise ValueError(
+            f"invalid review transition {review.review_status!r} -> "
+            f"{new_status!r} for proposal {review.proposal_id}")
+    return replace(
+        review,
+        review_status=new_status,
+        reviewer=review.reviewer if reviewer is None else reviewer,
+        reviewed_at=review.reviewed_at if reviewed_at is None else reviewed_at,
+        review_note=review.review_note if note is None else note,
+        updated_at=review.updated_at if updated_at is None else updated_at,
+        written=False,
+        written_at=None,
+    )
+
+
+def apply_memory_review_to_queue(reviews: List[MemoryProposalReview],
+                                 proposal_id: str, new_status: str, *,
+                                 reviewer: Optional[str] = None,
+                                 note: Optional[str] = None,
+                                 reviewed_at: Optional[str] = None,
+                                 updated_at: Optional[str] = None,
+                                 ) -> List[MemoryProposalReview]:
+    """Apply a review transition to one queued proposal, returning a new queue.
+
+    Pure: builds a new list (same membership), replacing only the targeted
+    review and re-sorting deterministically. Raises ``ValueError`` if
+    ``proposal_id`` is not queued. Writes nothing — persistence is the caller's
+    explicit :func:`save_memory_review_queue`.
+    """
+    found = False
+    updated: List[MemoryProposalReview] = []
+    for review in reviews:
+        if review.proposal_id == proposal_id:
+            updated.append(review_memory_proposal(
+                review, new_status, reviewer=reviewer, note=note,
+                reviewed_at=reviewed_at, updated_at=updated_at))
+            found = True
+        else:
+            updated.append(review)
+    if not found:
+        raise ValueError(f"no review for proposal_id {proposal_id!r}")
+    return _sorted_memory_queue(updated)
+
+
+def render_memory_review_queue_markdown(
+        reviews: List[MemoryProposalReview]) -> str:
+    """Render a deterministic Markdown view of the memory review queue.
+
+    Output depends only on the (deterministically sorted) reviews, so the same
+    queue renders identical text every time. Nothing is written.
+    """
+    counts: Dict[str, int] = {}
+    for r in reviews:
+        counts[r.review_status] = counts.get(r.review_status, 0) + 1
+    ordered = _sorted_memory_queue(reviews)
+
+    lines: List[str] = []
+    lines.append("# Memory proposal review queue")
+    lines.append("")
+    lines.append("Human review state for v5.0 memory proposals (v5.1). "
+                 "Reviewing records a decision only: **approved does not mean "
+                 "written** — nothing here writes the memory ledger, applies a "
+                 "memory, or changes retrieval, ranking, source selection, "
+                 "grounding, or composers. `written` stays false in v5.1.")
+    lines.append("")
+    lines.append(f"- reviews: {len(ordered)}")
+    written_n = sum(1 for r in ordered if r.written)
+    lines.append(f"- written: {written_n} (always 0 in v5.1)")
+    lines.append("")
+
+    lines.append("## Summary by status")
+    lines.append("")
+    if counts:
+        for status in sorted(counts):
+            lines.append(f"- {status}: {counts[status]}")
+    else:
+        lines.append("- (no reviews)")
+    lines.append("")
+
+    lines.append("## Reviews")
+    lines.append("")
+    if ordered:
+        lines.append("| review_status | proposal_id | proposal_type | "
+                     "written | claim |")
+        lines.append("|---|---|---|---|---|")
+        for r in ordered:
+            claim = r.claim.replace("|", "\\|")
+            lines.append(
+                f"| {r.review_status} | {r.proposal_id} | {r.proposal_type} "
+                f"| {str(r.written).lower()} | {claim} |")
+    else:
+        lines.append("(queue is empty)")
     return "\n".join(lines)

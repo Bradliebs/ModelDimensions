@@ -2264,6 +2264,65 @@ python app/workbench.py memory-proposals build demos/memory_proposal_candidates.
 | `app/workbench.py` | the `memory-proposals {list,build}` CLI group (writes only the `--out` file) |
 | `evals/test_memory_proposal_quality.py` | typed classification, evidence-bound facts/decisions/project-state, preferences approvable without evidence, vague/operator/unsupported → `INVALID_CANDIDATE` with a reason, deterministic ids/render/export, always `requires_human_approval` / `proposed`, no MemoryLedger write (spy + import purity), and the v3.0 retrieval path unchanged alongside proposal building |
 
+## v5.1 Memory proposal review queue (review-state only; approved ≠ written)
+
+v5.1 adds a **review queue** on top of the v5.0 memory proposals so a human can
+import, list, approve, reject, or defer them — **without writing any memory**.
+It is review-state only. The single source of truth is one JSONL queue file, and
+the only file these commands ever write is that queue.
+
+**Approved does not mean written.** This is the core rule. A memory proposal can
+be approved *for a future write*, but v5.1 never writes it to the `MemoryLedger`.
+`written` stays `false` and `written_at` stays `null` on every record — approval
+authorises a later step, it does not perform one. Nothing here applies a memory,
+auto-approves anything, or changes retrieval, ranking, source selection,
+grounding, or composer behaviour.
+
+**Review record schema.** Each queue entry keeps the full originating proposal so
+a review is auditable on its own:
+
+| field | meaning |
+|---|---|
+| `proposal_id` | stable v5.0 `memprop-…` id (the queue key) |
+| `proposal_type` | the v5.0 type (`fact`, `decision`, …) |
+| `claim` | the proposed memory claim |
+| `review_status` | `pending` / `approved` / `rejected` / `deferred` |
+| `reviewer` | who recorded the decision |
+| `reviewed_at` | optional ISO review timestamp |
+| `review_note` | optional free-text note |
+| `written` | always `false` in v5.1 |
+| `written_at` | always `null` in v5.1 |
+| `proposal_snapshot` | the full v5.0 proposal dict, preserved |
+| `created_at` / `updated_at` | queue bookkeeping |
+
+**Status transitions** (deterministic; `approved` and `rejected` are terminal):
+
+- `pending → approved`, `pending → rejected`, `pending → deferred`
+- `deferred → approved`, `deferred → rejected`
+- any other transition (including reopening a settled decision or an unknown
+  status) fails cleanly with a `ValueError`, leaving the queue untouched.
+
+Import creates `pending` records, is idempotent by `proposal_id` (no duplicate
+entries), and **preserves existing review state** on re-import. The queue saves
+sorted by `proposal_id`, so the file and the list view are deterministic.
+
+```text
+# import v5.0 memory proposals into the review queue (creates pending records)
+python app/workbench.py memory-proposals review-import reports/memory_proposals.jsonl --queue reports/memory_proposal_review_queue.jsonl
+
+# list the queue (deterministic Markdown; read-only)
+python app/workbench.py memory-proposals review-list --queue reports/memory_proposal_review_queue.jsonl
+
+# record a decision (approved != written; nothing is written to the ledger)
+python app/workbench.py memory-proposals review memprop-abcdef0123 --status approved --note "useful" --reviewer alex --queue reports/memory_proposal_review_queue.jsonl
+```
+
+| File | What it adds |
+|---|---|
+| `src/agent/memory_proposal_quality.py` | `MemoryReviewStatus` + `_ALLOWED_MEMORY_REVIEW_TRANSITIONS`, frozen `MemoryProposalReview` (keeps `proposal_snapshot`; `written` always false), and the pure review ops `load_memory_proposal_dicts` / `load_memory_review_queue` / `save_memory_review_queue` (the only writer) / `import_memory_proposals_to_queue` / `review_memory_proposal` / `apply_memory_review_to_queue` / `render_memory_review_queue_markdown` |
+| `app/workbench.py` | the `memory-proposals {review-import,review-list,review}` CLI group (writes only the `--queue` file; never the ledger) |
+| `evals/test_memory_proposal_review.py` | pending-record import, idempotent re-import preserving review state, deterministic list/CLI, every valid transition + clean failure on invalid ones, **approved-not-written** / `written` stays false, `MemoryLedger.add` never called, review writes only the queue file, snapshot preserved, and the v5.0 build / v4.3 source review / v3.0 retrieval baselines unchanged alongside it |
+
 ## License
 
 To be decided.
