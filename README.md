@@ -2442,6 +2442,127 @@ python app/workbench.py chat ask "Audit the source registry and propose source u
 | `app/workbench.py` | the `chat ask` CLI (builds the pack into a throwaway temp registry with no memory seeding, prints a deterministic Markdown result; writes nothing) |
 | `evals/test_chat_orchestrator.py` | router classification, action-word questions answered (not refused) while imperative commands still refused, evidence answer preserves citations, insufficient-evidence is constructive and names the gap + closest topics, judgement always labelled (no unlabelled judgement leaks), memory/source instructions yield proposals only, `state_mutation_attempted` always false, `MemoryLedger.add` never called, source registry + memory review queue byte-identical, the v3.0 retrieval baseline unchanged alongside it, the orchestrator imports no writer, and deterministic CLI output |
 
+## v6.2 Evidence-bound chat answer UX (clearer, auditable; still read-only)
+
+v6.2 improves **only the answer surface** of the governed chat orchestrator.
+Retrieval, ranking, grounding, source selection, memory writes, the source
+registry, and proposal application are all unchanged — this slice reshapes the
+text the orchestrator already produces into a clearer, auditable structure and
+exposes deterministic evidence metadata. There is **no LLM call**; every
+formatter is pure and deterministic, and the module still imports no writer, so
+`state_mutation_attempted` remains `false` by construction.
+
+Five deterministic formatters compose the `answer_text` surface from data the
+frozen pipeline already produced (the composer's grounded text, the composer's
+own citations, and the read-only audit): `format_evidence_bound_answer`,
+`format_insufficient_evidence_answer`, `format_labelled_judgement`,
+`format_unsupported_governed_action`, and `summarize_evidence_gaps`.
+`ChatOrchestratorResult` gains deterministic audit fields:
+`evidence_used_count`, `evidence_gap_count`, `evidence_summary`,
+`missing_evidence`, `answer_has_citations`, `judgement_present`, and
+`unsupported_claim_count` (the last is `0` by construction — a grounded fact is
+always cited and judgement is always labelled, so no uncited factual claim can
+be emitted).
+
+**Example — evidence-bound answer** (grounded; facts cited):
+
+```text
+Answer:
+Based on grounded evidence:
+  - ... least-privilege means assigning scoped admin roles ... [Microsoft 365 Admin Patterns] [src:chk-57c6e8ec]
+  - ... all admin roles above Helpdesk Administrator are made PIM-eligible ... [Microsoft 365 Admin Patterns] [src:chk-435cf574]
+
+Evidence used (5):
+- src:chk-435cf574
+- src:chk-57c6e8ec
+- ...
+
+Evidence gaps:
+- None identified within the cited scope; this answer reflects only the active pack.
+
+Next safe action:
+Base any decision on the cited evidence above. To extend this answer, add a
+source to the active pack or ask a more specific question; this chat will not
+write memory, edit the registry, or apply changes.
+```
+
+**Example — insufficient evidence** (names what is missing, not "I don't know"):
+
+```text
+Asked:
+- What is the exact pricing tier and per-user license cost for Teams Premium?
+
+Why this cannot be answered from current evidence:
+- No citable evidence was retrieved ... weak match (overlap 0.20); insufficient to ground
+
+Evidence that would resolve the gap:
+- weak match (overlap 0.20); insufficient to ground
+- closest rejected evidence src:chk-8918d43c: stale source — penalised but still citable
+
+Closest topics already in the pack:
+- Microsoft 365 Admin Patterns; Purview Sensitivity Labels and DLP; Power Platform PowerApps Formulas
+Try narrowing the question to one of those, or rephrasing it.
+
+Next safe action:
+Add a pack source that covers this topic, or narrow the question to a covered
+topic, then ask again. This chat will not invent an answer or write any state.
+```
+
+**Example — labelled judgement** (fact separated from opinion):
+
+```text
+Evidence-backed facts:
+Based on grounded evidence:
+  - ... the deterministic, offline backend is the default for tests ... [Local Coding-Agent Workflow Rules] [src:chk-9bde9cf0]
+
+Evidence used (5):
+- src:chk-9bde9cf0
+- ...
+
+Judgement:
+[JUDGEMENT — not grounded in evidence] This is an interpretation drawn from the
+cited evidence above, not an additional grounded fact.
+
+Assumptions:
+- The cited evidence is current and applies to your context; judgement adds no new facts.
+
+Next safe action:
+Judgement is advisory; validate it against the cited evidence (or gather
+evidence where none exists) before acting. This chat will not act on the
+recommendation or write any state.
+```
+
+**Example — unsupported mutation/action request** (refuse, explain, redirect):
+
+```text
+Refused:
+- This request asks to change durable state or run an action, which this read-only chat will not do.
+
+Governance boundary:
+- This chat is read-only by construction: it has no write path to memory, the
+  source registry, the review queue, or the shell, so it cannot apply a durable
+  change even when asked.
+
+Safe alternative:
+- Ask this chat to *propose* the change instead (a memory or source proposal you
+  can review and approve), or ask for a checklist or command plan you can run
+  yourself. Facts will be cited and any judgement will be labelled.
+```
+
+**Limitations and non-goals.** v6.2 is answer formatting only. It does **not**
+change retrieval, ranking, `EvidenceRanker` behaviour, source selection, or
+grounding; it does **not** loosen grounding or allow uncited factual claims or
+unlabelled judgement; it does **not** write memory, edit the source registry,
+write the review queue, apply any memory or source proposal, or run any
+autonomous action. The metadata fields are derived deterministically from the
+frozen pipeline's existing output, not recomputed — `unsupported_claim_count` is
+a structural invariant (`0`), not a parser of free text.
+
+| File | What v6.2 changes |
+|---|---|
+| `src/agent/chat_orchestrator.py` | five pure deterministic formatters (`format_evidence_bound_answer`, `format_insufficient_evidence_answer`, `format_labelled_judgement`, `format_unsupported_governed_action`, `summarize_evidence_gaps`); seven additive `ChatOrchestratorResult` audit fields wired into the unsupported / evidence / insufficient / judgement branches; no writer imported, no retrieval or ranking touched |
+| `evals/test_chat_orchestrator.py` | evidence answer is structured and exposes its metadata, `summarize_evidence_gaps` reads only the audit, insufficient-evidence names the missing evidence, labelled judgement separates fact from judgement and assumptions, unsupported request refuses and offers a safe alternative, answer UX is deterministic across repeated runs, and `to_dict` exposes the new metadata |
+
 ## License
 
 To be decided.

@@ -413,3 +413,123 @@ def test_enhanced_routing_keeps_state_unmutated(tmp_path, monkeypatch):
         result = orch.answer(query)
         assert result.state_mutation_attempted is False
     assert _REGISTRY.read_bytes() == before
+
+
+# ---------------------------------------------------------------------------
+# v6.2 evidence-bound answer UX.
+# ---------------------------------------------------------------------------
+
+# 20. an evidence answer is structured and exposes deterministic metadata. ----
+
+def test_evidence_bound_answer_structure_and_metadata(tmp_path, monkeypatch):
+    orch = _orchestrator(tmp_path, monkeypatch)
+    result = orch.answer(_EVIDENCE_QUERY)
+    assert result.mode == ChatMode.EVIDENCE_ANSWER
+    # structured sections are present and deterministic.
+    for header in ("Answer:", "Evidence used", "Evidence gaps:",
+                   "Next safe action:"):
+        assert header in result.answer_text
+    # metadata is populated from the composer's own citations.
+    assert result.evidence_used_count == len(result.citations)
+    assert result.evidence_used_count > 0
+    assert result.answer_has_citations is True
+    # governed guarantees: facts cited, judgement absent here, no uncited claims.
+    assert result.judgement_present is False
+    assert result.unsupported_claim_count == 0
+    assert result.evidence_summary  # audit line is set
+
+
+# 21. summarize_evidence_gaps reads only the audit (pure, read-only). ---------
+
+def test_summarize_evidence_gaps_reads_audit_only():
+    audit = {"relevance": {
+        "sufficiency_reason": "no chunk addresses residency",
+        "top_rejected": {"citation_id": "src:off", "reason": "off-topic"},
+    }}
+    gaps = co.summarize_evidence_gaps(audit)
+    assert "no chunk addresses residency" in gaps
+    assert any("off-topic" in g for g in gaps)
+    # missing / empty audits yield no gaps without error.
+    assert co.summarize_evidence_gaps({}) == []
+    assert co.summarize_evidence_gaps({"relevance": {}}) == []
+
+
+# 22. insufficient-evidence names the missing evidence and stays structured. --
+
+def test_insufficient_answer_names_missing_evidence(tmp_path, monkeypatch):
+    # Pure formatter: the named missing evidence appears verbatim.
+    text = co.format_insufficient_evidence_answer(
+        "What is the per-user license cost?",
+        "Evidence gap. weak match (overlap 0.20); insufficient to ground",
+        ["no chunk addresses pricing"],
+        ["Microsoft 365 Admin Patterns"])
+    assert "no chunk addresses pricing" in text
+    assert "Microsoft 365 Admin Patterns" in text
+    for header in ("Asked:", "Why this cannot be answered",
+                   "Evidence that would resolve the gap:", "Next safe action:"):
+        assert header in text
+
+    # Live path: the result mirrors the missing-evidence list deterministically.
+    orch = _orchestrator(tmp_path, monkeypatch)
+    result = orch.answer(
+        "What is our decision on data residency and which Azure region stores "
+        "customer data?")
+    assert result.mode == ChatMode.INSUFFICIENT_EVIDENCE
+    assert isinstance(result.missing_evidence, list)
+    assert result.evidence_gap_count == len(result.missing_evidence)
+    assert result.evidence_used_count == 0
+    assert "Next safe action:" in result.answer_text
+
+
+# 23. a labelled judgement separates fact from judgement and assumptions. -----
+
+def test_labelled_judgement_separates_fact_from_judgement():
+    grounded = co.format_labelled_judgement(
+        "Least-privilege limits standing access.", ["src:admin#1"],
+        grounded=True)
+    for header in ("Evidence-backed facts:", "Evidence used", "Judgement:",
+                   "Assumptions:"):
+        assert header in grounded
+    assert JUDGEMENT_LABEL in grounded
+    assert "src:admin#1" in grounded
+
+    ungrounded = co.format_labelled_judgement("", [], grounded=False)
+    assert JUDGEMENT_LABEL in ungrounded
+    assert "Assumptions:" in ungrounded
+
+
+# 24. an unsupported mutation request refuses and offers a safe alternative. --
+
+def test_unsupported_governed_action_offers_safe_alternative(tmp_path,
+                                                             monkeypatch):
+    orch = _orchestrator(tmp_path, monkeypatch)
+    result = orch.answer("Apply the proposal to memory and save the registry.")
+    assert result.mode == ChatMode.UNSUPPORTED_REQUEST
+    assert "Governance boundary:" in result.answer_text
+    assert "Safe alternative:" in result.answer_text
+    assert "propose" in result.answer_text.lower()
+    assert result.refusal_reason  # still names the refusal
+    assert result.state_mutation_attempted is False
+
+
+# 25. answer UX is deterministic across repeated runs. -----------------------
+
+def test_answer_ux_deterministic_repeated_runs(tmp_path, monkeypatch):
+    orch = _orchestrator(tmp_path, monkeypatch)
+    a = orch.answer(_EVIDENCE_QUERY)
+    b = orch.answer(_EVIDENCE_QUERY)
+    assert a.answer_text == b.answer_text
+    assert a.to_dict() == b.to_dict()
+
+
+# 26. to_dict exposes the new evidence metadata for downstream audit. ---------
+
+def test_result_to_dict_exposes_evidence_metadata(tmp_path, monkeypatch):
+    orch = _orchestrator(tmp_path, monkeypatch)
+    payload = orch.answer(_EVIDENCE_QUERY).to_dict()
+    for key in ("evidence_used_count", "evidence_gap_count", "evidence_summary",
+                "missing_evidence", "answer_has_citations", "judgement_present",
+                "unsupported_claim_count"):
+        assert key in payload
+    assert payload["answer_has_citations"] is True
+    assert payload["unsupported_claim_count"] == 0

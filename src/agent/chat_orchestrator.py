@@ -101,6 +101,19 @@ class ChatOrchestratorResult:
     proposed_memory: List[dict] = field(default_factory=list)
     proposed_source_updates: List[dict] = field(default_factory=list)
     related_sources: List[str] = field(default_factory=list)
+    # v6.2 evidence-bound answer UX metadata. Every field below is populated
+    # deterministically from data the frozen pipeline already produced (composer
+    # citations + the read-only audit); none of them trigger retrieval or a
+    # write. ``unsupported_claim_count`` is 0 by construction in this governed
+    # surface: grounded facts are always cited and judgement is always labelled,
+    # so no uncited factual claim can be emitted.
+    evidence_used_count: int = 0
+    evidence_gap_count: int = 0
+    evidence_summary: str = ""
+    missing_evidence: List[str] = field(default_factory=list)
+    answer_has_citations: bool = False
+    judgement_present: bool = False
+    unsupported_claim_count: int = 0
 
     def to_dict(self) -> dict:
         return {
@@ -117,6 +130,13 @@ class ChatOrchestratorResult:
             "intent_mode": self.intent_mode,
             "route_reason": self.route_reason,
             "related_sources": list(self.related_sources),
+            "evidence_used_count": self.evidence_used_count,
+            "evidence_gap_count": self.evidence_gap_count,
+            "evidence_summary": self.evidence_summary,
+            "missing_evidence": list(self.missing_evidence),
+            "answer_has_citations": self.answer_has_citations,
+            "judgement_present": self.judgement_present,
+            "unsupported_claim_count": self.unsupported_claim_count,
         }
 
 
@@ -317,6 +337,160 @@ def _insufficient_reason(audit: dict) -> str:
 
 
 # --------------------------------------------------------------------------- #
+# v6.2 evidence-bound answer UX (deterministic formatters)
+# --------------------------------------------------------------------------- #
+# These formatters compose the *answer_text* surface from data the frozen
+# pipeline already produced. They add no LLM call, perform no retrieval, and
+# write nothing — they only reshape already-grounded composer text, the
+# composer's own citations, and the read-only audit into a clearer, auditable
+# structure (Answer / Evidence used / Evidence gaps / Next safe action; a
+# labelled judgement that separates fact from opinion; and a governed refusal
+# that names a safe alternative).
+_NEXT_ACTION_EVIDENCE = (
+    "Base any decision on the cited evidence above. To extend this answer, add a "
+    "source to the active pack or ask a more specific question; this chat will "
+    "not write memory, edit the registry, or apply changes.")
+_NEXT_ACTION_INSUFFICIENT = (
+    "Add a pack source that covers this topic, or narrow the question to a "
+    "covered topic, then ask again. This chat will not invent an answer or write "
+    "any state.")
+_NEXT_ACTION_JUDGEMENT = (
+    "Judgement is advisory; validate it against the cited evidence (or gather "
+    "evidence where none exists) before acting. This chat will not act on the "
+    "recommendation or write any state.")
+_GOVERNANCE_BOUNDARY = (
+    "This chat is read-only by construction: it has no write path to memory, the "
+    "source registry, the review queue, or the shell, so it cannot apply a "
+    "durable change even when asked.")
+
+
+def _evidence_summary_line(used: int, gaps: int) -> str:
+    """One deterministic audit line: counts plus the standing guarantees."""
+    return (f"{used} evidence item(s) cited; {gaps} evidence gap(s) noted; every "
+            "factual claim is citation-backed and any judgement is labelled.")
+
+
+def summarize_evidence_gaps(audit: dict) -> List[str]:
+    """Name the evidence gaps the frozen relevance gate already recorded.
+
+    Reads only the audit dict the pipeline produced: the relevance gate's
+    ``sufficiency_reason`` and, when present, the closest rejected candidate's
+    reason. Returns an ordered, de-duplicated list of gap strings (empty when
+    the gate recorded none). It retrieves, ranks, and writes nothing.
+    """
+    relevance = (audit or {}).get("relevance") or {}
+    gaps: List[str] = []
+    reason = str(relevance.get("sufficiency_reason") or "").strip()
+    if reason:
+        gaps.append(reason)
+    rejected = relevance.get("top_rejected") or {}
+    rej_reason = str(rejected.get("reason") or "").strip()
+    if rej_reason:
+        rej_id = str(rejected.get("citation_id") or "").strip()
+        item = (f"closest rejected evidence {rej_id}: {rej_reason}"
+                if rej_id else rej_reason)
+        if item not in gaps:
+            gaps.append(item)
+    return gaps
+
+
+def format_evidence_bound_answer(answer_text: str, citations: List[str],
+                                 gaps: List[str]) -> str:
+    """Structure a grounded answer: Answer / Evidence used / gaps / next action.
+
+    Pure and deterministic. ``answer_text`` is the frozen composer's grounded
+    text (passed through unchanged), ``citations`` are the composer's own
+    citations, and ``gaps`` come from the audit. No judgement is added here —
+    judgement is its own labelled mode.
+    """
+    parts = ["Answer:\n" + (answer_text.strip() or "(no answer)")]
+    if citations:
+        cited = "\n".join(f"- {c}" for c in citations)
+        parts.append(f"Evidence used ({len(citations)}):\n{cited}")
+    else:
+        parts.append("Evidence used: none cited.")
+    if gaps:
+        parts.append("Evidence gaps:\n" + "\n".join(f"- {g}" for g in gaps))
+    else:
+        parts.append("Evidence gaps:\n- None identified within the cited scope; "
+                     "this answer reflects only the active pack.")
+    parts.append("Next safe action:\n" + _NEXT_ACTION_EVIDENCE)
+    return "\n\n".join(parts)
+
+
+def format_insufficient_evidence_answer(query: str, reason: str,
+                                        missing: List[str],
+                                        related: List[str]) -> str:
+    """Explain a refusal constructively: asked / why / what resolves it / next.
+
+    Names the specific missing evidence instead of a generic "I don't know",
+    and points at the closest covered topics so the asker can narrow or
+    rephrase. Pure and deterministic; reads no state.
+    """
+    parts = [f"Asked:\n- {query.strip()}"]
+    parts.append("Why this cannot be answered from current evidence:\n- " + reason)
+    if missing:
+        parts.append("Evidence that would resolve the gap:\n"
+                     + "\n".join(f"- {m}" for m in missing))
+    else:
+        parts.append("Evidence that would resolve the gap:\n- A pack source that "
+                     "directly addresses this question.")
+    if related:
+        parts.append("Closest topics already in the pack:\n- "
+                     + "; ".join(related)
+                     + "\nTry narrowing the question to one of those, or "
+                     "rephrasing it.")
+    parts.append("Next safe action:\n" + _NEXT_ACTION_INSUFFICIENT)
+    return "\n\n".join(parts)
+
+
+def format_labelled_judgement(fact_text: str, citations: List[str], *,
+                              grounded: bool) -> str:
+    """Separate evidence-backed facts from labelled judgement and assumptions.
+
+    Judgement is always prefixed with :data:`JUDGEMENT_LABEL`. When evidence
+    exists the facts and their citations are shown first; when none exists the
+    answer says so plainly. Pure and deterministic.
+    """
+    parts: List[str] = []
+    if grounded:
+        parts.append("Evidence-backed facts:\n" + (fact_text.strip() or "(none)"))
+        if citations:
+            cited = "\n".join(f"- {c}" for c in citations)
+            parts.append(f"Evidence used ({len(citations)}):\n{cited}")
+        parts.append("Judgement:\n" + JUDGEMENT_LABEL + " "
+                     + _judgement_prose(True))
+        parts.append("Assumptions:\n- The cited evidence is current and applies "
+                     "to your context; judgement adds no new facts.")
+    else:
+        parts.append("Judgement:\n" + JUDGEMENT_LABEL + " "
+                     + _judgement_prose(False))
+        parts.append("Evidence-backed facts:\n- None. " + _EVIDENCE_GAP)
+        parts.append("Assumptions:\n- This is reasoning without retrieved "
+                     "evidence; treat it as opinion, not fact.")
+    parts.append("Next safe action:\n" + _NEXT_ACTION_JUDGEMENT)
+    return "\n\n".join(parts)
+
+
+def format_unsupported_governed_action(query: str) -> str:
+    """Refuse a mutation/action request and offer a safe, in-bounds alternative.
+
+    Explains the governance boundary (this chat has no write path) and points to
+    what it *can* do instead: produce a proposal, checklist, or command plan for
+    a human to review and run. Pure and deterministic.
+    """
+    return "\n\n".join([
+        "Refused:\n- This request asks to change durable state or run an action, "
+        "which this read-only chat will not do.",
+        "Governance boundary:\n- " + _GOVERNANCE_BOUNDARY,
+        "Safe alternative:\n- Ask this chat to *propose* the change instead (a "
+        "memory or source proposal you can review and approve), or ask for a "
+        "checklist or command plan you can run yourself. Facts will be cited and "
+        "any judgement will be labelled.",
+    ])
+
+
+# --------------------------------------------------------------------------- #
 # Orchestrator
 # --------------------------------------------------------------------------- #
 class ChatOrchestrator:
@@ -345,13 +519,12 @@ class ChatOrchestrator:
 
     # -- non-evidence branches ----------------------------------------------
     def _unsupported(self, intent: ChatIntent) -> ChatOrchestratorResult:
-        reason = ("This chat is read-only and cannot change durable state or "
-                  "run actions (writing memory, editing the registry, applying "
-                  "proposals, or running commands). It can answer, cite, label "
-                  "judgement, or propose follow-up records for human review.")
+        answer_text = format_unsupported_governed_action(intent.query)
+        reason = ("Read-only chat: durable mutations and actions are refused; it "
+                  "can propose a change or produce a plan for human review.")
         return ChatOrchestratorResult(
             query=intent.query, mode=ChatMode.UNSUPPORTED_REQUEST,
-            answer_text=reason, refusal_reason=reason,
+            answer_text=answer_text, refusal_reason=reason,
             intent_mode=intent.mode, route_reason=intent.reason)
 
     def _propose_memory(self, intent: ChatIntent) -> ChatOrchestratorResult:
@@ -411,11 +584,19 @@ class ChatOrchestrator:
         mode = intent.mode
         if mode == ChatMode.MEMORY_CONTEXT and not _has_memory_citation(citations):
             mode = ChatMode.EVIDENCE_ANSWER
-        answer_text = result.answer.text
+        answer_text = format_evidence_bound_answer(
+            result.answer.text, citations, [])
+        judgement_present = JUDGEMENT_LABEL in answer_text
         return ChatOrchestratorResult(
             query=intent.query, mode=mode, answer_text=answer_text,
             citations=citations,
-            judgement_labelled=JUDGEMENT_LABEL in answer_text,
+            judgement_labelled=judgement_present,
+            evidence_used_count=len(citations),
+            evidence_gap_count=0,
+            evidence_summary=_evidence_summary_line(len(citations), 0),
+            answer_has_citations=bool(citations),
+            judgement_present=judgement_present,
+            unsupported_claim_count=0,
             intent_mode=intent.mode, route_reason=intent.reason)
 
     def _insufficient_result(self, intent: ChatIntent,
@@ -430,35 +611,51 @@ class ChatOrchestrator:
         audit = getattr(result, "audit", None) or {}
         related = _related_sources_from_audit(audit)
         reason = _insufficient_reason(audit)
-        answer_text = "Insufficient grounded evidence to answer directly. " + reason
-        if related:
-            answer_text += (" The closest topics in the active pack are: "
-                            + "; ".join(related)
-                            + ". Try narrowing the question to one of those, or "
-                            "rephrasing it.")
+        missing = summarize_evidence_gaps(audit)
+        answer_text = format_insufficient_evidence_answer(
+            intent.query, reason, missing, related)
         return ChatOrchestratorResult(
             query=intent.query, mode=ChatMode.INSUFFICIENT_EVIDENCE,
             answer_text=answer_text, refusal_reason=reason,
             related_sources=related,
+            evidence_used_count=0,
+            evidence_gap_count=len(missing),
+            evidence_summary=_evidence_summary_line(0, len(missing)),
+            missing_evidence=missing,
+            answer_has_citations=False,
+            judgement_present=False,
+            unsupported_claim_count=0,
             intent_mode=intent.mode, route_reason=intent.reason)
 
     def _judgement_result(self, intent: ChatIntent, result,
                           citations: List[str],
                           grounded: bool) -> ChatOrchestratorResult:
         if grounded:
-            answer_text = (result.answer.text.strip() + "\n\n"
-                           + JUDGEMENT_LABEL + " " + _judgement_prose(True))
+            answer_text = format_labelled_judgement(
+                result.answer.text, citations, grounded=True)
             return ChatOrchestratorResult(
                 query=intent.query, mode=ChatMode.JUDGEMENT_ONLY,
                 answer_text=answer_text, citations=citations,
                 judgement_labelled=True,
+                evidence_used_count=len(citations),
+                evidence_gap_count=0,
+                evidence_summary=_evidence_summary_line(len(citations), 0),
+                answer_has_citations=bool(citations),
+                judgement_present=True,
+                unsupported_claim_count=0,
                 intent_mode=intent.mode, route_reason=intent.reason)
-        answer_text = (JUDGEMENT_LABEL + " " + _judgement_prose(False)
-                       + " " + _EVIDENCE_GAP)
+        answer_text = format_labelled_judgement("", [], grounded=False)
         return ChatOrchestratorResult(
             query=intent.query, mode=ChatMode.JUDGEMENT_ONLY,
             answer_text=answer_text, judgement_labelled=True,
             refusal_reason=_EVIDENCE_GAP,
+            evidence_used_count=0,
+            evidence_gap_count=1,
+            evidence_summary=_evidence_summary_line(0, 1),
+            missing_evidence=[_EVIDENCE_GAP],
+            answer_has_citations=False,
+            judgement_present=True,
+            unsupported_claim_count=0,
             intent_mode=intent.mode, route_reason=intent.reason)
 
 
