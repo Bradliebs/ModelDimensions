@@ -249,6 +249,7 @@ Commands:
   memory-proposals review-import <proposals.jsonl> [--queue path]  queue memory proposals for review (review-state only; not written)
   memory-proposals review-list [--queue path]  list memory proposal review state (read-only)
   memory-proposals review <id> --status approved|rejected|deferred [--note t] [--reviewer r] [--queue path]  record a review decision (approved != written)
+  memory-proposals check-conflicts <proposals_or_queue.jsonl> --existing-memory path [--out path] [--now ISO]  detect duplicate/conflict/staleness risk (read-only; nothing written)
   hf-inspect <dataset_id>  preview a Hugging Face dataset's licence/decision
   hf-import <dataset_id> --pack <pack>  import a small governed HF sample
   demo                  run the Friday -> Monday near-miss example
@@ -1364,6 +1365,8 @@ def _memory_proposals_cli(argv: list[str]) -> int:
 
     if argv and argv[0] in ("review-import", "review-list", "review"):
         return _memory_review_cli(argv)
+    if argv and argv[0] == "check-conflicts":
+        return _memory_check_conflicts_cli(argv[1:])
 
     parser = argparse.ArgumentParser(
         prog="workbench.py memory-proposals",
@@ -1476,6 +1479,66 @@ def _memory_review_cli(argv: list[str]) -> int:
     mpq.save_memory_review_queue(updated, args.queue)
     print(f"[memory-proposals] review {args.target} -> {args.status} "
           f"(queue updated; no memory written; approved != written)")
+    return 0
+
+
+def _memory_check_conflicts_cli(argv: list[str]) -> int:
+    """Check memory proposals for conflict/staleness risk (read-only; v5.2).
+
+    Reads a v5.0 proposal export *or* a v5.1 review queue and an existing-memory
+    JSONL, then reports duplicate / contradiction / supersession / staleness /
+    missing-evidence / low-confidence / not-writeable risk. It is detection
+    only: **conflict detection reports risk; it does not resolve it or write
+    memory.** Nothing is written to the memory ledger, the proposal queue is not
+    mutated, the existing-memory file is not mutated, no proposal is applied, and
+    no retrieval/ranking/source/grounding/composer behaviour changes. Default
+    prints deterministic Markdown to stdout; ``--out`` writes only the report
+    file.
+    """
+    from agent import memory_conflict_detector as mcd
+    from datetime import datetime
+
+    parser = argparse.ArgumentParser(
+        prog="workbench.py memory-proposals check-conflicts",
+        description="Detect conflict/staleness risk for memory proposals vs "
+                    "existing memory (read-only; nothing is written or mutated).")
+    parser.add_argument(
+        "proposals",
+        help="path to a v5.0 memory-proposals export or a v5.1 review-queue JSONL")
+    parser.add_argument("--existing-memory", dest="existing_memory",
+                        required=True,
+                        help="path to the existing-memory JSONL to check against")
+    parser.add_argument("--out", default=None,
+                        help="write the conflict report to this JSONL file "
+                             "instead of printing it (the only file this command "
+                             "may write; never the ledger, queue, or memory)")
+    parser.add_argument("--now", default=None,
+                        help="optional ISO timestamp used for staleness checks")
+    args = parser.parse_args(argv)
+
+    now = None
+    if args.now:
+        try:
+            now = datetime.fromisoformat(args.now.replace("Z", "+00:00"))
+        except ValueError:
+            print(f"[memory-proposals] invalid --now timestamp {args.now!r}",
+                  file=sys.stderr)
+            return 2
+
+    proposals = mcd.load_proposals_for_check(args.proposals)
+    existing = mcd.load_existing_memory(args.existing_memory)
+    report = mcd.detect_memory_conflicts(proposals, existing, now=now)
+
+    if args.out:
+        mcd.write_conflict_report(report, args.out)
+        sev = report.counts_by_severity()
+        print(f"[memory-proposals] wrote {len(report.findings)} finding(s) to "
+              f"{args.out} (errors={sev.get('error', 0)}, "
+              f"warnings={sev.get('warning', 0)}, info={sev.get('info', 0)}; "
+              f"read-only; no memory written or mutated)")
+        return 0
+
+    print(mcd.render_conflict_report_markdown(report))
     return 0
 
 

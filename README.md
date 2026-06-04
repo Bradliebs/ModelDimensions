@@ -2323,6 +2323,60 @@ python app/workbench.py memory-proposals review memprop-abcdef0123 --status appr
 | `app/workbench.py` | the `memory-proposals {review-import,review-list,review}` CLI group (writes only the `--queue` file; never the ledger) |
 | `evals/test_memory_proposal_review.py` | pending-record import, idempotent re-import preserving review state, deterministic list/CLI, every valid transition + clean failure on invalid ones, **approved-not-written** / `written` stays false, `MemoryLedger.add` never called, review writes only the queue file, snapshot preserved, and the v5.0 build / v4.3 source review / v3.0 retrieval baselines unchanged alongside it |
 
+## v5.2 Memory conflict + staleness detector (read-only; reports risk, never resolves)
+
+Before any memory-write path exists, v5.2 adds a **read-only** detector that
+checks v5.0/v5.1 memory proposals against existing memory / project-state
+records and reports *risk*. The core rule:
+
+> **Conflict detection reports risk; it does not resolve it or write memory.**
+
+The detector imports no ledger or bank write path by construction. It never
+writes the memory ledger, never mutates a proposal queue or the existing-memory
+file, never applies or approves a proposal, and changes **no** retrieval,
+ranking, source-selection, grounding, or composer behaviour. Every finding is a
+signal for a human, never an action. Detection is deterministic and
+*conservative* (lexical token overlap, polarity, and date comparison — not
+semantic); ambiguous overlap is reported at a lower severity rather than
+asserted, and no risk is silently dropped.
+
+| Risk code | Severity | What it reports |
+|---|---|---|
+| `contradicts_existing_memory` | error | a claim whose polarity conflicts with an existing memory on the same topic |
+| `invalid_candidate` | error | a candidate that is not writeable memory at all |
+| `duplicate_claim` | warning | an exact (token-normalised) duplicate of an existing memory |
+| `supersedes_existing_memory` | warning | a newer project-state claim that updates an older one |
+| `superseded_by_existing_memory` | warning | a project-state claim an existing newer memory may supersede |
+| `stale_project_state` | warning | a project-state claim older than 90 days |
+| `missing_evidence` | warning | an evidence-required type (`fact`/`decision`/`project_state`) with no bound evidence |
+| `low_confidence` | warning | a factual proposal below the 0.6 confidence threshold |
+| `possible_duplicate` | info | high (but non-exact) overlap with an existing memory |
+| `stale_user_preference` | info | a user preference older than 365 days |
+| `non_factual_not_writeable` | info | a tracked `todo`/`open_question`/`source_gap` that is not directly writeable |
+| `needs_human_review` | info | a clean factual proposal that still needs approval before any future write |
+
+```text
+# check a v5.0 proposal export (or a v5.1 review queue) against existing memory
+# (prints a deterministic Markdown report; writes nothing)
+python app/workbench.py memory-proposals check-conflicts reports/memory_proposals.jsonl --existing-memory demos/existing_memory_records.jsonl
+
+# write the report to a JSONL file instead (the only file this command may write)
+python app/workbench.py memory-proposals check-conflicts reports/memory_proposals.jsonl --existing-memory demos/existing_memory_records.jsonl --out reports/memory_conflict_report.jsonl
+```
+
+Limitations: detection is lexical and conservative, so it catches exact and
+high-overlap duplicates, simple polarity contradictions, project-state updates,
+and age-based staleness — it does not perform semantic entailment, and it
+deliberately under-reports ambiguous cases (as `possible_duplicate`) rather than
+over-asserting.
+
+| File | What it adds |
+|---|---|
+| `src/agent/memory_conflict_detector.py` | the read-only detector: `MemoryConflictSeverity`/`MemoryConflictCode`, frozen `ExistingMemoryRecord` / `MemoryConflictFinding` / `MemoryConflictReport`, pure loaders `load_existing_memory` / `load_proposals_for_check` (accepts a v5.0 export or a v5.1 queue), `detect_memory_conflicts`, `render_conflict_report_markdown`, and `write_conflict_report` (the only writer — a read-only report file, never the ledger) |
+| `demos/existing_memory_records.jsonl` | demo existing-memory seed crafted so the v5.0 demo candidates surface a duplicate, a contradiction, and a project-state supersession |
+| `app/workbench.py` | the `memory-proposals check-conflicts` CLI (prints to stdout, or writes only the `--out` report; never the ledger, queue, or memory) |
+| `evals/test_memory_conflict_detector.py` | each risk code detected deterministically and conservatively, not-writeable categories flagged, deterministic output, CLI stdout writes no files / `--out` writes only the report, `MemoryLedger.add` never called, proposal queue + existing-memory byte-identical, and the v5.0 build / v5.1 review queue / v3.0 retrieval baselines unchanged alongside it |
+
 ## License
 
 To be decided.
