@@ -1899,6 +1899,63 @@ reproducible; a clean result is recorded as-is, never forced into a failure.
 | `app/workbench.py` | the `retrieval-eval --probe-hygiene` flag |
 | `evals/test_hardcorpus_hygiene.py` | field loading, taxonomy classification, bleed-vs-neighbour separation, gap handling, hygiene-metric shape, determinism, non-mutation, and proof the v3.0 eval and v3.0.1 probe are unchanged alongside it |
 
+## v2.9 Consultant narrative layer
+
+v2.7 gave the opt-in `ConsultantReportComposer` a structurally typed nine-section
+report; v2.9 makes that report **read like a professional deliverable** without
+touching a single byte of the evidence contract. It changes no retrieval, no
+ranking, no source selection, no grounding, no memory, and no `AnswerGuard`
+semantics. The template stays the default and the report stays opt-in.
+
+**What the narrative layer adds (framing only):**
+
+* **Section framing.** Each factual section carries a fact-free `intro` line
+  describing *what the section contains* (`Executive summary` → "The single most
+  relevant finding from the cited evidence, stated first."), and the first
+  judgement section carries the **factual→judgement transition** ("The sections
+  below are author judgement: labelled, uncited, and not drawn from the evidence
+  above."). Intros are drawn from a **closed set of frames** — they assert no
+  fact and carry no citation.
+* **Evidence-sufficiency-aware recommendation.** The `Recommendation` section
+  still **never fabricates a directive** — it remains a labelled, uncited
+  placeholder — but its wording now adapts to how much evidence backs the
+  report: one source keeps the original wording, two or more name the count and
+  the limits of choosing among them, and zero evidence **names the gap rather
+  than closing it by inference**. Safe degradation, never invention.
+
+**The contract is unchanged.** Framing lives on the carrier's additive
+`ReportSection.intro` field, which the **guard never reads** — it still checks
+only `kind`, `spans`, and `judgement_text`. Factual sections still carry only
+verbatim, citation-bound spans; judgement sections still start with
+`[JUDGEMENT — not grounded in evidence]` and contain zero citation markers. The
+grounded citation set is **identical** to the template's and to the
+non-narrative report's.
+
+**Narrative metrics** (`report_narrative_metrics(report) → NarrativeMetrics`,
+pure and inert when `report is None`):
+
+| metric | meaning |
+|---|---|
+| `narrative_transition_count` | section framing lines attached (factual intros + transition) |
+| `unsupported_narrative_claim_count` | section intros that are **not** the canonical fact-free frame — must be 0 |
+| `labelled_judgement_count` / `unlabelled_judgement_count` | judgement sections with / without the mandatory label (unlabelled must be 0) |
+| `recommendation_placeholder_count` | 1 when the recommendation degrades to a labelled placeholder |
+| `evidence_gap_named_count` | judgement sections that honestly name a gap rather than smoothing it over |
+| `consultant_readability_score` | deterministic [0, 1] share of sections carrying their expected scaffolding |
+
+The `unsupported_narrative_claim_count` is the integrity counter for the framing:
+any free-text intro that is not the canonical frame for its title/kind is
+mechanically counted, so framing can never silently introduce a claim.
+
+```text
+workbench> query-assist --report how does pydantic validate input   # opt-in; narrative on
+```
+
+| File | What it adds |
+|---|---|
+| `src/slm/assistant_composer.py` | additive `ReportSection.intro`, closed `_NARRATIVE_FACTUAL_FRAMES` / `_JUDGEMENT_TRANSITION` frames, a `narrative` flag on `ConsultantReportComposer` (default on), evidence-sufficiency-aware `_recommendation_text`, render of intro framing, and the pure `NarrativeMetrics` / `report_narrative_metrics` |
+| `evals/test_consultant_narrative.py` | no citation/grounding drift, judgement stays labelled+uncited, framing introduces no unsupported claim (with a tampered-intro counter-test), recommendation safe degradation across evidence sufficiency, v2.8 fluency metrics intact, template-default/report-opt-in, and a full narrative report passing the guard |
+
 ## License
 
 To be decided.

@@ -191,6 +191,13 @@ class ReportSection:
     # (no evidence-derived content to surface). Structural and additive; the
     # guard never reads it, but the fluency metrics count placeholder sections.
     is_placeholder: bool = False
+    # v2.9: optional structural framing line describing what this section
+    # contains (or, on the first judgement section, the transition into the
+    # labelled-judgement half of the report). It asserts no fact and carries no
+    # citation; it is drawn from a closed set of frames so it can never
+    # introduce an unsupported claim. The guard never reads it — it is purely a
+    # readability scaffold, audited by ``report_narrative_metrics``.
+    intro: Optional[str] = None
 
     def to_dict(self) -> dict:
         return {
@@ -199,6 +206,7 @@ class ReportSection:
             "spans": [s.to_dict() for s in self.spans],
             "judgement_text": self.judgement_text,
             "is_placeholder": self.is_placeholder,
+            "intro": self.intro,
         }
 
 
@@ -518,6 +526,29 @@ _JUDGEMENT_PLACEHOLDERS = {
 }
 
 
+# v2.9: structural narrative framing for the consultant report. Each frame
+# describes its SECTION, not the evidence content — it states no fact and carries
+# no citation, so it can never introduce an unsupported claim or drift the
+# citation set. The frames are a CLOSED set: ``report_narrative_metrics`` audits
+# that every section ``intro`` is exactly the canonical frame for its title/kind,
+# counting any deviation as an unsupported narrative claim. Framing lives on the
+# carrier's ``intro`` field, which the guard never reads.
+_NARRATIVE_FACTUAL_FRAMES = {
+    "Executive summary": (
+        "The single most relevant finding from the cited evidence, stated "
+        "first."),
+    "Current state": (
+        "What the cited evidence establishes about the current situation."),
+    "Evidence": (
+        "Supporting sources not already surfaced above."),
+}
+# The transition from the evidence-bound half of the report into the labelled-
+# judgement half. Attached as the ``intro`` of the first judgement section.
+_JUDGEMENT_TRANSITION = (
+    "The sections below are author judgement: labelled, uncited, and not drawn "
+    "from the evidence above.")
+
+
 class ExtractiveMultiChunkComposer(AssistantComposer):
     """Opt-in composer that quotes the most relevant span from each source.
 
@@ -647,10 +678,17 @@ class ConsultantReportComposer(AssistantComposer):
     name = "consultant"
 
     def __init__(self, *, fallback: Optional[TemplateComposer] = None,
-                 extractive: Optional["ExtractiveMultiChunkComposer"] = None):
+                 extractive: Optional["ExtractiveMultiChunkComposer"] = None,
+                 narrative: bool = True):
         self._template = fallback or TemplateComposer()
         self._extractive = extractive or ExtractiveMultiChunkComposer(
             fallback=self._template)
+        # v2.9: when True, the report carries structural narrative framing
+        # (section intros and the factual->judgement transition) and the
+        # recommendation wording adapts to evidence sufficiency. Framing is
+        # fact-free scaffolding only; the evidence contract is unchanged whether
+        # this is on or off.
+        self._narrative = narrative
 
     def compose(self, package: GroundingPackage) -> ComposedAnswer:
         if package.mode != ComposerMode.GROUNDED:
@@ -685,16 +723,25 @@ class ConsultantReportComposer(AssistantComposer):
         risks_text, risks_is_placeholder = self._risks_text(package)
         rec_text, rec_is_placeholder = self._recommendation_text(package)
         open_text, open_is_placeholder = self._open_questions_text(package)
+        narrative = self._narrative
+
+        def factual_intro(title: str) -> Optional[str]:
+            return _NARRATIVE_FACTUAL_FRAMES[title] if narrative else None
+
         return [
             ReportSection(title="Executive summary", kind=SECTION_FACTUAL,
-                          spans=exec_spans),
+                          spans=exec_spans,
+                          intro=factual_intro("Executive summary")),
             ReportSection(title="Current state", kind=SECTION_FACTUAL,
-                          spans=current_spans),
+                          spans=current_spans,
+                          intro=factual_intro("Current state")),
             ReportSection(title="Evidence", kind=SECTION_FACTUAL,
-                          spans=evidence_spans),
+                          spans=evidence_spans,
+                          intro=factual_intro("Evidence")),
             ReportSection(title="Risks", kind=SECTION_JUDGEMENT,
                           judgement_text=risks_text,
-                          is_placeholder=risks_is_placeholder),
+                          is_placeholder=risks_is_placeholder,
+                          intro=_JUDGEMENT_TRANSITION if narrative else None),
             ReportSection(title="Options", kind=SECTION_JUDGEMENT,
                           judgement_text=self._placeholder("Options"),
                           is_placeholder=True),
@@ -881,11 +928,28 @@ class ConsultantReportComposer(AssistantComposer):
     def _recommendation_text(self, package: GroundingPackage) -> tuple[str, bool]:
         # Deterministic and model-free: never fabricate a recommendation. Degrade
         # to a labelled placeholder; the grounded basis to act on lives in the
-        # factual sections above.
-        return self._label(
-            "A recommendation cannot be drawn from the cited evidence alone; "
-            "author judgement required. The evidence-bound sections above may "
-            "inform it."), True
+        # factual sections above. v2.9: the wording adapts to how much grounded
+        # evidence exists so the placeholder reads like a consultant naming the
+        # limits of the brief — but it is always a labelled, uncited placeholder
+        # and never asserts a directive.
+        n = len(package.evidence)
+        if not self._narrative or n == 1:
+            body = (
+                "A recommendation cannot be drawn from the cited evidence "
+                "alone; author judgement required. The evidence-bound sections "
+                "above may inform it.")
+        elif n >= 2:
+            body = (
+                "A recommendation cannot be drawn from the cited evidence "
+                f"alone; author judgement required. The {n} evidence-bound "
+                "sources above can inform that judgement, but choosing among "
+                "them is not something the evidence settles.")
+        else:  # n == 0: insufficient evidence — name the gap, do not fill it.
+            body = (
+                "No grounded evidence supports a recommendation; author "
+                "judgement required, and the gap should be named rather than "
+                "closed by inference.")
+        return self._label(body), True
 
     def _open_questions_text(self, package: GroundingPackage) -> tuple[str, bool]:
         notes = [
@@ -910,6 +974,10 @@ class ConsultantReportComposer(AssistantComposer):
         for section in sections:
             lines.append("")
             lines.append(f"## {section.title}")
+            # v2.9: structural framing line (fact-free; not a cited span and not
+            # part of the judgement body the guard checks).
+            if section.intro:
+                lines.append(section.intro)
             if section.kind == SECTION_FACTUAL:
                 if not section.spans:
                     lines.append("  (no additional sources; see sections above)")
@@ -968,3 +1036,105 @@ def report_fluency_metrics(
 
     return (duplicate_span_count, truncated_span_count,
             section_overlap_count, judgement_placeholder_count)
+
+
+@dataclass(frozen=True)
+class NarrativeMetrics:
+    """Readability/integrity diagnostics for the v2.9 narrative framing layer.
+
+    Pure, structural counters derived from a finished report. They measure how
+    consultant-readable the report scaffolding is and assert that the narrative
+    framing never erodes the evidence contract:
+
+    - ``narrative_transition_count``: section framing lines attached (factual
+      section intros plus the factual->judgement transition).
+    - ``unsupported_narrative_claim_count``: section intros that are not the
+      canonical, fact-free frame for their title/kind. Must be 0 — any other
+      value means free-text framing leaked in.
+    - ``labelled_judgement_count`` / ``unlabelled_judgement_count``: judgement
+      sections that do / do not carry the mandatory label. Unlabelled must be 0.
+    - ``recommendation_placeholder_count``: 1 when the Recommendation section
+      degrades to a labelled placeholder (never a fabricated directive).
+    - ``evidence_gap_named_count``: judgement sections that honestly name a gap
+      (placeholder sections) rather than smoothing it over.
+    - ``consultant_readability_score``: deterministic [0, 1] share of sections
+      carrying their expected scaffolding (framed factual + labelled judgement).
+    """
+
+    narrative_transition_count: int = 0
+    unsupported_narrative_claim_count: int = 0
+    labelled_judgement_count: int = 0
+    unlabelled_judgement_count: int = 0
+    recommendation_placeholder_count: int = 0
+    evidence_gap_named_count: int = 0
+    consultant_readability_score: float = 0.0
+
+    def to_dict(self) -> dict:
+        return {
+            "narrative_transition_count": self.narrative_transition_count,
+            "unsupported_narrative_claim_count":
+                self.unsupported_narrative_claim_count,
+            "labelled_judgement_count": self.labelled_judgement_count,
+            "unlabelled_judgement_count": self.unlabelled_judgement_count,
+            "recommendation_placeholder_count":
+                self.recommendation_placeholder_count,
+            "evidence_gap_named_count": self.evidence_gap_named_count,
+            "consultant_readability_score": self.consultant_readability_score,
+        }
+
+
+def report_narrative_metrics(
+    report: Optional[ReportStructure],
+) -> NarrativeMetrics:
+    """Narrative-quality diagnostics derived purely from a report structure.
+
+    Returns an all-zero :class:`NarrativeMetrics` when ``report`` is None, so the
+    metrics are inert outside report mode. This function only reads the report;
+    it never touches retrieval, ranking, grounding, sufficiency, or memory. The
+    ``unsupported_narrative_claim_count`` is the integrity guard for the framing:
+    every section intro must be the canonical, fact-free frame for its
+    title/kind, so any free-text framing is mechanically counted here.
+    """
+    if report is None:
+        return NarrativeMetrics()
+
+    sections = report.sections
+    judgement = [s for s in sections if s.kind == SECTION_JUDGEMENT]
+
+    narrative_transition_count = sum(1 for s in sections if s.intro)
+
+    unsupported = 0
+    for s in sections:
+        if not s.intro:
+            continue
+        if s.kind == SECTION_FACTUAL:
+            if s.intro != _NARRATIVE_FACTUAL_FRAMES.get(s.title):
+                unsupported += 1
+        elif s.intro != _JUDGEMENT_TRANSITION:
+            unsupported += 1
+
+    labelled = sum(
+        1 for s in judgement
+        if (s.judgement_text or "").startswith(JUDGEMENT_LABEL))
+    unlabelled = len(judgement) - labelled
+
+    rec = next((s for s in sections if s.title == "Recommendation"), None)
+    recommendation_placeholder_count = (
+        1 if rec is not None and rec.is_placeholder else 0)
+
+    evidence_gap_named_count = sum(1 for s in judgement if s.is_placeholder)
+
+    total = len(sections)
+    framed_factual = sum(
+        1 for s in sections if s.kind == SECTION_FACTUAL and s.intro)
+    readability = (framed_factual + labelled) / total if total else 0.0
+
+    return NarrativeMetrics(
+        narrative_transition_count=narrative_transition_count,
+        unsupported_narrative_claim_count=unsupported,
+        labelled_judgement_count=labelled,
+        unlabelled_judgement_count=unlabelled,
+        recommendation_placeholder_count=recommendation_placeholder_count,
+        evidence_gap_named_count=evidence_gap_named_count,
+        consultant_readability_score=round(readability, 4),
+    )
