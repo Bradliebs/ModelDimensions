@@ -42,7 +42,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import List, Optional
 
-from slm.assistant_composer import ComposerMode
+from slm.assistant_composer import AssistantComposer, ComposerMode
 
 from .memory_proposals import MemoryProposal, ProposalKind, ProposalStatus
 from .workbench_service import WorkbenchService
@@ -162,6 +162,13 @@ class SprintRow:
     # only one (or no) candidate was retrieved.
     rejected_candidate: str = ""
     rejected_reason: str = ""
+    # v2.6 extractive-composer measurement. ``synthesis_breadth`` is the number
+    # of distinct sources a grounded answer draws on (composer-independent: a
+    # property of the pack and query, 0 when not grounded). ``span_count`` is
+    # the number of citation-bound spans the composer emitted (0 for the
+    # whole-chunk template composer; >=1 per source for the extractive one).
+    synthesis_breadth: int = 0
+    span_count: int = 0
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -181,6 +188,9 @@ class SprintSummary:
     pack_gap_count: int
     guard_reject_count: int
     expectation_met_count: int
+    # v2.6: grounded answers that draw on >=2 distinct sources — the queries an
+    # extractive multi-chunk composer can synthesise rather than echo.
+    multi_source_grounded_count: int = 0
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -352,7 +362,8 @@ def emit_memory_proposals(rows: List["SprintRow"], *,
 
 
 def run_query(service: WorkbenchService, spec: SprintQuery, *,
-              retrieval_backend: str) -> SprintRow:
+              retrieval_backend: str,
+              composer: Optional[AssistantComposer] = None) -> SprintRow:
     """Run one query through the frozen assistant path and record the audit.
 
     Two frozen, deterministic calls are made: ``build_grounding_package`` to read
@@ -360,12 +371,14 @@ def run_query(service: WorkbenchService, spec: SprintQuery, *,
     conflict / model-prior, which the audit flags alone cannot distinguish), and
     ``answer_query`` to obtain the composed answer, cited ids, and the
     independent AnswerGuard verdict. Both use identical arguments, so they route
-    consistently.
+    consistently. ``composer`` selects how the (already-decided) grounded
+    evidence is rendered; it can never change the grounding decision.
     """
     package = service.build_grounding_package(
         spec.query, allow_model_prior=spec.allow_model_prior)
     result = service.answer_query(
-        spec.query, allow_model_prior=spec.allow_model_prior)
+        spec.query, allow_model_prior=spec.allow_model_prior,
+        composer=composer)
 
     mode = package.mode
     audit = result.audit or {}
@@ -391,6 +404,8 @@ def run_query(service: WorkbenchService, spec: SprintQuery, *,
     snippet = (result.answer.text or "").strip().replace("\n", " ")
     if len(snippet) > 160:
         snippet = snippet[:157] + "..."
+    synthesis_breadth = citations if grounded else 0
+    span_count = len(getattr(result.answer, "spans", None) or [])
 
     return SprintRow(
         query=spec.query,
@@ -414,13 +429,17 @@ def run_query(service: WorkbenchService, spec: SprintQuery, *,
         relevance_label=relevance_label,
         rejected_candidate=rejected_candidate,
         rejected_reason=rejected_reason,
+        synthesis_breadth=synthesis_breadth,
+        span_count=span_count,
     )
 
 
 def run_sprint(service: WorkbenchService, queries: List[SprintQuery], *,
-               retrieval_backend: str = "deterministic") -> List[SprintRow]:
+               retrieval_backend: str = "deterministic",
+               composer: Optional[AssistantComposer] = None) -> List[SprintRow]:
     """Run every sprint query against the active pack's service."""
-    return [run_query(service, q, retrieval_backend=retrieval_backend)
+    return [run_query(service, q, retrieval_backend=retrieval_backend,
+                      composer=composer)
             for q in queries]
 
 
@@ -442,6 +461,8 @@ def summarize(rows: List[SprintRow]) -> SprintSummary:
         expectation_met_count=sum(
             1 for r in rows
             if _row_expectation_met(r)),
+        multi_source_grounded_count=sum(
+            1 for r in rows if grounded(r) and r.synthesis_breadth >= 2),
     )
 
 

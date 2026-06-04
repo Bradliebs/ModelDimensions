@@ -49,6 +49,7 @@ SOFTENED_REFUSAL = "softened_refusal"
 UNLABELLED_MODEL_PRIOR = "unlabelled_model_prior"
 MODE_MISMATCH = "mode_mismatch"
 DROPPED_STALE_CAUTION = "dropped_stale_caution"
+UNSUPPORTED_SPAN = "unsupported_span"
 
 
 @dataclass(frozen=True)
@@ -140,6 +141,20 @@ def check_answer(package: GroundingPackage,
             DROPPED_STALE_CAUTION,
             "package carries a stale-source caution the answer does not "
             "surface"))
+
+    # Span-level binding (v2.6): when a composer emits per-span citations, every
+    # span must be a verbatim substring of the evidence item it cites. This
+    # mechanically forbids unsupported bridging text. No-op for whole-chunk
+    # composers, whose ``spans`` list is empty.
+    if answer.spans:
+        evidence_text = {e.citation_id: e.text for e in package.evidence}
+        for span in answer.spans:
+            source = evidence_text.get(span.citation_id)
+            if source is None or span.text not in source:
+                violations.append(GuardViolation(
+                    UNSUPPORTED_SPAN,
+                    f"span {span.text!r} cited to {span.citation_id} is not a "
+                    "verbatim substring of that evidence item"))
 
     verdict = "ACCEPT" if not violations else "REJECT"
     return GuardReport(verdict=verdict, violations=violations)

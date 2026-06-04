@@ -119,6 +119,28 @@ class GroundingPackage:
         }
 
 
+@dataclass(frozen=True)
+class AnswerSpan:
+    """One emitted span of an answer, bound to a single allowed evidence item.
+
+    ``text`` must be a verbatim substring of the cited evidence item's text.
+    This is what makes an extractive answer auditable span-by-span: the
+    AnswerGuard can confirm every span is supported by the source it cites,
+    forbidding any unsupported bridging text.
+    """
+
+    text: str
+    citation_id: str
+    source_name: Optional[str] = None
+
+    def to_dict(self) -> dict:
+        return {
+            "text": self.text,
+            "citation_id": self.citation_id,
+            "source_name": self.source_name,
+        }
+
+
 @dataclass
 class ComposedAnswer:
     """A rendered answer. Structural fields mirror the package, never the SLM."""
@@ -131,6 +153,10 @@ class ComposedAnswer:
     informational_only: bool
     refused: bool
     fell_back: bool = False
+    # Optional per-span citation binding. Empty for whole-chunk composers (the
+    # template and SLM composers); populated by the extractive composer so each
+    # bullet maps to exactly one allowed evidence item.
+    spans: List[AnswerSpan] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         return {
@@ -142,7 +168,22 @@ class ComposedAnswer:
             "informational_only": self.informational_only,
             "refused": self.refused,
             "fell_back": self.fell_back,
+            "spans": [s.to_dict() for s in self.spans],
         }
+
+
+def _append_cautions(body: str, package: GroundingPackage) -> str:
+    """Append the package's cautions and historical note to a rendered body.
+
+    Shared by every deterministic composer so a stale-source caution or a
+    superseded-memory note is surfaced identically however the body was built.
+    """
+    cautions = [f"! {c}" for c in package.cautions]
+    if package.historical_note:
+        cautions.append(f"! {package.historical_note}")
+    if cautions:
+        body = body + "\n" + "\n".join(cautions)
+    return body
 
 
 def _citations_for(package: GroundingPackage) -> List[str]:
@@ -200,12 +241,7 @@ class TemplateComposer(AssistantComposer):
             body = self._render_pack_summary(package)
         else:
             body = self._render_refusal(package)
-        cautions = [f"! {c}" for c in package.cautions]
-        if package.historical_note:
-            cautions.append(f"! {package.historical_note}")
-        if cautions:
-            body = body + "\n" + "\n".join(cautions)
-        return body
+        return _append_cautions(body, package)
 
     def _render_grounded(self, package: GroundingPackage) -> str:
         lead = "Based on grounded evidence:"
@@ -334,4 +370,120 @@ class LocalSLMComposer(AssistantComposer):
             lines.append("Evidence: (none — you must refuse to answer)")
         if package.cautions:
             lines.append("Cautions to preserve: " + "; ".join(package.cautions))
+        return "\n".join(lines)
+
+
+# Sentence boundary: whitespace that follows sentence-ending punctuation. The
+# split consumes only the separating whitespace, so every resulting piece is a
+# contiguous substring of the original text — the verbatim guarantee the
+# extractive composer and AnswerGuard rely on.
+_SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?])\s+")
+
+
+def _split_sentences(text: str) -> List[str]:
+    """Split ``text`` into trimmed sentence spans, each a verbatim substring.
+
+    ``str.strip`` only removes leading/trailing whitespace, so each returned
+    span is still a contiguous substring of ``text`` (``span in text`` holds).
+    """
+    return [p.strip() for p in _SENTENCE_SPLIT_RE.split(text or "") if p.strip()]
+
+
+class ExtractiveMultiChunkComposer(AssistantComposer):
+    """Opt-in composer that quotes the most relevant span from each source.
+
+    Where :class:`TemplateComposer` echoes each evidence item *whole*, this
+    composer selects, from every allowed evidence item, the sentence(s) whose
+    lexical overlap with the query is highest, and renders them as per-span,
+    citation-bound bullets. It is strictly **extractive**:
+
+    - every emitted span is a *verbatim substring* of the evidence item it
+      cites — no paraphrase, no token added, no two chunks merged;
+    - the set of citable ids is unchanged (still the package's grounded
+      evidence), so it can never cite more sources than the template would;
+    - only ``GROUNDED`` answers are reshaped. Refusal, conflict, model-prior
+      and pack-summary answers are delegated to the template verbatim, so every
+      non-grounded path is byte-identical to the default.
+
+    The span scoring reuses the frozen deterministic ``content_tokens`` /
+    ``overlap_coefficient`` primitives from the evidence ranker, so it adds no
+    new notion of relevance. The :class:`~slm.answer_guard.AnswerGuard` enforces
+    the verbatim-substring invariant after the fact; a span that is not
+    supported by its cited evidence is rejected and recomposed by the template.
+    """
+
+    name = "extractive"
+
+    def __init__(self, *, max_spans_per_item: int = 2,
+                 fallback: Optional[TemplateComposer] = None):
+        if max_spans_per_item < 1:
+            raise ValueError("max_spans_per_item must be >= 1")
+        self.max_spans_per_item = max_spans_per_item
+        self._template = fallback or TemplateComposer()
+
+    def compose(self, package: GroundingPackage) -> ComposedAnswer:
+        if package.mode != ComposerMode.GROUNDED:
+            # Non-grounded modes are unchanged: render with the template, but
+            # record that the extractive composer was the one selected.
+            answer = self._template.compose(package)
+            answer.composer_backend = self.name
+            return answer
+        spans = self._select_spans(package)
+        text = _append_cautions(self._render_spans(package, spans), package)
+        return ComposedAnswer(
+            text=text,
+            mode=package.mode,
+            citations=_citations_for(package),
+            composer_backend=self.name,
+            model_prior_labelled=False,
+            informational_only=package.informational_only,
+            refused=package.refused,
+            fell_back=False,
+            spans=spans,
+        )
+
+    # -- internals --
+
+    def _select_spans(self, package: GroundingPackage) -> List[AnswerSpan]:
+        # Lazy import: the evidence ranker imports EvidenceItem from this module,
+        # so a top-level import would be circular.
+        from retrieval.evidence_ranker import content_tokens, overlap_coefficient
+
+        query_tokens = set(content_tokens(package.query))
+        spans: List[AnswerSpan] = []
+        for item in package.evidence:
+            sentences = _split_sentences(item.text)
+            if not sentences:
+                continue
+            scored = sorted(
+                ((overlap_coefficient(query_tokens,
+                                      set(content_tokens(sentence))), idx, sentence)
+                 for idx, sentence in enumerate(sentences)),
+                key=lambda triple: (triple[0], -triple[1]),
+                reverse=True,
+            )
+            chosen = [(idx, sentence) for score, idx, sentence in scored
+                      if score > 0][: self.max_spans_per_item]
+            if not chosen:
+                # No lexical overlap with any sentence: keep the leading
+                # sentence so a cited source is never silently dropped.
+                chosen = [(0, sentences[0])]
+            chosen.sort(key=lambda pair: pair[0])  # restore reading order
+            for _, sentence in chosen:
+                spans.append(AnswerSpan(
+                    text=sentence,
+                    citation_id=item.citation_id,
+                    source_name=item.source_name,
+                ))
+        return spans
+
+    def _render_spans(self, package: GroundingPackage,
+                      spans: List[AnswerSpan]) -> str:
+        lead = "Based on grounded evidence:"
+        if package.informational_only:
+            lead = "Informational only (not professional advice). " + lead
+        lines = [lead]
+        for span in spans:
+            tag = f" [{span.source_name}]" if span.source_name else ""
+            lines.append(f"  - {span.text}{tag} [{span.citation_id}]")
         return "\n".join(lines)

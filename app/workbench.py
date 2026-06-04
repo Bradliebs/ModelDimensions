@@ -937,6 +937,7 @@ def _build_sprint_service(pack_name: str, backend: str, *, seed: bool):
 
 def _value_sprint_cli(argv: list[str]) -> int:
     from agent import value_sprint_harness as vsh
+    from slm.assistant_composer import ExtractiveMultiChunkComposer
 
     parser = argparse.ArgumentParser(
         prog="workbench.py value-sprint",
@@ -949,6 +950,11 @@ def _value_sprint_cli(argv: list[str]) -> int:
     run.add_argument("--backend", default="deterministic",
                      choices=["deterministic", "hybrid"],
                      help="knowledge retrieval backend (default deterministic)")
+    run.add_argument("--composer", default="template",
+                     choices=["template", "extractive"],
+                     help="answer composer: 'template' echoes whole chunks "
+                          "(default); 'extractive' quotes the most relevant "
+                          "verbatim span from each source")
     run.add_argument("--queries", default=str(_VALUE_SPRINT_QUERIES),
                      help="path to the value sprint query JSONL")
     run.add_argument("--no-seed", dest="seed", action="store_false",
@@ -981,7 +987,10 @@ def _value_sprint_cli(argv: list[str]) -> int:
     if args.action == "run":
         service = _build_sprint_service(args.pack, args.backend, seed=args.seed)
         queries = vsh.load_queries(args.queries)
-        rows = vsh.run_sprint(service, queries, retrieval_backend=args.backend)
+        composer = (ExtractiveMultiChunkComposer()
+                    if args.composer == "extractive" else None)
+        rows = vsh.run_sprint(service, queries, retrieval_backend=args.backend,
+                              composer=composer)
         summary = vsh.summarize(rows)
         vsh.write_reports(
             rows, summary, md_path=args.out_md, jsonl_path=args.out_jsonl,
@@ -994,6 +1003,9 @@ def _value_sprint_cli(argv: list[str]) -> int:
               f"stale={summary.stale_flagged_count} "
               f"gaps={summary.pack_gap_count} "
               f"guard-rejects={summary.guard_reject_count}")
+        print(f"[value-sprint] composer={args.composer} "
+              f"multi-source-grounded={summary.multi_source_grounded_count} "
+              f"spans={sum(r.span_count for r in rows)}")
         print(f"[value-sprint] wrote {args.out_md}")
         print(f"[value-sprint] wrote {args.out_jsonl}")
         if args.emit_proposals:

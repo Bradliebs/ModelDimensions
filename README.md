@@ -1281,6 +1281,9 @@ the package:
 * a model-prior answer is labelled as such and never presents as grounded;
 * the answer's mode matches the package's mode (no relabelling);
 * a stale-source caution in the package is still surfaced in the prose.
+* every per-span citation (v2.6) is a *verbatim substring* of the evidence item
+  it cites — no unsupported bridging text (a no-op for whole-chunk composers,
+  whose `spans` list is empty).
 
 **Why this exists when `LocalSLMComposer` already validates its own output.**
 That internal check only guards the *SLM* path, as a silent fallback trigger.
@@ -1594,6 +1597,55 @@ remains advisory/report-only.
 | `src/agent/value_sprint_harness.py` | `pack_gap_to_memory_proposal` adapter (memory_proposal gaps only) and the opt-in `emit_memory_proposals` sprint-scoped queue writer |
 | `app/workbench.py` | `value-sprint run --emit-memory-proposals` / `--proposals-queue` opt-in flags (default off) |
 | `evals/test_value_sprint_memory_capture.py` | PENDING conversion, knowledge-gap skip, no-ledger-write, refusal-before-approval, approval-and-write-required, idempotency, and default-sprint-creates-no-queue |
+
+## v2.6 Citation-bound extractive multi-chunk composer
+
+The default `TemplateComposer` already cites every source — but it does so by
+**echoing each evidence chunk whole**. When a grounded answer draws on several
+sources, the reader gets the union of full chunks, including the off-topic
+sentences each chunk happens to contain. v2.6 adds an opt-in
+`ExtractiveMultiChunkComposer` that **quotes the most query-relevant verbatim
+span from each allowed source** and binds each span to its citation id, so a
+multi-source answer reads as a tight, attributable set of quotes rather than a
+wall of concatenated chunks.
+
+It is strictly extractive and changes no grounding decision:
+
+* **No new sources.** The composer renders the same frozen `GroundingPackage`;
+  its citation set equals the template's for any given package, so a value
+  sprint reports an **identical `grounded_count` between template and
+  extractive runs** (the no-drift check). The composer lift is visible only in
+  the new `span_count` (0 for template, ≥1 per grounded source for extractive).
+* **Verbatim only.** Each span is selected by splitting an evidence item into
+  sentences and ranking them with the frozen deterministic `content_tokens` /
+  `overlap_coefficient` primitives from the evidence ranker. Each emitted span
+  is a contiguous substring of the source — no paraphrase, no merged chunks, no
+  bridging text. A source with no lexical overlap still contributes its leading
+  sentence, so a cited source is never silently dropped.
+* **Non-grounded modes are untouched.** Refusal, conflict, and model-prior
+  answers are delegated to the template verbatim (byte-identical output); only
+  the recorded `composer_backend` notes that the extractive composer was
+  selected.
+* **Guarded after the fact.** `AnswerSpan` carries `text` + `citation_id`, and
+  the `AnswerGuard` rejects any span that is not a verbatim substring of the
+  evidence it cites (`UNSUPPORTED_SPAN`). `enforce()` recomposes to the safe
+  template on rejection, so a misbehaving extractive composer cannot leak an
+  unsupported claim.
+
+```text
+workbench> value-sprint run --composer extractive   # opt-in; template is default
+```
+
+The composer is **opt-in everywhere**: `answer_query` / `compose_answer` default
+to the template, and the value-sprint CLI defaults to `--composer template`.
+
+| File | What it adds |
+|---|---|
+| `src/slm/assistant_composer.py` | `AnswerSpan`, `ComposedAnswer.spans`, and `ExtractiveMultiChunkComposer` (sentence-level extractive span selection, verbatim guarantee, template delegation for non-grounded modes) |
+| `src/slm/answer_guard.py` | `UNSUPPORTED_SPAN` check — every per-span citation must be a verbatim substring of its cited evidence (no-op when `spans` is empty) |
+| `src/agent/value_sprint_harness.py` | `SprintRow.synthesis_breadth` / `span_count`, `SprintSummary.multi_source_grounded_count`, and `composer` threading through `run_query` / `run_sprint` |
+| `app/workbench.py` | `value-sprint run --composer {template,extractive}` (default `template`) |
+| `evals/test_extractive_composer.py` | distinct bound spans, verbatim guarantee, guard rejection + safe recomposition, byte-identical non-grounded modes, single-source degradation, and `max_spans_per_item` bounds |
 
 ## License
 
