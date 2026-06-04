@@ -374,3 +374,106 @@ def test_no_grounding_drift_vs_template():
     assert sorted(report.citations) == sorted(template.citations)
     # Every cited id in the report is an allowed evidence id (no invention).
     assert set(report.citations) <= pkg.allowed_citation_ids
+
+
+# -- v2.7.1: internal diagnostics must not leak into client-facing Risks. -----
+
+def _risks_section(answer):
+    return next(s for s in answer.report.sections if s.title == "Risks")
+
+
+# 12. the relevance-gate verdict trace never appears in Risks. ----------------
+
+def test_risks_excludes_relevance_gate_trace():
+    pkg = _grounded_package(
+        "how does pydantic validate input",
+        [_evidence("src:a", _DOC_A, "doc-a")],
+        cautions=[
+            "Relevance gate: relevant — strong substantive match (overlap 0.80)",
+        ],
+    )
+
+    answer = ConsultantReportComposer().compose(pkg)
+    risks = _risks_section(answer)
+
+    assert "Relevance gate" not in risks.judgement_text
+    # The package/audit still carries the diagnostic (it is a display filter).
+    assert any("Relevance gate" in c for c in pkg.cautions)
+    assert check_answer(pkg, answer).ok
+
+
+# 13. an overlap score never appears in Risks. --------------------------------
+
+def test_risks_excludes_overlap_score():
+    pkg = _grounded_package(
+        "how does pydantic validate input",
+        [_evidence("src:a", _DOC_A, "doc-a")],
+        cautions=[
+            "Relevance gate: partial — partial match (overlap 0.42); answer is "
+            "limited to what the evidence directly supports",
+        ],
+    )
+
+    answer = ConsultantReportComposer().compose(pkg)
+    risks = _risks_section(answer)
+
+    assert "overlap" not in risks.judgement_text.lower()
+    assert "0.42" not in risks.judgement_text
+
+
+# 14. a legitimate stale-source caution still surfaces in Risks. --------------
+
+def test_risks_keeps_stale_source_caution():
+    stale = ("Source 'doc-a' is marked stale (staleness policy: stale); it may "
+             "be out of date.")
+    pkg = _grounded_package(
+        "how does pydantic validate input",
+        [_evidence("src:a", _DOC_A, "doc-a")],
+        cautions=[
+            stale,
+            "Relevance gate: relevant — strong substantive match (overlap 0.80)",
+        ],
+    )
+
+    answer = ConsultantReportComposer().compose(pkg)
+    risks = _risks_section(answer)
+
+    assert "marked stale" in risks.judgement_text
+    assert "Relevance gate" not in risks.judgement_text
+    assert risks.judgement_text.startswith(JUDGEMENT_LABEL)
+
+
+# 15. a legitimate low-authority caution still surfaces in Risks. -------------
+
+def test_risks_keeps_authority_caution():
+    authority = ("Source 'doc-a' has community authority; verify before relying "
+                 "on it.")
+    pkg = _grounded_package(
+        "how does pydantic validate input",
+        [_evidence("src:a", _DOC_A, "doc-a")],
+        cautions=[authority],
+    )
+
+    answer = ConsultantReportComposer().compose(pkg)
+    risks = _risks_section(answer)
+
+    assert "community authority" in risks.judgement_text
+
+
+# 16. a conflict near-miss still surfaces as an open question. ----------------
+
+def test_open_questions_keeps_conflict_signal():
+    conflict = [_evidence("mem:1", "An older near-miss memory text.", "mem")]
+    pkg = _grounded_package(
+        "how does pydantic validate input",
+        [_evidence("src:a", _DOC_A, "doc-a")],
+        conflict=conflict,
+    )
+
+    answer = ConsultantReportComposer().compose(pkg)
+    open_q = next(s for s in answer.report.sections
+                  if s.title == "Open questions")
+
+    assert "near-miss" in open_q.judgement_text.lower()
+    assert open_q.judgement_text.startswith(JUDGEMENT_LABEL)
+    assert check_answer(pkg, answer).ok

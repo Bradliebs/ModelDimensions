@@ -154,6 +154,23 @@ SECTION_JUDGEMENT = "judgement"
 # citation marker inside a judgement section.
 JUDGEMENT_LABEL = "[JUDGEMENT — not grounded in evidence]"
 
+# Internal retrieval/ranker telemetry that must never appear in a client-facing
+# report. These strings (the relevance-gate verdict trace and any overlap score)
+# are retained in the audit/package; the consultant report filters them out at
+# render time only. This is a display filter -- it changes no grounding decision.
+_REPORT_DIAGNOSTIC_OVERLAP_RE = re.compile(r"overlap\s+\d", re.IGNORECASE)
+
+
+def _is_internal_diagnostic(caution: str) -> bool:
+    """True when a caution is internal retrieval telemetry, not a client-facing
+    risk. Matches the relevance-gate verdict trace and any embedded overlap
+    score; legitimate stale/authority/conflict cautions are left untouched.
+    """
+    body = caution.strip().lstrip("!-* ").lower()
+    if body.startswith("relevance gate:"):
+        return True
+    return bool(_REPORT_DIAGNOSTIC_OVERLAP_RE.search(caution))
+
 
 @dataclass(frozen=True)
 class ReportSection:
@@ -662,7 +679,12 @@ class ConsultantReportComposer(AssistantComposer):
             "allowed evidence alone.")
 
     def _risks_text(self, package: GroundingPackage) -> str:
-        notes: List[str] = [f"- {c}" for c in package.cautions]
+        # Display filter: internal relevance/ranker telemetry stays in the audit
+        # but never reaches the client-facing report.
+        notes: List[str] = [
+            f"- {c}" for c in package.cautions
+            if not _is_internal_diagnostic(c)
+        ]
         if package.historical_note:
             notes.append(f"- {package.historical_note}")
         for item in package.conflict_context:
