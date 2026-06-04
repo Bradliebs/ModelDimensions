@@ -51,6 +51,7 @@ from slm.assistant_composer import (  # noqa: E402
     ReportSection,
     ReportStructure,
     TemplateComposer,
+    report_fluency_metrics,
 )
 
 _CITATION_RE_TEXT = r"\[(mem|src):"
@@ -168,9 +169,12 @@ def test_factual_sections_are_verbatim_and_cited():
             assert span.citation_id in by_id
             assert span.text in by_id[span.citation_id]
     assert saw_span
-    # Evidence section covers every allowed source at least once.
-    evidence_section = next(s for s in factual if s.title == "Evidence")
-    assert {s.citation_id for s in evidence_section.spans} == {"src:a", "src:b"}
+    # v2.8: sections are disjoint, but coverage is preserved -- every allowed
+    # source is cited at least once across the factual sections (not necessarily
+    # in the Evidence section, which now carries only sources not surfaced above).
+    cited_ids = {span.citation_id
+                 for section in factual for span in section.spans}
+    assert cited_ids == {"src:a", "src:b"}
     # No grounding drift: report cites exactly the template's allowed ids.
     template = TemplateComposer().compose(pkg)
     assert sorted(answer.citations) == sorted(template.citations)
@@ -477,3 +481,175 @@ def test_open_questions_keeps_conflict_signal():
     assert "near-miss" in open_q.judgement_text.lower()
     assert open_q.judgement_text.startswith(JUDGEMENT_LABEL)
     assert check_answer(pkg, answer).ok
+
+
+# -- v2.8 report fluency layer (readability only; grounding unchanged) --------
+
+# A source whose top-overlap sentence is clean but which also carries a trailing
+# truncated fragment that overlaps the query.
+_DOC_FRAG_ALT = (
+    "Pydantic validates input on construction. "
+    "Off-topic trivia about the weather. "
+    "Pydantic validate"
+)
+# A source whose only candidate sentence is a truncated fragment.
+_DOC_FRAG_ONLY = "Pydantic validate input"
+
+
+def _factual_sections(answer):
+    return [s for s in answer.report.sections if s.kind == SECTION_FACTUAL]
+
+
+def _judgement_sections(answer):
+    return [s for s in answer.report.sections if s.kind == SECTION_JUDGEMENT]
+
+
+def _factual_span_keys(answer):
+    return [(span.citation_id, " ".join(span.text.split()))
+            for section in _factual_sections(answer)
+            for span in section.spans]
+
+
+# 17. the same span is never repeated across the factual sections. -----------
+
+def test_factual_sections_are_disjoint():
+    pkg = _grounded_package(
+        "how does pydantic validate input",
+        [_evidence("src:a", _DOC_A, "doc-a"),
+         _evidence("src:b", _DOC_B, "doc-b")],
+    )
+
+    answer = ConsultantReportComposer().compose(pkg)
+    keys = _factual_span_keys(answer)
+
+    assert len(keys) == len(set(keys)), keys
+    assert report_fluency_metrics(answer.report)[0] == 0  # duplicate_span_count
+    assert report_fluency_metrics(answer.report)[2] == 0  # section_overlap_count
+
+
+# 18. the executive span is not echoed in Current state or Evidence. ---------
+
+def test_executive_span_excluded_from_other_sections():
+    pkg = _grounded_package(
+        "how does pydantic validate input",
+        [_evidence("src:a", _DOC_A, "doc-a"),
+         _evidence("src:b", _DOC_B, "doc-b")],
+    )
+
+    answer = ConsultantReportComposer().compose(pkg)
+    exec_section = next(s for s in answer.report.sections
+                        if s.title == "Executive summary")
+    assert exec_section.spans, "executive summary should carry one span"
+    exec_key = (exec_section.spans[0].citation_id,
+                " ".join(exec_section.spans[0].text.split()))
+
+    others = [s for s in _factual_sections(answer)
+              if s.title != "Executive summary"]
+    other_keys = [(span.citation_id, " ".join(span.text.split()))
+                  for s in others for span in s.spans]
+    assert exec_key not in other_keys
+
+
+# 19. every allowed source is still cited at least once (coverage). ----------
+
+def test_every_source_cited_after_dedup():
+    pkg = _grounded_package(
+        "how does pydantic validate input",
+        [_evidence("src:a", _DOC_A, "doc-a"),
+         _evidence("src:b", _DOC_B, "doc-b"),
+         _evidence("src:c", "Pydantic also supports nested model validation.",
+                   "doc-c")],
+    )
+
+    answer = ConsultantReportComposer().compose(pkg)
+    cited = {cid for cid, _ in _factual_span_keys(answer)}
+
+    assert cited == {"src:a", "src:b", "src:c"}
+    assert check_answer(pkg, answer).ok
+
+
+# 20. a clean sentence is preferred over a fragment for the same source. ------
+
+def test_clean_span_preferred_over_fragment():
+    pkg = _grounded_package(
+        "how does pydantic validate input",
+        [_evidence("src:a", _DOC_FRAG_ALT, "doc-a")],
+    )
+
+    answer = ConsultantReportComposer().compose(pkg)
+    texts = [span.text for section in _factual_sections(answer)
+             for span in section.spans]
+
+    assert "Pydantic validates input on construction." in texts
+    assert "Pydantic validate" not in texts  # the fragment is not surfaced
+    assert report_fluency_metrics(answer.report)[1] == 0  # truncated_span_count
+
+
+# 21. coverage beats fluency: a fragment-only source is retained and counted. -
+
+def test_fragment_only_source_retained_for_coverage():
+    pkg = _grounded_package(
+        "how does pydantic validate input",
+        [_evidence("src:a", _DOC_FRAG_ONLY, "doc-a")],
+    )
+
+    answer = ConsultantReportComposer().compose(pkg)
+    cited = {cid for cid, _ in _factual_span_keys(answer)}
+
+    assert cited == {"src:a"}  # the only source is still cited
+    assert report_fluency_metrics(answer.report)[1] == 1  # one truncated span
+    assert check_answer(pkg, answer).ok  # still a verbatim, guard-clean span
+
+
+# 22. judgement placeholders are distinctly worded, not one boilerplate. ------
+
+def test_judgement_placeholders_are_varied():
+    pkg = _grounded_package(
+        "how does pydantic validate input",
+        [_evidence("src:a", _DOC_A, "doc-a")],
+    )
+
+    answer = ConsultantReportComposer().compose(pkg)
+    placeholders = [s.judgement_text for s in _judgement_sections(answer)
+                    if s.is_placeholder]
+
+    # With no cautions/conflict every judgement section is a placeholder.
+    assert len(placeholders) == 6
+    assert len(set(placeholders)) == len(placeholders)  # all distinct
+
+
+# 23. every judgement section carries the label exactly once and is uncited. --
+
+def test_judgement_label_appears_exactly_once():
+    import re
+
+    pkg = _grounded_package(
+        "how does pydantic validate input",
+        [_evidence("src:a", _DOC_A, "doc-a")],
+    )
+
+    answer = ConsultantReportComposer().compose(pkg)
+    for section in _judgement_sections(answer):
+        assert section.judgement_text.count(JUDGEMENT_LABEL) == 1
+        assert re.search(_CITATION_RE_TEXT, section.judgement_text) is None
+
+
+# 24. fluency metrics are populated in report mode, zero/absent otherwise. ----
+
+def test_fluency_metrics_inert_outside_report_mode():
+    assert report_fluency_metrics(None) == (0, 0, 0, 0)
+
+    pkg = _grounded_package(
+        "how does pydantic validate input",
+        [_evidence("src:a", _DOC_A, "doc-a")],
+    )
+    template_answer = TemplateComposer().compose(pkg)
+    assert template_answer.report is None
+    assert report_fluency_metrics(template_answer.report) == (0, 0, 0, 0)
+
+    report_answer = ConsultantReportComposer().compose(pkg)
+    metrics = report_fluency_metrics(report_answer.report)
+    # placeholder count is populated; duplicate/overlap stay clean.
+    assert metrics[3] == 6
+    assert metrics[0] == 0 and metrics[2] == 0
+

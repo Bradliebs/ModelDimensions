@@ -211,3 +211,47 @@ def test_extract_pack_gap_is_advisory_only():
     # A grounded value query produces no gap.
     grounded_spec = SprintQuery(query="anything", expected_outcome="grounded_useful")
     assert extract_pack_gap(grounded_spec, grounded=True) is None
+
+
+def test_report_metrics_extended_with_fluency_and_inert_by_default():
+    """v2.8: the report-metrics tuple grows to eight (v2.7 partition + v2.8
+    fluency) and every report field defaults to zero on a non-report row."""
+    from agent.value_sprint_harness import SprintRow, _report_metrics
+    from slm.assistant_composer import (
+        SECTION_FACTUAL,
+        SECTION_JUDGEMENT,
+        AnswerSpan,
+        ReportSection,
+        ReportStructure,
+    )
+
+    # No report -> eight zeros (inert outside report mode).
+    assert _report_metrics(None) == (0, 0, 0, 0, 0, 0, 0, 0)
+
+    # The new report-fluency fields exist on SprintRow and default to zero
+    # (additive and backward-compatible; older rows deserialise unchanged).
+    from dataclasses import fields
+
+    defaults = {f.name: f.default for f in fields(SprintRow)}
+    for name in ("report_duplicate_span_count", "report_truncated_span_count",
+                 "report_section_overlap_count",
+                 "report_judgement_placeholder_count"):
+        assert name in defaults, name
+        assert defaults[name] == 0
+
+    # A small report produces the eight-tuple in (partition..., fluency...) order.
+    report = ReportStructure(sections=[
+        ReportSection(title="Executive summary", kind=SECTION_FACTUAL,
+                      spans=[AnswerSpan(text="Pydantic validates input.",
+                                        citation_id="src:a", source_name="a")]),
+        ReportSection(title="Recommendation", kind=SECTION_JUDGEMENT,
+                      judgement_text="[JUDGEMENT — not grounded in evidence]\nx",
+                      is_placeholder=True),
+    ])
+    metrics = _report_metrics(report)
+    assert len(metrics) == 8
+    assert metrics[0] == 1  # one factual section
+    assert metrics[1] == 1  # one cited claim
+    assert metrics[2] == 1  # one judgement block
+    assert metrics[7] == 1  # one judgement placeholder
+

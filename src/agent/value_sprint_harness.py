@@ -48,6 +48,7 @@ from slm.assistant_composer import (
     SECTION_JUDGEMENT,
     AssistantComposer,
     ComposerMode,
+    report_fluency_metrics,
 )
 
 from .memory_proposals import MemoryProposal, ProposalKind, ProposalStatus
@@ -184,6 +185,14 @@ class SprintRow:
     report_cited_claim_count: int = 0
     report_judgement_block_count: int = 0
     report_unlabelled_judgement_count: int = 0
+    # v2.8 report-fluency measurement (readability only; all 0 unless the report
+    # composer ran). ``duplicate``/``section_overlap`` should be 0 in a clean
+    # report; ``truncated`` counts fragment spans retained for coverage;
+    # ``judgement_placeholder`` counts judgement sections with fallback wording.
+    report_duplicate_span_count: int = 0
+    report_truncated_span_count: int = 0
+    report_section_overlap_count: int = 0
+    report_judgement_placeholder_count: int = 0
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -379,22 +388,30 @@ def emit_memory_proposals(rows: List["SprintRow"], *,
     return added
 
 
-def _report_metrics(report) -> tuple[int, int, int, int]:
+def _report_metrics(report) -> tuple[int, int, int, int, int, int, int, int]:
     """Derive consultant-report metrics from an answer's report carrier.
 
-    Returns ``(factual_section_count, cited_claim_count, judgement_block_count,
-    unlabelled_judgement_count)``. All zeros when ``report`` is None (every
-    non-report answer), so the metrics are inert outside report mode.
+    Returns the v2.7 partition metrics followed by the v2.8 fluency metrics:
+    ``(factual_section_count, cited_claim_count, judgement_block_count,
+    unlabelled_judgement_count, duplicate_span_count, truncated_span_count,
+    section_overlap_count, judgement_placeholder_count)``. All zeros when
+    ``report`` is None (every non-report answer), so the metrics are inert
+    outside report mode. Measurement only — never touches retrieval, ranking,
+    grounding, sufficiency, or memory.
     """
     if report is None:
-        return (0, 0, 0, 0)
+        return (0, 0, 0, 0, 0, 0, 0, 0)
     factual = [s for s in report.sections if s.kind == SECTION_FACTUAL]
     judgement = [s for s in report.sections if s.kind == SECTION_JUDGEMENT]
     cited_claims = sum(len(s.spans) for s in factual)
     unlabelled = sum(
         1 for s in judgement
         if not (s.judgement_text or "").startswith(JUDGEMENT_LABEL))
-    return (len(factual), cited_claims, len(judgement), unlabelled)
+    (duplicate_spans, truncated_spans, section_overlap,
+     judgement_placeholders) = report_fluency_metrics(report)
+    return (len(factual), cited_claims, len(judgement), unlabelled,
+            duplicate_spans, truncated_spans, section_overlap,
+            judgement_placeholders)
 
 
 def run_query(service: WorkbenchService, spec: SprintQuery, *,
@@ -443,7 +460,9 @@ def run_query(service: WorkbenchService, spec: SprintQuery, *,
     synthesis_breadth = citations if grounded else 0
     span_count = len(getattr(result.answer, "spans", None) or [])
     (report_factual_section_count, report_cited_claim_count,
-     report_judgement_block_count, report_unlabelled_judgement_count) = (
+     report_judgement_block_count, report_unlabelled_judgement_count,
+     report_duplicate_span_count, report_truncated_span_count,
+     report_section_overlap_count, report_judgement_placeholder_count) = (
         _report_metrics(getattr(result.answer, "report", None)))
 
     return SprintRow(
@@ -474,6 +493,10 @@ def run_query(service: WorkbenchService, spec: SprintQuery, *,
         report_cited_claim_count=report_cited_claim_count,
         report_judgement_block_count=report_judgement_block_count,
         report_unlabelled_judgement_count=report_unlabelled_judgement_count,
+        report_duplicate_span_count=report_duplicate_span_count,
+        report_truncated_span_count=report_truncated_span_count,
+        report_section_overlap_count=report_section_overlap_count,
+        report_judgement_placeholder_count=report_judgement_placeholder_count,
     )
 
 
