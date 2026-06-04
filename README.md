@@ -1705,6 +1705,74 @@ and the value-sprint CLI defaults to `--composer template`.
 | `app/workbench.py` | `query-assist --report <text>` and `value-sprint run --composer {template,extractive,report}` (default `template`) |
 | `evals/test_consultant_report_composer.py` | section partition, verbatim+cited factual spans, labelled+uncited judgement, no-drift vs template, guard rejection of unlabelled/cited judgement and unsupported claims with safe recomposition, placeholder recommendation, and byte-identical non-grounded modes |
 
+## v3.0 Retrieval Evaluation Harness (measurement only)
+
+The retrieval eval harness measures **how good retrieval is**, before any change
+to retrieval, ranking, or source-selection logic. It exists to expose a
+baseline, not to improve it: if retrieval performs badly on a case, that is a
+recorded finding, not a harness failure.
+
+The motivating defect is *relevance bleed* — for example an off-topic Copilot
+Studio connector caution surfacing in a least-privilege report. That is a
+retrieval / source-selection quality problem, so the harness scores the raw
+retrieval signal directly: it reads the frozen, deterministic
+`WorkbenchService.query_knowledge` path (the same path the pack evaluator uses)
+and measures the *ordered retrieved candidates* against each case. It writes
+nothing to memory, the proposal queue, or the knowledge library, and it changes
+no retrieval, ranking, source-selection, grounding, or composer behaviour.
+
+```text
+# print a readable baseline (hybrid is the meaningful lexical path)
+python app/workbench.py retrieval-eval --backend hybrid
+
+# optional: also write reports (otherwise nothing is generated)
+python app/workbench.py retrieval-eval --backend hybrid \
+    --out-md reports/retrieval_eval_latest.md \
+    --out-jsonl reports/retrieval_eval_latest.jsonl
+```
+
+**Eval dataset** — `demos/retrieval_eval_cases.jsonl` (JSONL; blank lines and
+`#` lines ignored). Each case is a retrieval probe:
+
+| field | meaning |
+|---|---|
+| `query` | the retrieval query (required) |
+| `expected_sources` | source names (substring) or ids that *should* be retrieved |
+| `expected_chunk_ids` | specific chunk ids that *should* be retrieved |
+| `forbidden_sources` | source names whose presence is relevance bleed |
+| `forbidden_topic_terms` | terms whose presence in a *non-expected* chunk is bleed |
+| `minimum_hit_k` | expected target must appear within top-k (`0` = no hit requirement) |
+| `notes` / `tags` / `case_id` | human context and labels (e.g. `m365`, `purview`, `copilot`, `decision`, `source_librarian`) |
+
+A case with no expected target is a **gap probe**: hit-rate and recall are
+reported as `n/a`, and it passes as long as no forbidden source/term bleeds in
+(used to document a known gap such as data residency, which the pack does not
+cover).
+
+**Metrics** — per case and aggregated:
+
+* `hit_at_1` / `hit_at_3` / `hit_at_5` — whether an expected source/chunk appears
+  within the top 1 / 3 / 5 retrieved candidates;
+* `expected_source_recall` — fraction of expected targets retrieved anywhere;
+* `wrong_source_rate` — fraction of retrieved candidates that are not an expected
+  source (a noise measure; reported only when a source is expected);
+* `off_topic_inclusion_rate` — fraction of cases where a non-expected forbidden
+  source/term bled in (the relevance-bleed signal);
+* `missing_expected_source_count`, `retrieved_chunk_count`, `query_count`, and a
+  `pass`/`fail` per case (pass = expected target within `minimum_hit_k` **and**
+  no off-topic bleed).
+
+The default backend is `hybrid` (real lexical retrieval); the `deterministic`
+backend is a whole-string encoder whose recall is near-chance for non-identical
+queries and is shown only as a floor.
+
+| File | What it adds |
+|---|---|
+| `src/agent/retrieval_eval_harness.py` | `RetrievalEvalCase`, `load_cases`, per-case + aggregate scoring over `query_knowledge`, and a Markdown renderer (all read-only) |
+| `demos/retrieval_eval_cases.jsonl` | the initial retrieval probe set (least-privilege/PIM, Purview taxonomy, data-residency gap probe, Copilot Studio cautions, stale Power Platform) |
+| `app/workbench.py` | the `retrieval-eval` subcommand (default pack `m365_coding_assistant`, default backend `hybrid`, optional report output) |
+| `evals/test_retrieval_eval_harness.py` | metric shape, determinism (identical results across runs), and non-mutation (ledger / proposals / knowledge unchanged) |
+
 ## License
 
 To be decided.

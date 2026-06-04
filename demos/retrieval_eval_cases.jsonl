@@ -1,0 +1,21 @@
+# v3.0 Retrieval evaluation cases — measurement only.
+#
+# JSONL. Blank lines and lines beginning with '#' are ignored. Each case is a
+# retrieval probe scored against the frozen `query_knowledge` path. Fields:
+#   query                 (required) the retrieval query
+#   expected_sources      source names (substring) or ids that SHOULD retrieve
+#   expected_chunk_ids    specific chunk ids that SHOULD retrieve
+#   forbidden_sources     source names whose presence is relevance bleed
+#   forbidden_topic_terms terms whose presence in a non-expected chunk is bleed
+#   minimum_hit_k         expected target must appear within top-k (0 = no hit req)
+#   notes                 human context
+#   tags                  e.g. m365, purview, copilot, memory, decision, source_librarian
+#   case_id               stable label
+#
+# These cases expose the current baseline. Failing cases are acceptable findings,
+# not harness bugs: this slice measures retrieval, it does not change it.
+{"case_id": "least-privilege-pim", "query": "How do we set up least-privilege admin roles, separate break-glass Global Administrator accounts, and Privileged Identity Management for just-in-time activation?", "expected_sources": ["Microsoft 365 Admin Patterns"], "forbidden_topic_terms": ["Copilot Studio", "connector"], "minimum_hit_k": 3, "tags": ["m365", "source_librarian"], "notes": "Core relevance-bleed probe: least-privilege/PIM must ground in admin patterns; an off-topic Copilot Studio connector caution must not bleed in."}
+{"case_id": "purview-taxonomy", "query": "Design a Purview sensitivity label taxonomy of Public, Internal, Confidential, and Highly Confidential, and explain where encryption is enabled.", "expected_sources": ["Purview Sensitivity Labels and DLP"], "forbidden_topic_terms": ["Power Fx", "delegation"], "minimum_hit_k": 3, "tags": ["m365", "purview"], "notes": "Sensitivity-label taxonomy should ground in the Purview notes; Power Platform formula guidance must not bleed in."}
+{"case_id": "data-residency-gap", "query": "What is our decision on data residency and which Azure region customer data is stored in?", "expected_sources": [], "minimum_hit_k": 0, "tags": ["m365", "decision"], "notes": "Known pack gap: no data-residency source exists. Gap probe — exposes whether retrieval honestly returns weak/no on-topic match. Low or zero recall here is the documented baseline, not a defect to fix in this slice."}
+{"case_id": "copilot-studio-cautions", "query": "What cautions apply to Copilot Studio custom agents, their connected knowledge sources, and connector availability?", "expected_sources": ["SharePoint Teams Copilot Studio Notes"], "forbidden_topic_terms": ["Privileged Identity", "break-glass"], "minimum_hit_k": 3, "tags": ["m365", "copilot"], "notes": "Inverse bleed probe: Copilot Studio cautions must ground in the SharePoint/Teams/Copilot notes; admin PIM/break-glass guidance must not bleed in."}
+{"case_id": "stale-power-platform", "query": "Show Power Fx formula and delegation warning guidance for Power Apps canvas apps.", "expected_sources": ["Power Platform PowerApps Formulas"], "minimum_hit_k": 3, "tags": ["m365", "source_librarian"], "notes": "The Power Platform source is marked stale (local-notes-2023); retrieval should still surface it. Staleness labelling is verified elsewhere, not here."}

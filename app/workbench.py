@@ -234,6 +234,7 @@ Commands:
   pack-build <spec>     build a curated knowledge pack from a JSON/YAML spec
   pack-eval <pack> <eval-file>  validate a pack's retrieval with eval questions
   pack-report <pack>    show a pack's curated sources and chunk counts
+  retrieval-eval [--pack p] [--backend hybrid]  measure retrieval quality (read-only baseline)
   hf-inspect <dataset_id>  preview a Hugging Face dataset's licence/decision
   hf-import <dataset_id> --pack <pack>  import a small governed HF sample
   demo                  run the Friday -> Monday near-miss example
@@ -1049,10 +1050,70 @@ def _value_sprint_cli(argv: list[str]) -> int:
     return 0
 
 
+# ---------- v3.0 retrieval evaluation CLI ----------
+
+_RETRIEVAL_EVAL_CASES = ROOT / "demos" / "retrieval_eval_cases.jsonl"
+
+
+def _retrieval_eval_cli(argv: list[str]) -> int:
+    """Run the v3.0 retrieval evaluation harness (read-only, measurement only).
+
+    Builds the named pack into a throwaway registry, scores the eval cases
+    against the frozen ``query_knowledge`` retrieval path, and prints a readable
+    summary. Changes no retrieval, ranking, source-selection, composer, or
+    memory behaviour; writes reports only when ``--out-md`` / ``--out-jsonl``
+    are given.
+    """
+    from agent import retrieval_eval_harness as reh
+
+    parser = argparse.ArgumentParser(
+        prog="workbench.py retrieval-eval",
+        description="Measure retrieval quality for a pack (read-only). Exposes "
+                    "the baseline; changes no retrieval/ranking/source logic.")
+    parser.add_argument("--pack", default="m365_coding_assistant",
+                        help="pack manifest directory under packs/")
+    parser.add_argument("--backend", default="hybrid",
+                        choices=["deterministic", "hybrid"],
+                        help="knowledge retrieval backend (default hybrid — the "
+                             "meaningful lexical path; deterministic recall is "
+                             "near-chance and shown only as a floor)")
+    parser.add_argument("--cases", default=str(_RETRIEVAL_EVAL_CASES),
+                        help="path to the retrieval eval case JSONL")
+    parser.add_argument("--out-md", default=None,
+                        help="optional path to write a Markdown report")
+    parser.add_argument("--out-jsonl", default=None,
+                        help="optional path to write a JSONL report")
+    args = parser.parse_args(argv)
+
+    # seed=False: no memory writes; this exercises the knowledge path only.
+    service = _build_sprint_service(args.pack, args.backend, seed=False)
+    cases = reh.load_cases(args.cases)
+    results = reh.run_eval(service, cases)
+    summary = reh.summarize(results)
+
+    print(reh.render_markdown(
+        results, summary, pack_label=args.pack, backend_label=args.backend))
+    if args.out_md or args.out_jsonl:
+        reh.write_reports(
+            results, summary,
+            md_path=args.out_md or (ROOT / "reports"
+                                    / "retrieval_eval_latest.md"),
+            jsonl_path=args.out_jsonl or (ROOT / "reports"
+                                          / "retrieval_eval_latest.jsonl"),
+            pack_label=args.pack, backend_label=args.backend)
+        if args.out_md:
+            print(f"[retrieval-eval] wrote {args.out_md}")
+        if args.out_jsonl:
+            print(f"[retrieval-eval] wrote {args.out_jsonl}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     argv = sys.argv[1:] if argv is None else argv
     if argv and argv[0] == "value-sprint":
         return _value_sprint_cli(argv[1:])
+    if argv and argv[0] == "retrieval-eval":
+        return _retrieval_eval_cli(argv[1:])
     parser = argparse.ArgumentParser(description="Concept Memory Workbench v1.1")
     parser.add_argument("--ledger", default=str(_DEFAULT_LEDGER),
                         help="path to the JSONL memory ledger")
