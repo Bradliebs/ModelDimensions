@@ -2740,6 +2740,99 @@ knowledge automatically. The classification is only as honest as the declared
 card metadata — which is exactly why gated, private, unlicensed, unverified, and
 possibly-personal datasets are held for human review rather than trusted.
 
+## v6.4 Governed PDF Intake Adapter (local PDF assessment only; no OCR, no import)
+
+Teams keep wanting to "just upload a PDF" into the system. v6.4 makes that
+governable. It adds a deterministic, read-only adapter that assesses a **local**
+PDF file for provenance, permission, parseability, sensitivity, freshness, and
+intended use **before** the file may be considered for an eval pack, a knowledge
+pack, the source registry, a memory proposal, or chat retrieval. Like v6.2A and
+v6.3, this slice is **assessment-only**: it classifies; it never imports.
+
+**Why a PDF upload is not knowledge approval.** A readable PDF is not a trusted
+source. *Parseability* (can we read the text at all?) is a separate question from
+*authority* (are we allowed to use it, and do we know where it came from?). v6.4
+keeps the two apart. Extraction quality decides whether the text is usable;
+operator-declared provenance and permission decide whether it is allowed. Both
+must hold before a PDF can even be a knowledge candidate.
+
+**Provenance and permission are operator-declared, never inferred.** Embedded
+PDF metadata (`/Title`, `/Author`, `/Producer`, dates) is descriptive and is
+always flagged `PDF_METADATA_UNVERIFIED`. It is never used as provenance and is
+never trusted as truth. Provenance comes only from a declared `--source-url` or
+`--owner`; permission comes only from a declared `--permission`/licence or an
+explicit internal-owned declaration (`--owner` plus `--authority internal`).
+
+**Why OCR and chunking are deferred.** This slice reads only a short, bounded
+text sample to score extraction quality. It performs **no OCR**, builds **no
+document fragments**, and updates **no retrieval index**. A scanned or
+image-only PDF is recognised (`PDF_NO_TEXT_LAYER`, `PDF_SCANNED_IMAGE_ONLY`,
+`PDF_REQUIRES_OCR`) and held below the knowledge tier rather than guessed at.
+Fragment preview and OCR are explicitly future work, not silent behaviour here.
+
+**Decisions** reuse the shared v6.2A tiers, worst-finding-wins:
+
+| Decision | Meaning |
+|---|---|
+| `approved_for_knowledge` | clean, parseable, provenanced, and permitted — may be a knowledge candidate (and eval) |
+| `approved_for_eval` | usable for eval only; a knowledge-blocking finding (eval-only intent, scanned/low-quality text, staleness) caps it below knowledge |
+| `needs_review` | a human must decide first (missing provenance/permission, possible PII, confidential/restricted marker, embedded files, password) |
+| `quarantine` | held until cleared (e.g. too large for an initial import) |
+| `blocked` | no import should occur (unreadable, encrypted, zero pages) |
+
+**CLI.** Assessment-only; writes nothing unless `--out` is given, and even then
+writes only the assessment report:
+
+```bash
+# Assess a local PDF and print a deterministic report to stdout (no writes).
+python app/workbench.py pdf-intake assess --pdf path/to/report.pdf
+
+# Declare provenance and permission so a clean PDF can be a knowledge candidate.
+python app/workbench.py pdf-intake assess --pdf path/to/report.pdf \
+    --source-url https://example.org/report.pdf \
+    --owner "Platform Team" --permission cc-by-4.0 \
+    --intended-use knowledge_candidate
+
+# Write the JSON assessment report (the only durable write this slice performs).
+python app/workbench.py pdf-intake assess --pdf path/to/report.pdf --out report.json
+```
+
+Sample report (abridged):
+
+```text
+# PDF intake assessment (v6.4; assessment-only)
+
+- File: report.pdf
+- Decision: approved_for_eval
+- Lane: eval_only
+- Approved for knowledge: false
+- Text layer: true
+- Requires OCR: false
+- Extraction quality: good (score 1.0)
+...
+## Findings
+- [knowledge_block] pdf_eval_only_intended_use: declared intended use 'eval' is eval-only, not knowledge
+- [info] pdf_metadata_unverified: embedded PDF metadata is descriptive and is treated as unverified
+```
+
+| File | What v6.4 adds |
+|---|---|
+| `src/agent/pdf_intake_adapter.py` | a minimal pure-stdlib PDF reader (`re`/`zlib`/`hashlib`), `PdfMetadataSummary`/`PdfParseQuality`/`PdfIntakeCandidate`/`PdfIntakeResult`, `PdfFindingCode`, parse-quality scoring, conservative risk inference, `assess_pdf_intake`/`assess_pdf_paths`, deterministic renderers, and `write_pdf_assessment_report` (the only durable write); reuses the v6.2A `DataIntakeDecision`/`IntakeLane`/`IntakeSeverity`/`ExternalDatasetCandidate`; imports no memory/source/proposal writer, no retrieval-index writer, and no OCR/download client |
+| `app/workbench.py` | the `pdf-intake assess --pdf PATH [--source-url URL] [--owner NAME] [--permission TEXT] [--intended-use USE] [--authority LEVEL] [--out PATH] [--now ISO]` CLI |
+| `evals/test_pdf_intake_adapter.py` | programmatically generated PDF fixtures; clean text ⇒ eval, clean+provenance+permission ⇒ knowledge candidate, internal-owned ⇒ knowledge; missing provenance/permission, encryption, scanned/no-text-layer, low extraction quality, possible PII, and confidential markers never auto-enter knowledge; embedded metadata flagged unverified; staleness is a finding, not a falsity claim; deterministic; no network; stdout writes nothing and `--out` writes only the report; the module imports no writer/downloader/OCR client |
+
+**Limitations and non-goals.** v6.4 is local PDF assessment only. It does **not**
+perform OCR; it does **not** create document fragments or import any PDF text
+into retrieval; it does **not** update any retrieval index; it does **not** write
+the memory ledger, the source registry, or any proposal; it does **not** change
+ranking, grounding, or chat routing; and it never marks a PDF as trusted
+knowledge automatically. The text sample is bounded and the extraction is a
+minimal stdlib reader, so the parse-quality score is a conservative signal, not a
+full layout-aware extractor. The classification is only as honest as the declared
+provenance and permission — which is exactly why unprovenanced, unpermitted,
+encrypted, scanned, and possibly-personal PDFs are held for human review rather
+than trusted. The next planned slice is **PDF Parse Quality + Chunk Preview**.
+
 ## License
 
 To be decided.

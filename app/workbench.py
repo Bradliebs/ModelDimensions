@@ -1723,6 +1723,81 @@ def _hf_data_cli(argv: list[str]) -> int:
     return 0
 
 
+def _pdf_intake_cli(argv: list[str]) -> int:
+    """Assess a local PDF for governed intake before any use (v6.4).
+
+    Inspects one local PDF file deterministically — provenance, permission,
+    parseability, sensitivity, freshness, and intended use — and prints a
+    classification of ``approved_for_eval``, ``approved_for_knowledge``,
+    ``needs_review``, ``quarantine``, or ``blocked``. It is **assessment-only**:
+    it reads only a short bounded text sample, performs no OCR, creates no
+    document fragments, updates no retrieval index, writes no memory ledger,
+    writes no source registry, and creates no proposal. It writes to disk only
+    when an explicit ``--out`` path is given, and even then writes only the
+    assessment report. Embedded PDF metadata is treated as unverified. Usage::
+
+        python app/workbench.py pdf-intake assess --pdf PATH [--source-url URL]
+            [--owner NAME] [--permission TEXT] [--intended-use USE]
+            [--authority LEVEL] [--out PATH] [--now ISO]
+    """
+    from datetime import datetime
+
+    from agent.pdf_intake_adapter import (
+        assess_pdf_intake,
+        render_pdf_assessment_markdown,
+        write_pdf_assessment_report,
+    )
+
+    parser = argparse.ArgumentParser(
+        prog="workbench.py pdf-intake assess",
+        description="Assess a local PDF before any intake (assessment-only; no "
+                    "OCR, no fragments, no retrieval changes, and no durable "
+                    "state written unless --out is given).")
+    parser.add_argument("subcommand", choices=["assess"],
+                        help="pdf-intake subcommand")
+    parser.add_argument("--pdf", required=True, help="path to a local PDF file")
+    parser.add_argument("--source-url", default="",
+                        help="declared provenance: the source URL the PDF came from")
+    parser.add_argument("--owner", default="",
+                        help="declared owner of the document")
+    parser.add_argument("--permission", default="",
+                        help="declared permission or licence to use the document")
+    parser.add_argument("--intended-use", default="",
+                        help="declared intended use (e.g. knowledge_candidate, eval)")
+    parser.add_argument("--authority", default="",
+                        help="declared authority level (e.g. internal, official)")
+    parser.add_argument("--out", default=None,
+                        help="optional path to write the JSON assessment report "
+                             "(the only durable write; off by default)")
+    parser.add_argument("--now", default=None,
+                        help="optional ISO timestamp used for freshness checks")
+    args = parser.parse_args(argv)
+
+    now = None
+    if args.now:
+        try:
+            now = datetime.fromisoformat(args.now.replace("Z", "+00:00"))
+        except ValueError:
+            print(f"[pdf-intake] invalid --now timestamp {args.now!r}", file=sys.stderr)
+            return 2
+
+    result = assess_pdf_intake(
+        args.pdf,
+        source_url=args.source_url,
+        owner=args.owner,
+        permission=args.permission,
+        intended_use=args.intended_use,
+        authority_level=args.authority,
+        now=now,
+    )
+    print(render_pdf_assessment_markdown(result))
+
+    if args.out:
+        path = write_pdf_assessment_report(result, args.out)
+        print(f"\n[pdf-intake] wrote assessment report to {path}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     argv = sys.argv[1:] if argv is None else argv
     if argv and argv[0] == "value-sprint":
@@ -1739,6 +1814,8 @@ def main(argv: list[str] | None = None) -> int:
         return _data_intake_cli(argv[1:])
     if argv and argv[0] == "hf-data":
         return _hf_data_cli(argv[1:])
+    if argv and argv[0] == "pdf-intake":
+        return _pdf_intake_cli(argv[1:])
     parser = argparse.ArgumentParser(description="Concept Memory Workbench v1.1")
     parser.add_argument("--ledger", default=str(_DEFAULT_LEDGER),
                         help="path to the JSONL memory ledger")
