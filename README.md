@@ -2377,6 +2377,55 @@ over-asserting.
 | `app/workbench.py` | the `memory-proposals check-conflicts` CLI (prints to stdout, or writes only the `--out` report; never the ledger, queue, or memory) |
 | `evals/test_memory_conflict_detector.py` | each risk code detected deterministically and conservatively, not-writeable categories flagged, deterministic output, CLI stdout writes no files / `--out` writes only the report, `MemoryLedger.add` never called, proposal queue + existing-memory byte-identical, and the v5.0 build / v5.1 review queue / v3.0 retrieval baselines unchanged alongside it |
 
+## v6.0 Governed chat orchestrator (read-only; answers, cites, labels, proposes — never mutates)
+
+The chat orchestrator routes a user question into one of a small set of **safe
+answer modes** and renders a result. It is a read-only orchestration skeleton:
+**chat may answer, cite, label judgement, refuse, or propose follow-up records
+for human review — it never mutates memory, sources, the registry, proposals,
+or files.** It wires only into the existing frozen read-only paths
+(`WorkbenchService.answer_query` for grounded answers, the v5.0 memory-proposal
+builder for proposals only, and the v4.2 source-update proposer for proposals
+only) and changes no retrieval / ranking / grounding / composer behaviour.
+
+A deterministic, lexical router gives the first-pass classification; an
+evidence-seeking mode is downgraded to `insufficient_evidence` when retrieval
+grounds nothing. The answer modes are:
+
+| Mode | When | Behaviour |
+|---|---|---|
+| `evidence_answer` | a factual question that grounds | grounded answer with its citations preserved |
+| `memory_context` | a question about remembered context that grounds in memory | grounded answer; memory is context, cited like any evidence |
+| `report_style_answer` | a request for a report/consultant write-up that grounds | report composer output (its judgement sections already labelled) |
+| `judgement_only` | a request for an opinion/recommendation | judgement is always prefixed with `[JUDGEMENT — not grounded in evidence]` |
+| `insufficient_evidence` | no citable evidence was retrieved | refuses and names the evidence gap |
+| `propose_memory` | a "remember this" instruction | builds a memory **proposal** (requires human approval); nothing is written |
+| `propose_source_update` | a source-maintenance request | generates source-update **proposals** (requires human approval); the registry is not modified |
+| `unsupported_request` | anything asking to change durable state or run an action | polite refusal — chat can propose, never apply |
+
+`ChatOrchestratorResult.state_mutation_attempted` is always `false`: the module
+imports no writer (no `MemoryLedger`, no registry/queue writer), so it cannot
+mutate durable state even by accident. Memory and source proposals are emitted
+with `requires_human_approval=true` and `status="proposed"`; the orchestrator
+never applies them.
+
+```bash
+# answer a chat-style question over the active pack (read-only; nothing is written)
+python app/workbench.py chat ask "How do we set up least-privilege admin roles and PIM?"
+
+# a "remember this" instruction yields a memory proposal only (never a ledger write)
+python app/workbench.py chat ask "Remember that the team chose hybrid retrieval as the default."
+
+# a source-maintenance request yields source-update proposals only (never a registry write)
+python app/workbench.py chat ask "Audit the source registry and propose source updates." --registry demos/source_registry.jsonl
+```
+
+| File | What it adds |
+|---|---|
+| `src/agent/chat_orchestrator.py` | the read-only orchestrator: `ChatMode` answer modes, frozen `ChatIntent` / `ChatOrchestratorResult`, the deterministic `route_query` router, `ChatOrchestrator` (wires only to `answer_query`, the memory-proposal builder, and the source-update proposer — imports no writer), and `render_chat_result_markdown` |
+| `app/workbench.py` | the `chat ask` CLI (builds the pack into a throwaway temp registry with no memory seeding, prints a deterministic Markdown result; writes nothing) |
+| `evals/test_chat_orchestrator.py` | router classification, evidence answer preserves citations, insufficient-evidence refusal names the gap, judgement always labelled (no unlabelled judgement leaks), memory/source instructions yield proposals only, `state_mutation_attempted` always false, `MemoryLedger.add` never called, source registry + memory review queue byte-identical, the v3.0 retrieval baseline unchanged alongside it, the orchestrator imports no writer, and deterministic CLI output |
+
 ## License
 
 To be decided.

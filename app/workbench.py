@@ -1542,6 +1542,59 @@ def _memory_check_conflicts_cli(argv: list[str]) -> int:
     return 0
 
 
+def _chat_cli(argv: list[str]) -> int:
+    """Answer a chat-style query over the active pack (read-only; v6.0).
+
+    Routes the question into a safe answer mode (evidence answer, insufficient
+    evidence, labelled judgement, or a memory/source *proposal*) and prints a
+    deterministic Markdown result. It is read-only: **chat may answer, cite,
+    label judgement, refuse, or propose follow-up records — it never mutates
+    memory, sources, the registry, proposals, or files.** The pack is built into
+    a throwaway temp registry with no memory seeding, so no durable state is
+    touched. Usage::
+
+        python app/workbench.py chat ask "question" [--pack NAME] [--registry PATH]
+    """
+    from datetime import datetime
+
+    from agent.chat_orchestrator import (
+        ChatOrchestrator,
+        render_chat_result_markdown,
+    )
+
+    parser = argparse.ArgumentParser(
+        prog="workbench.py chat ask",
+        description="Answer a chat-style query over the active pack (read-only; "
+                    "nothing is written or mutated).")
+    parser.add_argument("subcommand", choices=["ask"], help="chat subcommand")
+    parser.add_argument("question", help="the question to answer")
+    parser.add_argument("--pack", default="m365_coding_assistant",
+                        help="name of the pack to ground answers against")
+    parser.add_argument("--backend", default="hybrid",
+                        choices=["deterministic", "hybrid"],
+                        help="knowledge retrieval backend (default: hybrid)")
+    parser.add_argument("--registry", default=str(_SOURCE_REGISTRY_DEFAULT),
+                        help="source registry JSONL used only to generate "
+                             "source-update proposals (read, never written)")
+    parser.add_argument("--now", default=None,
+                        help="optional ISO timestamp for source staleness checks")
+    args = parser.parse_args(argv)
+
+    now = None
+    if args.now:
+        try:
+            now = datetime.fromisoformat(args.now.replace("Z", "+00:00"))
+        except ValueError:
+            print(f"[chat] invalid --now timestamp {args.now!r}", file=sys.stderr)
+            return 2
+
+    service = _build_sprint_service(args.pack, args.backend, seed=False)
+    orchestrator = ChatOrchestrator(service, registry_path=args.registry)
+    result = orchestrator.answer(args.question, now=now)
+    print(render_chat_result_markdown(result))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     argv = sys.argv[1:] if argv is None else argv
     if argv and argv[0] == "value-sprint":
@@ -1552,6 +1605,8 @@ def main(argv: list[str] | None = None) -> int:
         return _source_registry_cli(argv[1:])
     if argv and argv[0] == "memory-proposals":
         return _memory_proposals_cli(argv[1:])
+    if argv and argv[0] == "chat":
+        return _chat_cli(argv[1:])
     parser = argparse.ArgumentParser(description="Concept Memory Workbench v1.1")
     parser.add_argument("--ledger", default=str(_DEFAULT_LEDGER),
                         help="path to the JSONL memory ledger")
