@@ -3426,6 +3426,129 @@ cleanup. The module writes only the activation-state manifest and the audit log,
 and only with an explicit `--write`. It is generic by construction: there is no
 `hf_pack_activation` or `pdf_pack_activation` and no source-specific registry.
 
+## v7.1 Active-Pack Monitoring + Regression Detection (read-only; advisory)
+
+> Version note: this slice follows v7.0. The label "v6.6" was avoided because it
+> already names the imported-PDF pack importer; "v7.1" continues the post-v7.0
+> activation lifecycle without colliding with an existing version.
+
+v7.0 made a pack *active* only through a governed approval bound to an exact pack
+and evaluation fingerprint. v7.1 adds the next governed step: once a pack is
+active and serving retrieval, **monitoring** continuously re-measures the active
+set against a fixed baseline and **detects regressions** — in retrieval, evidence
+selection, citation integrity, source isolation and unrelated-query behaviour. It
+is a deterministic, read-only *layer on top of the existing evaluation harness*,
+not a second retrieval framework.
+
+`src/agent/active_pack_monitor.py` is pure: it imports only the standard library
+plus read-only names from the activation contracts (state/identity models, the
+lifecycle enum and the active-set selector). It imports no activation,
+deactivation or rollback writer, no `ActivationStateManager`, no `MemoryLedger`,
+no source-registry writer, no proposal applier, no pack-content or
+retrieval-index writer, and no LLM client (enforced by an AST import-purity test
+and a stdlib-plus-activation-only test). The live measurement wiring lives in the
+`app/workbench.py` CLI, which reads the frozen path (`query_knowledge` raw,
+`build_grounding_package` selected, `answer_query` cited) exactly as the v6.7 PDF
+harness does.
+
+**Lifecycle.** import -> evaluate -> activation approval -> activate -> **monitor**
+-> keep active / keep active with watch / investigate / recommend deactivation /
+recommend rollback -> *human approval* -> governed lifecycle action. Monitoring
+sits entirely in the "monitor" step; it never advances the lifecycle itself.
+
+**Baseline types.** `pre_activation` (default), `previous_active_state`,
+`known_good_state`, `rolling_reference` and `fixed_release_baseline`. A baseline
+is created explicitly (separate from a run), is immutable (a new baseline needs a
+new identity and path — overwriting fails closed with `FileExistsError`), and
+records its corpus, retrieval-config and evaluator fingerprints, the active-state
+hash it was captured under, and per-case results.
+
+**Active-state binding.** Every run binds to the exact active-pack *snapshot*
+(`activeset-<hash>` over the active pack ids, versions, fingerprints, source ids,
+revisions and coexistence policies), the corpus fingerprint (`moncorpus-...`),
+the retrieval-config fingerprint (`retrcfg-...`), the policy fingerprint and the
+evaluator version. A stored run is **invalid** once any of those change
+(`MonitoringRun.is_valid_for`). Baseline *comparability* requires the corpus,
+retrieval config and evaluator to match — but deliberately **not** the
+active-state hash, because the baseline is pre-activation and the active state is
+expected to differ.
+
+**Monitored stages.** raw retrieval, relevance-gated selected evidence, and final
+cited spans. As the v6.7 finding established, retrieval backends apply no raw
+score threshold (they always return top-k), so a forbidden/unrelated source at
+the *raw* stage is expected and is only *recorded*; the forbidden-source and
+isolation **hard gates** are enforced at the selected and cited stages.
+
+**Regression metrics and finding codes.** expected-source / expected-chunk drop,
+expected-source rank worsening, wrong-source-rate increase, forbidden-source
+introduction (selected/cited), unrelated-control regression, inactive / superseded
+/ retired pack retrieval, environment-scope violation, unsupported citation,
+uncited claim, citation-lineage degradation, false-answerable / false-insufficient,
+duplicate interference, instability, critical-case failure, the
+aggregate-improved-but-critical-failed override, insufficient sample, incompatible
+baseline and invalid run.
+
+**Critical-case handling.** Critical cases are evaluated and counted *separately*
+from the aggregate. A passing or improving aggregate can never hide a critical
+failure: if aggregate recall holds or improves while a critical case fails, the
+monitor raises `aggregate_improved_but_critical_failed` and treats it as critical.
+
+**Conservative attribution.** A regression is attributed to a specific pack
+(`pack_specific`) **only** when it appears with the pack enabled, disappears with
+the pack disabled (in an isolated evaluation that never mutates governed state),
+configuration and corpus are unchanged, and repeated runs agree. Otherwise the
+cause is classified conservatively: `active_set_interaction`,
+`retrieval_configuration`, `corpus_change`, `evaluator_change`, `unstable_result`
+or `undetermined`. Correlation is not causation.
+
+**Advisory recommendations (closed set).** `keep_active`,
+`keep_active_with_watch`, `investigate`, `deactivate_recommended`,
+`rollback_recommended`, `block_future_activation` and
+`insufficient_evidence_to_recommend`. Recommendations are **advisory only**: the
+monitor exposes no lifecycle action and never activates, deactivates, supersedes
+or rolls back anything. A rollback *recommendation* is not a rollback *approval*;
+a human acts on it through the v7.0 governed rollback path. Insufficient sample or
+an incompatible baseline blocks any strong keep/rollback recommendation.
+
+**Monitoring history.** An append-only `reports/active_pack_monitoring.jsonl`
+records only ids, hashes, bounded metrics and findings (never retrieved text), and
+only when the caller passes `--history`. History is appended, never rewritten.
+
+**CLI (read-only by default).**
+
+```text
+active-pack-monitor baseline --cases C --out P [--write] [--state P]
+active-pack-monitor run      --baseline B --cases C [--out P] [--history] \
+                             [--rollback-target HASH]
+active-pack-monitor isolate  --baseline B --cases C --pack-id ID [--out P]
+active-pack-monitor history  [--history-path P]
+active-pack-monitor latest   [--history-path P]
+```
+
+`run` and `isolate` write nothing unless `--out` (report) or `--history` is
+given; `baseline` requires `--write` to persist. No subcommand changes
+active-pack state, calls rollback/deactivation, or creates the governed
+activation state or audit files. Output shows the active-state, baseline, corpus
+and policy fingerprints, lists critical findings first, and labels the
+recommendation ADVISORY ONLY. A non-zero exit only *signals* a critical finding;
+it performs no action. `--deterministic` omits wall-clock timestamps for stable
+fingerprints.
+
+**Why no automatic rollback.** Monitoring measures and recommends; it does not
+enforce. Monitoring evidence is not approval, a recommendation is not an action,
+and a rollback recommendation is not a rollback. Acting on a regression is a
+deliberate, separately governed human step (v7.0), so a measurement defect or an
+unstable run can never silently flip the active set.
+
+**Limitations and non-goals.** No automatic deactivation, rollback or blocking;
+no background scheduler, alerts, email, dashboards, web UI or telemetry; no
+embedding/ranking tuning, pack rewriting or memory cleanup. The live CLI measures
+retrieval, evidence selection, citation forbidden-source bleed and unrelated-query
+behaviour; full inactive/superseded/retired source-status isolation is classified
+by the pure layer (`classify_pack_hits`) and in the CLI when a governed `--state`
+manifest is supplied. It is generic by construction: there is no
+`hf_active_monitor` or `pdf_active_monitor` and no source-specific monitoring.
+
 ## License
 
 To be decided.

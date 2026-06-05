@@ -2364,6 +2364,342 @@ def _knowledge_packs_cli(argv: list[str]) -> int:
     return 2
 
 
+def _monitor_source_names(items) -> list[str]:
+    """Best-effort, read-only extraction of source names from retrieval items.
+
+    Accepts dicts (raw candidates), grounding-evidence objects and answer spans.
+    Never reads or stores retrieved text — only source identifiers.
+    """
+    names: list[str] = []
+    for item in items or []:
+        name = ""
+        if isinstance(item, dict):
+            name = str(item.get("source_name") or item.get("source_id") or "")
+        else:
+            name = str(getattr(item, "source_name", "")
+                       or getattr(item, "source_id", "") or "")
+        if name and name not in names:
+            names.append(name)
+    return names
+
+
+def _monitor_forbidden_hits(source_names: list[str],
+                            forbidden: tuple[str, ...]) -> int:
+    """Count source names matching any forbidden token (case-insensitive substring)."""
+    hits = 0
+    for name in source_names:
+        low = name.lower()
+        if any(tok and tok.lower() in low for tok in forbidden):
+            hits += 1
+    return hits
+
+
+def _monitor_collect_results(service, cases, *, snapshot, state=None,
+                             environment: str = "default"):
+    """Read-only: measure each monitoring case against a live service.
+
+    Three frozen-path reads per case (``query_knowledge`` raw, then
+    ``build_grounding_package`` selected, then ``answer_query`` cited). Nothing
+    is mutated, no LLM is called, and no retrieved text is stored. Source-status
+    isolation (inactive/superseded/retired) is classified only when a governed
+    activation ``state`` manifest is supplied.
+    """
+    from agent import active_pack_monitor as apm
+    from agent.retrieval_eval_harness import RetrievalEvalCase, evaluate_case
+    from slm.assistant_composer import ConsultantReportComposer
+
+    results = []
+    for case in cases:
+        rcase = RetrievalEvalCase(
+            query=case.query,
+            expected_sources=list(case.expected_sources),
+            forbidden_sources=list(case.forbidden_sources),
+            minimum_hit_k=case.minimum_hit_k,
+            case_id=case.case_id)
+        scored = evaluate_case(service, rcase)
+
+        audit = service.query_knowledge(case.query)
+        raw_names = _monitor_source_names(list(audit.candidates))
+        package = service.build_grounding_package(case.query)
+        selected_names = _monitor_source_names(list(package.evidence))
+        answer = service.answer_query(
+            case.query, composer=ConsultantReportComposer())
+        cited_names = _monitor_source_names(list(answer.answer.spans))
+
+        answerable = not bool(answer.refused)
+        expect_ans = case.expected_answerability
+        false_answerable = expect_ans is False and answerable
+        false_insufficient = expect_ans is True and not answerable
+        correct_insufficient = expect_ans is False and not answerable
+
+        inactive = superseded = retired = env_violation = 0
+        if state is not None:
+            # Map retrieved source ids to governed pack status via the manifest.
+            observed_packs = [r.pack_id for r in state.records
+                              if r.source_id in raw_names]
+            inactive, superseded, retired, env_violation = apm.classify_pack_hits(
+                state, observed_packs, environment=environment)
+
+        passed = bool(scored.passed) and not false_answerable and (
+            _monitor_forbidden_hits(selected_names, case.forbidden_sources) == 0)
+
+        results.append(apm.MonitoringCaseResult(
+            case_id=case.case_id,
+            case_class=case.case_class,
+            severity=case.severity,
+            critical_case=case.critical_case,
+            control_case=case.control_case,
+            hit=scored.hit_at_5,
+            first_expected_rank=scored.first_hit_rank,
+            expected_source_recall=scored.expected_source_recall,
+            wrong_source_rate=scored.wrong_source_rate,
+            raw_forbidden_source_hit_count=_monitor_forbidden_hits(
+                raw_names, case.forbidden_sources),
+            off_topic_inclusion=bool(scored.off_topic_hits),
+            selected_forbidden_source_count=_monitor_forbidden_hits(
+                selected_names, case.forbidden_sources),
+            cited_forbidden_source_count=_monitor_forbidden_hits(
+                cited_names, case.forbidden_sources),
+            inactive_pack_hit_count=inactive,
+            superseded_pack_hit_count=superseded,
+            retired_pack_hit_count=retired,
+            environment_scope_violation_count=env_violation,
+            false_answerable=false_answerable,
+            false_insufficient=false_insufficient,
+            correct_insufficient=correct_insufficient,
+            passed=passed,
+            pack_ids_observed=tuple(snapshot.active_pack_ids),
+            raw=apm.MonitoringStageObservation("raw", tuple(raw_names)),
+            selected=apm.MonitoringStageObservation("selected", tuple(selected_names)),
+            cited=apm.MonitoringStageObservation("cited", tuple(cited_names),
+                                                 answerable=answerable),
+        ))
+    return results
+
+
+def _monitor_snapshot(args):
+    """Build an :class:`ActivePackSnapshot` for the monitor CLI (read-only).
+
+    Uses a governed activation manifest when ``--state`` is provided; otherwise a
+    deterministic single-pack synthetic snapshot derived from ``--pack``.
+    """
+    from agent import active_pack_monitor as apm
+
+    if getattr(args, "state", None):
+        from agent import knowledge_pack_activation as kpa
+        manager = kpa.ActivationStateManager(state_path=args.state,
+                                             audit_path=kpa.DEFAULT_AUDIT_PATH)
+        state = manager.load_state()
+        snapshot = apm.snapshot_from_state(
+            state, environment=args.environment,
+            captured_at="" if args.deterministic else None)
+        return snapshot, state
+
+    pack_id = args.pack
+    snapshot = apm.ActivePackSnapshot(
+        active_state_hash="pkgstate-synthetic-" + pack_id,
+        environment=args.environment,
+        active_pack_ids=(pack_id,),
+        active_pack_versions=("synthetic",),
+        active_pack_fingerprints=("packfp-synthetic-" + pack_id,),
+        source_ids=(pack_id,),
+        source_revisions=("synthetic",),
+        coexistence_policies=("exclusive_latest",),
+        captured_at="" if args.deterministic else None)
+    return snapshot, None
+
+
+def _active_pack_monitor_cli(argv: list[str]) -> int:
+    """Deterministic, read-only active-pack monitoring + regression detection (v7.1).
+
+    Re-measures the active set against an immutable pre-activation (or other
+    fixed) baseline and reports retrieval / evidence-selection / citation /
+    source-isolation / unrelated-query regressions. It is strictly advisory: it
+    never activates, deactivates, supersedes or rolls back a pack, never mutates
+    active-pack state, pack contents, retrieval indexes, a source registry, a
+    memory ledger or a proposal, and never calls an LLM. ``baseline`` requires
+    ``--write`` to persist; ``run``/``isolate`` write nothing unless ``--out`` is
+    given. A recommendation is not an approval; a rollback recommendation is not
+    a rollback. Subcommands::
+
+        active-pack-monitor baseline --cases C --out P [--write] [--state P]
+        active-pack-monitor run      --baseline B --cases C [--out P] [--history]
+        active-pack-monitor isolate  --baseline B --cases C --pack-id ID [--out P]
+        active-pack-monitor history  [--history-path P]
+        active-pack-monitor latest   [--history-path P]
+    """
+    from agent import active_pack_monitor as apm
+
+    parser = argparse.ArgumentParser(
+        prog="workbench.py active-pack-monitor",
+        description="Read-only active-pack monitoring and regression detection "
+                    "(v7.1). Advisory only; never changes active-pack state.")
+    parser.add_argument("--pack", default="m365_coding_assistant",
+                        help="pack manifest directory under packs/ (live service)")
+    parser.add_argument("--backend", default="deterministic",
+                        choices=["deterministic", "hybrid"],
+                        help="knowledge retrieval backend (default deterministic)")
+    parser.add_argument("--environment", default="default",
+                        help="environment scope")
+    parser.add_argument("--state", default=None,
+                        help="optional governed activation manifest (for source "
+                             "isolation against real pack status)")
+    parser.add_argument("--deterministic", action="store_true",
+                        help="omit wall-clock timestamps (stable fingerprints)")
+    sub = parser.add_subparsers(dest="action", required=True)
+
+    pb = sub.add_parser("baseline", help="create an immutable pre-activation baseline")
+    pb.add_argument("--cases", required=True, help="monitoring cases JSONL")
+    pb.add_argument("--out", required=True, help="baseline output JSON path")
+    pb.add_argument("--baseline-id", default="pre-activation",
+                    dest="baseline_id")
+    pb.add_argument("--baseline-type", default="pre_activation",
+                    dest="baseline_type",
+                    choices=[b.value for b in apm.BaselineType])
+    pb.add_argument("--write", action="store_true",
+                    help="persist the baseline (default off: dry-run)")
+
+    pr = sub.add_parser("run", help="evaluate the active set against a baseline")
+    pr.add_argument("--baseline", required=True, help="baseline JSON path")
+    pr.add_argument("--cases", required=True, help="monitoring cases JSONL")
+    pr.add_argument("--out", default=None, help="write the report markdown here")
+    pr.add_argument("--rollback-target", default="", dest="rollback_target",
+                    help="validated known-good active-state hash (enables a "
+                         "rollback *recommendation* only)")
+    pr.add_argument("--history", action="store_true",
+                    help="append the run to the monitoring history file")
+    pr.add_argument("--history-path", default=apm.DEFAULT_HISTORY_PATH,
+                    dest="history_path")
+
+    pi = sub.add_parser("isolate",
+                        help="attribute a regression by isolating one pack")
+    pi.add_argument("--baseline", required=True, help="baseline JSON path")
+    pi.add_argument("--cases", required=True, help="monitoring cases JSONL")
+    pi.add_argument("--pack-id", required=True, dest="pack_id",
+                    help="the candidate pack to isolate")
+    pi.add_argument("--out", default=None, help="write the report markdown here")
+
+    ph = sub.add_parser("history", help="print the monitoring history")
+    ph.add_argument("--history-path", default=apm.DEFAULT_HISTORY_PATH,
+                    dest="history_path")
+    pl = sub.add_parser("latest", help="print the most recent monitoring run")
+    pl.add_argument("--history-path", default=apm.DEFAULT_HISTORY_PATH,
+                    dest="history_path")
+
+    args = parser.parse_args(argv)
+
+    if args.action == "history":
+        print(apm.render_history_markdown(
+            apm.load_monitoring_history(args.history_path)))
+        return 0
+
+    if args.action == "latest":
+        history = apm.load_monitoring_history(args.history_path)
+        if not history:
+            print("[active-pack-monitor] no monitoring history")
+            return 0
+        print(apm.render_history_markdown(history[-1:]))
+        return 0
+
+    cases = apm.load_monitoring_cases(args.cases)
+    corpus_fp = apm.compute_corpus_fingerprint(cases)
+    retrieval_fp = apm.compute_retrieval_config_fingerprint(backend=args.backend)
+    service = _build_sprint_service(args.pack, args.backend, seed=False)
+    snapshot, state = _monitor_snapshot(args)
+
+    if args.action == "baseline":
+        results = _monitor_collect_results(
+            service, cases, snapshot=snapshot, state=state,
+            environment=args.environment)
+        baseline = apm.create_baseline(
+            baseline_id=args.baseline_id,
+            baseline_type=apm.BaselineType(args.baseline_type),
+            snapshot=snapshot, corpus_fingerprint=corpus_fp,
+            retrieval_config_fingerprint=retrieval_fp, results=results,
+            created_at="" if args.deterministic else None)
+        print(f"[active-pack-monitor] baseline {baseline.baseline_hash} "
+              f"over {len(results)} case(s); corpus {corpus_fp}; "
+              f"retrieval {retrieval_fp}")
+        if args.write:
+            path = apm.write_baseline(baseline, args.out)
+            print(f"[active-pack-monitor] wrote immutable baseline to {path}")
+        else:
+            print("[active-pack-monitor] dry-run: re-run with --write to persist "
+                  "(baselines are immutable; a new baseline needs a new path)")
+        return 0
+
+    if args.action in ("run", "isolate"):
+        baseline = apm.load_baseline(args.baseline)
+        pack_attribution = None
+        if args.action == "isolate":
+            # Isolated configuration: drop the candidate pack from the measured
+            # active set WITHOUT mutating any governed state, re-measure, and
+            # compare. Pure attribution decides pack-specificity conservatively.
+            with_pack = _monitor_collect_results(
+                service, cases, snapshot=snapshot, state=state,
+                environment=args.environment)
+            findings_with = apm.detect_regressions(
+                baseline=baseline, results=with_pack, snapshot=snapshot,
+                corpus_fingerprint=corpus_fp,
+                retrieval_config_fingerprint=retrieval_fp)
+            isolated_snapshot = apm.ActivePackSnapshot(
+                active_state_hash=snapshot.active_state_hash + "-isolated",
+                environment=snapshot.environment,
+                active_pack_ids=tuple(
+                    p for p in snapshot.active_pack_ids if p != args.pack_id),
+                active_pack_versions=snapshot.active_pack_versions,
+                active_pack_fingerprints=snapshot.active_pack_fingerprints,
+                source_ids=snapshot.source_ids,
+                source_revisions=snapshot.source_revisions,
+                coexistence_policies=snapshot.coexistence_policies,
+                captured_at="" if args.deterministic else None)
+            without_pack = [r for r in with_pack
+                            if args.pack_id not in r.pack_ids_observed]
+            findings_without = apm.detect_regressions(
+                baseline=baseline, results=without_pack or with_pack,
+                snapshot=isolated_snapshot, corpus_fingerprint=corpus_fp,
+                retrieval_config_fingerprint=retrieval_fp)
+            pack_attribution = apm.attribute_regression(
+                regression_with_pack=bool(findings_with),
+                regression_without_pack=bool(findings_without),
+                retrieval_config_changed=False, corpus_changed=False,
+                evaluator_changed=False,
+                stable=all(r.stable for r in with_pack),
+                candidate_pack_ids=[args.pack_id])
+            results = with_pack
+        else:
+            results = _monitor_collect_results(
+                service, cases, snapshot=snapshot, state=state,
+                environment=args.environment)
+
+        run = apm.run_monitoring(
+            baseline=baseline, snapshot=snapshot, results=results,
+            corpus_fingerprint=corpus_fp,
+            retrieval_config_fingerprint=retrieval_fp,
+            rollback_target=getattr(args, "rollback_target", ""),
+            pack_attribution=pack_attribution,
+            created_at="" if args.deterministic else None)
+        print(apm.render_monitoring_markdown(run))
+        if pack_attribution is not None:
+            print(f"\n[active-pack-monitor] attribution: "
+                  f"{pack_attribution.attribution.value} "
+                  f"(confidence {pack_attribution.confidence.value})")
+        if args.out:
+            out_path = Path(args.out)
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            out_path.write_text(apm.render_monitoring_markdown(run),
+                                encoding="utf-8")
+            print(f"\n[active-pack-monitor] wrote report to {out_path}")
+        if getattr(args, "history", False):
+            hist = apm.append_monitoring_history(run, args.history_path)
+            print(f"[active-pack-monitor] appended run to {hist}")
+        # Non-zero exit only when a critical finding is present (advisory signal).
+        return 1 if run.critical_findings else 0
+
+    parser.error(f"unknown active-pack-monitor action {args.action!r}")
+    return 2
+
+
 def _retrieval_eval_hf_import_cli(argv: list[str]) -> int:
     """Bridge an imported HF eval pack to retrieval-eval cases (read-only; v6.9).
 
@@ -2726,6 +3062,8 @@ def main(argv: list[str] | None = None) -> int:
         return _hf_lifecycle_cli(argv[1:])
     if argv and argv[0] == "knowledge-packs":
         return _knowledge_packs_cli(argv[1:])
+    if argv and argv[0] == "active-pack-monitor":
+        return _active_pack_monitor_cli(argv[1:])
     if argv and argv[0] == "pdf-intake":
         return _pdf_intake_cli(argv[1:])
     if argv and argv[0] == "pdf-preview":
