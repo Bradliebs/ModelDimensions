@@ -1,0 +1,319 @@
+"""V1 answer pipeline: question in, grounded answer or honest silence out.
+
+Wires together the four pieces validated in Steps 1-2.5:
+
+    question
+      → EncoderSingleton.encode_one  (MiniLM, query-side prefix if any)
+      → StreamingBank.whiten + topk  (k retrieved cells, descending activation)
+      → v1_silence_gate.decide       (fire iff top1-top2 >= 0.05)
+      → Phi-3 generate               (only if gate fires)
+      → v1_answer_verifier.verify    (token coverage >= 0.50 against cells)
+      → grounded answer + citations, OR honest-silence string
+
+The generator is injectable so tests can avoid loading 2.5 GB of weights:
+pass ``generator=<callable str -> str>`` to the constructor and the
+default Phi-3 path is skipped entirely.
+
+This module is *the* V1 contract. The CLI in ``scripts/ask.py`` is a
+thin shell over it.
+"""
+from __future__ import annotations
+
+import time
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Callable, List, Optional, Sequence
+
+import numpy as np
+
+from src.agent import v1_answer_verifier, v1_silence_gate
+from src.agent.streaming_bank import StreamingBank
+from src.cc_service.encoder import EncoderSingleton
+
+
+# Honest-silence strings. These are not error messages; they are the
+# system's valid answer for "this is outside the library".
+SILENCE_NO_MATCH = "I have no matching memory for that."
+SILENCE_DRIFT = "I drafted an answer but could not ground it in memory."
+
+
+PHI3_MODEL = "microsoft/Phi-3-mini-4k-instruct"
+
+
+def _build_phi3_generator(
+    model_name: str, use_4bit: bool
+) -> tuple[Callable[[str], str], Callable[[str, Sequence[dict]], str]]:
+    """Construct (generate, build_prompt) callables sharing a tokenizer.
+
+    Pre-inits CUDA via ``mem_get_info`` to avoid the Windows lazy-init
+    access violation that bites when bitsandbytes initialises CUDA after
+    transformers does.
+    """
+    import torch
+
+    if torch.cuda.is_available():
+        _ = torch.cuda.mem_get_info()
+
+    from transformers import AutoModelForCausalLM, AutoTokenizer
+
+    tok = AutoTokenizer.from_pretrained(model_name)
+    kwargs: dict = {
+        "device_map": "auto",
+        "trust_remote_code": False,
+        "attn_implementation": "eager",
+    }
+    if use_4bit:
+        from transformers import BitsAndBytesConfig
+        kwargs["quantization_config"] = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_quant_type="nf4",
+            bnb_4bit_compute_dtype=torch.bfloat16,
+            bnb_4bit_use_double_quant=True,
+        )
+    else:
+        kwargs["torch_dtype"] = torch.bfloat16
+
+    model = AutoModelForCausalLM.from_pretrained(model_name, **kwargs)
+    model.eval()
+
+    def _generate(prompt: str, max_new_tokens: int = 200) -> str:
+        inputs = tok(prompt, return_tensors="pt").to(model.device)
+        with torch.no_grad():
+            out = model.generate(
+                **inputs,
+                max_new_tokens=max_new_tokens,
+                do_sample=False,
+                temperature=None,
+                top_p=None,
+                pad_token_id=tok.eos_token_id,
+            )
+        gen = tok.decode(
+            out[0][inputs["input_ids"].shape[1]:], skip_special_tokens=True
+        )
+        return gen.strip()
+
+    def _build_prompt(question: str, cells: Sequence[dict]) -> str:
+        facts_block = "\n".join(
+            f"[{c['cell_id']}] {c['text']}" for c in cells if c.get("text")
+        )
+        system = (
+            "You answer questions strictly from the FACTS provided. "
+            "Use only what is in the FACTS; do not add outside information. "
+            "Cite each fact you use with its bracketed id, e.g. [123]. "
+            "Keep answers to one or two sentences."
+        )
+        user = (
+            f"FACTS:\n{facts_block}\n\nQUESTION: {question}\n\n"
+            f"Answer using only the FACTS above, with citations."
+        )
+        return tok.apply_chat_template(
+            [{"role": "system", "content": system},
+             {"role": "user", "content": user}],
+            tokenize=False,
+            add_generation_prompt=True,
+        )
+
+    return _generate, _build_prompt
+
+
+def _default_plain_prompt(question: str, cells: Sequence[dict]) -> str:
+    """Fallback prompt-builder for injected generators (tests).
+
+    Plain text so callers don't need a tokenizer.
+    """
+    facts_block = "\n".join(
+        f"[{c['cell_id']}] {c['text']}" for c in cells if c.get("text")
+    )
+    return (
+        f"FACTS:\n{facts_block}\n\n"
+        f"QUESTION: {question}\n\n"
+        f"Answer using only the FACTS above, with citations."
+    )
+
+
+@dataclass
+class PipelineResult:
+    question: str
+    answer: str
+    silence: bool
+    silence_reason: str
+    citations: List[int]
+    retrieval: dict
+    gate: dict
+    verification: Optional[dict]
+    timings: dict
+
+    def as_dict(self) -> dict:
+        return {
+            "question": self.question,
+            "answer": self.answer,
+            "silence": self.silence,
+            "silence_reason": self.silence_reason,
+            "citations": list(self.citations),
+            "retrieval": self.retrieval,
+            "gate": self.gate,
+            "verification": self.verification,
+            "timings": self.timings,
+        }
+
+
+class AnswerPipeline:
+    """End-to-end pipeline; instantiate once, call :meth:`ask` per question."""
+
+    def __init__(
+        self,
+        bank_path: str | Path,
+        *,
+        top_k: int = 10,
+        margin_threshold: float = v1_silence_gate.DEFAULT_MARGIN_THRESHOLD,
+        min_coverage: float = v1_answer_verifier.MIN_COVERAGE,
+        generator: Optional[Callable[[str], str]] = None,
+        generator_model: str = PHI3_MODEL,
+        use_4bit: bool = True,
+        encoder: Optional[EncoderSingleton] = None,
+        bank: Optional[StreamingBank] = None,
+    ) -> None:
+        self.top_k = int(top_k)
+        self.margin_threshold = float(margin_threshold)
+        self.min_coverage = float(min_coverage)
+
+        t0 = time.time()
+        self.bank = bank if bank is not None else StreamingBank(bank_path)
+        self.bank_load_seconds = time.time() - t0
+
+        encoder_name = self.bank.encoder_model or "all-MiniLM-L6-v2"
+        self.encoder = encoder if encoder is not None else EncoderSingleton(
+            model_name=encoder_name
+        )
+        if self.encoder.model_name != encoder_name:
+            raise ValueError(
+                f"encoder mismatch: bank built with {encoder_name!r}, "
+                f"caller supplied {self.encoder.model_name!r}"
+            )
+
+        if generator is not None:
+            self._generate = generator
+            self._build_prompt = _default_plain_prompt
+            self._generator_model_name = "<injected>"
+        else:
+            self._generate, self._build_prompt = _build_phi3_generator(
+                generator_model, use_4bit
+            )
+            self._generator_model_name = generator_model
+
+    # ---- public API ----
+
+    def ask(self, question: str) -> PipelineResult:
+        timings: dict = {}
+
+        t0 = time.time()
+        raw = self.encoder.encode_one(question, is_query=True)
+        whitened = self.bank.whiten(raw)
+        timings["encode"] = time.time() - t0
+
+        t0 = time.time()
+        topk = self.bank.topk(whitened, k=self.top_k)
+        timings["retrieve"] = time.time() - t0
+
+        activations = topk["activations"]
+        gate = v1_silence_gate.decide(
+            activations.tolist(), margin_threshold=self.margin_threshold
+        )
+        retrieval = {
+            "top_k_cell_ids": [int(c) for c in topk["cell_ids"]],
+            "activations": [float(a) for a in activations],
+            "thetas": [float(t) for t in topk["thetas"]],
+        }
+
+        if not gate.fire:
+            return PipelineResult(
+                question=question,
+                answer=SILENCE_NO_MATCH,
+                silence=True,
+                silence_reason=f"gate: {gate.reason}",
+                citations=[],
+                retrieval=retrieval,
+                gate=gate.as_dict(),
+                verification=None,
+                timings=timings,
+            )
+
+        # Gate fired: fetch source texts only for the cells we'll cite.
+        t0 = time.time()
+        texts = self.bank.fetch_source_texts(retrieval["top_k_cell_ids"])
+        cells = [
+            {"cell_id": cid, "text": txt or ""}
+            for cid, txt in zip(retrieval["top_k_cell_ids"], texts)
+            if txt
+        ]
+        timings["fetch_sources"] = time.time() - t0
+
+        if not cells:
+            return PipelineResult(
+                question=question,
+                answer=SILENCE_NO_MATCH,
+                silence=True,
+                silence_reason="gate fired but no source text on disk for top cells",
+                citations=[],
+                retrieval=retrieval,
+                gate=gate.as_dict(),
+                verification=None,
+                timings=timings,
+            )
+
+        t0 = time.time()
+        prompt = self._build_prompt(question, cells)
+        timings["build_prompt"] = time.time() - t0
+
+        t0 = time.time()
+        raw_answer = self._generate(prompt)
+        timings["generate"] = time.time() - t0
+
+        t0 = time.time()
+        cell_texts = [c["text"] for c in cells]
+        verdict = v1_answer_verifier.verify(
+            raw_answer, cell_texts, question=question,
+            min_coverage=self.min_coverage,
+        )
+        timings["verify"] = time.time() - t0
+
+        if not verdict.grounded:
+            return PipelineResult(
+                question=question,
+                answer=SILENCE_DRIFT,
+                silence=True,
+                silence_reason=(
+                    f"verify: coverage={verdict.coverage:.2f} "
+                    f"< {verdict.threshold:.2f}; "
+                    f"uncovered={verdict.uncovered_tokens[:5]}"
+                ),
+                citations=[c["cell_id"] for c in cells],
+                retrieval=retrieval,
+                gate=gate.as_dict(),
+                verification=verdict.as_dict(),
+                timings=timings,
+            )
+
+        return PipelineResult(
+            question=question,
+            answer=raw_answer,
+            silence=False,
+            silence_reason="",
+            citations=[c["cell_id"] for c in cells],
+            retrieval=retrieval,
+            gate=gate.as_dict(),
+            verification=verdict.as_dict(),
+            timings=timings,
+        )
+
+    def close(self) -> None:
+        self.bank.close()
+
+
+__all__ = [
+    "AnswerPipeline",
+    "PipelineResult",
+    "SILENCE_NO_MATCH",
+    "SILENCE_DRIFT",
+    "PHI3_MODEL",
+]
