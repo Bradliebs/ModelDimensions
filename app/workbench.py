@@ -1076,6 +1076,121 @@ _MEMORY_CANDIDATES_DEFAULT = ROOT / "demos" / "memory_proposal_candidates.jsonl"
 _MEMORY_PROPOSAL_QUEUE_DEFAULT = (
     ROOT / "reports" / "memory_proposal_review_queue.jsonl")
 
+def _load_pdf_pack_service(pack_dir: Path, backend: str):
+    """Load an imported PDF pack directory into a read-only service.
+
+    The pack is copied into a throwaway temp directory before loading so the
+    tracked/approved pack on disk stays byte-identical. No memory ledger,
+    proposal queue, or source registry is written.
+    """
+    import shutil
+    import tempfile
+
+    tmp_parent = Path(tempfile.mkdtemp(prefix="pdf_import_eval_")) / "packs"
+    tmp_parent.mkdir(parents=True, exist_ok=True)
+    shutil.copytree(pack_dir, tmp_parent / pack_dir.name)
+    registry = PackRegistry(tmp_parent)
+    pack = registry.get_pack(pack_dir.name)
+    if pack is None:
+        raise SystemExit(f"could not load pack from {pack_dir}")
+    embedder = None
+    if backend == "hybrid":
+        from retrieval.embedding_backend import OfflineHashingEmbedder
+        embedder = OfflineHashingEmbedder()
+    service = WorkbenchService.from_pack(
+        pack, registry=registry,
+        knowledge_backend=backend, semantic_embedder=embedder)
+    return service, pack_dir.name
+
+
+def _empty_knowledge_service(backend: str):
+    """Build a baseline service with no imported knowledge (read-only).
+
+    Used as the without-pack arm of the baseline-vs-pack comparison. All paths
+    point at a throwaway temp directory; nothing tracked is written.
+    """
+    import tempfile
+
+    tmp = Path(tempfile.mkdtemp(prefix="pdf_import_base_"))
+    embedder = None
+    if backend == "hybrid":
+        from retrieval.embedding_backend import OfflineHashingEmbedder
+        embedder = OfflineHashingEmbedder()
+    return WorkbenchService(
+        ledger_path=str(tmp / "ledger.jsonl"),
+        queue_path=str(tmp / "queue.jsonl"),
+        knowledge_path=str(tmp / "knowledge.jsonl"),
+        knowledge_backend=backend, semantic_embedder=embedder)
+
+
+def _retrieval_eval_pdf_import_cli(argv: list[str]) -> int:
+    """Evaluate an imported PDF pack's retrieval quality (read-only; v6.7).
+
+    Traces every case through the frozen read path — raw ``query_knowledge``
+    retrieval -> relevance-gated selected evidence -> final report citations —
+    and scores source/chunk/page lineage, wrong-source bleed, off-topic
+    inclusion, and citation drift. With ``--compare-without-pack`` it also runs
+    the same cases against an empty-knowledge baseline and reports whether the
+    pack helps without introducing bleed or unrelated-case regressions.
+
+    Strictly read-only: the imported pack is copied to a throwaway directory
+    before loading (original stays byte-identical), no memory ledger / proposal
+    queue / source registry is written, and no retrieval, ranking, chunking,
+    grounding, or composer behaviour is changed. With ``--out`` the Markdown
+    report is written to that path and nothing is printed; otherwise the report
+    is printed to stdout.
+    """
+    from agent import retrieval_eval_harness as reh
+
+    parser = argparse.ArgumentParser(
+        prog="workbench.py retrieval-eval pdf-import",
+        description="Evaluate an imported PDF pack's retrieval quality "
+                    "(read-only). Changes no retrieval/ranking/grounding logic; "
+                    "the approved pack stays byte-identical.")
+    parser.add_argument("--cases", required=True,
+                        help="path to the PDF import case JSONL")
+    parser.add_argument("--pack", required=True,
+                        help="path to an imported PDF pack directory "
+                             "(contains manifest.json + knowledge.jsonl)")
+    parser.add_argument("--backend", default="hybrid",
+                        choices=["deterministic", "hybrid"],
+                        help="knowledge retrieval backend (default hybrid — the "
+                             "meaningful lexical path)")
+    parser.add_argument("--compare-without-pack", action="store_true",
+                        help="also run an empty-knowledge baseline and report "
+                             "the baseline-vs-pack comparison")
+    parser.add_argument("--out", default=None,
+                        help="write the Markdown report to this path (silent on "
+                             "stdout); otherwise print the report")
+    args = parser.parse_args(argv)
+
+    pack_dir = Path(args.pack)
+    if not (pack_dir / "manifest.json").exists():
+        raise SystemExit(f"no pack manifest at {pack_dir / 'manifest.json'}")
+
+    cases = reh.load_pdf_import_cases(args.cases)
+    service, label = _load_pdf_pack_service(pack_dir, args.backend)
+    results = reh.run_pdf_import_eval(service, cases, pack_label=label)
+    summary = reh.summarize_pdf_import_eval(results)
+
+    comparison = None
+    if args.compare_without_pack:
+        baseline = _empty_knowledge_service(args.backend)
+        base_results = reh.run_pdf_import_eval(baseline, cases, pack_label=label)
+        comparison = reh.compare_pdf_import_eval(base_results, results)
+
+    report = reh.render_pdf_import_markdown(
+        results, summary, pack_label=label,
+        backend_label=args.backend, comparison=comparison)
+    if args.out:
+        out_path = Path(args.out)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(report, encoding="utf-8")
+    else:
+        print(report)
+    return 0
+
+
 def _retrieval_eval_cli(argv: list[str]) -> int:
     """Run the v3.0 retrieval evaluation harness (read-only, measurement only).
 
@@ -1094,7 +1209,16 @@ def _retrieval_eval_cli(argv: list[str]) -> int:
     and classifies every retrieved candidate into the wrong-source taxonomy
     (forbidden_bleed / on_topic_neighbour / ambiguous / expected_gap) plus
     chunk/source hygiene diagnostics. Still entirely read-only.
+
+    The ``pdf-import`` subcommand (v6.7) evaluates an approved imported PDF pack
+    directory through the same frozen read path — raw retrieval -> selected
+    evidence -> final citations — with an optional baseline-vs-pack comparison.
+    Still entirely read-only; the imported pack is copied to a throwaway
+    directory before loading so the original stays byte-identical.
     """
+    if argv and argv[0] == "pdf-import":
+        return _retrieval_eval_pdf_import_cli(argv[1:])
+
     from agent import retrieval_eval_harness as reh
 
     parser = argparse.ArgumentParser(

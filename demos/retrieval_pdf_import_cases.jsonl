@@ -1,0 +1,42 @@
+# v6.7 Imported PDF retrieval evaluation corpus (read-only, illustrative).
+#
+# Each line is one PdfImportRetrievalCase. Cases reference imported PDF content
+# by SOURCE NAME substring (not brittle generated chunk ids), page ranges, and
+# on/off-topic terms, so they run against any pack imported with the matching
+# source titles. The reference content is two approved PDFs:
+#   * "Quarterly Operating Review" — p1 reliability budget ceiling (4200
+#     error-minutes); p2 accountable owner (Dana Okafor) + weekly review; p3
+#     regression triggers a documented investigation within 5 business days.
+#   * "Annual Reliability Summary" — a similar-topic neighbour PDF.
+# Build a matching pack with `app/workbench.py pdf-pack` (see README v6.7), then:
+#   python app/workbench.py retrieval-eval pdf-import \
+#     --cases demos/retrieval_pdf_import_cases.jsonl --pack PATH --compare-without-pack
+#
+# 1. Direct factual lookup — distinctive fact on a single page.
+{"case_id": "direct_factual_lookup", "query": "What is the reliability budget ceiling in error-minutes?", "expected_source_ids": ["Quarterly Operating Review"], "expected_page_ranges": [[1, 1]], "expected_terms": ["4200", "error-minutes"], "expected_answer_mode": "grounded", "pdf_only": true, "tags": ["pdf", "direct"], "notes": "answer exists only in the imported PDF"}
+# 2. Exact decision lookup — named accountable owner.
+{"case_id": "exact_decision_lookup", "query": "Who is the accountable owner for capacity planning?", "expected_source_ids": ["Quarterly Operating Review"], "expected_page_ranges": [[2, 2]], "expected_terms": ["Okafor"], "expected_answer_mode": "grounded", "pdf_only": true, "tags": ["pdf", "decision"], "notes": "exact decision recorded on page 2"}
+# 3. Paraphrased query — meaning matches but words differ.
+{"case_id": "paraphrased_query", "query": "How soon must a reliability regression be looked into?", "expected_source_ids": ["Quarterly Operating Review"], "expected_page_ranges": [[3, 3]], "expected_terms": ["investigation", "business days"], "expected_answer_mode": "grounded", "tags": ["pdf", "paraphrase"], "notes": "page 3 says investigation within 5 business days"}
+# 4. Near-neighbour source competition — two PDFs both plausible.
+{"case_id": "near_neighbour_competition", "query": "What does the operating review say about the reliability budget?", "expected_source_ids": ["Quarterly Operating Review"], "expected_page_ranges": [[1, 1]], "expected_terms": ["4200"], "expected_answer_mode": "grounded", "minimum_hit_k": 2, "tags": ["pdf", "neighbour"], "notes": "quarterly review is the correct source over the competing Annual Reliability Summary"}
+# 5. Multiple PDFs on a similar topic — both legitimately answer.
+{"case_id": "multiple_pdfs_similar_topic", "query": "Summarise the reliability budgeting approach across the reports.", "expected_source_ids": ["Quarterly Operating Review"], "ambiguous": true, "expected_terms": ["budget"], "expected_answer_mode": "grounded", "tags": ["pdf", "ambiguous"], "notes": "no single authoritative source; competing sources tolerated"}
+# 6. Page-specific fact retrieval — must carry the right page lineage.
+{"case_id": "page_specific_fact", "query": "On which page is the weekly operating review cadence described?", "expected_source_ids": ["Quarterly Operating Review"], "expected_page_ranges": [[2, 2]], "expected_terms": ["weekly"], "expected_answer_mode": "grounded", "tags": ["pdf", "page"], "notes": "page lineage must resolve to page 2"}
+# 7. Table-like extracted content — figures embedded in prose.
+{"case_id": "table_like_content", "query": "What throughput and latency targets are tracked for capacity planning?", "expected_source_ids": ["Quarterly Operating Review"], "expected_page_ranges": [[1, 1]], "expected_terms": ["throughput", "latency"], "expected_answer_mode": "grounded", "tags": ["pdf", "table"], "notes": "extracted tabular figures appear inline on page 1"}
+# 8. Multi-page answer — content spans more than one page.
+{"case_id": "multi_page_answer", "query": "Describe the reliability budget and the regression follow-up process.", "expected_source_ids": ["Quarterly Operating Review"], "expected_page_ranges": [[1, 1], [3, 3]], "expected_terms": ["budget", "investigation"], "expected_answer_mode": "grounded", "tags": ["pdf", "multipage"], "notes": "answer draws on pages 1 and 3"}
+# 9. Insufficient-evidence query — no source should support it.
+{"case_id": "insufficient_evidence", "query": "What is the marketing campaign budget for next year?", "expected_gap": true, "forbidden_terms": ["error-minutes", "Okafor"], "expected_answer_mode": "refusal", "tags": ["pdf", "gap"], "notes": "the imported PDFs do not cover marketing budgets"}
+# 10. Forbidden unrelated-source query — answer must not use the PDF.
+{"case_id": "forbidden_unrelated_source", "query": "What is the recommended Kubernetes pod security policy?", "unrelated": true, "forbidden_source_ids": ["Quarterly Operating Review", "Annual Reliability Summary"], "expected_answer_mode": "refusal", "tags": ["pdf", "unrelated"], "notes": "off-topic query must not pull in imported reliability PDFs"}
+# 11. Stale / superseded neighbour source — prefer current over old.
+{"case_id": "stale_superseded_neighbour", "query": "What is the current reliability budget ceiling?", "expected_source_ids": ["Quarterly Operating Review"], "forbidden_source_ids": ["Annual Reliability Summary"], "expected_page_ranges": [[1, 1]], "expected_terms": ["4200"], "expected_answer_mode": "grounded", "tags": ["pdf", "stale"], "notes": "the annual summary is superseded by the quarterly review"}
+# 12. Chunk-boundary-sensitive query — fact sits near a page break.
+{"case_id": "chunk_boundary_sensitive", "query": "What happens when a regression exceeds the agreed threshold?", "expected_source_ids": ["Quarterly Operating Review"], "expected_page_ranges": [[3, 3]], "expected_terms": ["threshold", "investigation"], "expected_answer_mode": "grounded", "tags": ["pdf", "boundary"], "notes": "fact must survive chunk/page boundary splitting"}
+# 13. PDF-only answer — exists solely in imported content.
+{"case_id": "pdf_only_answer", "query": "Name the accountable owner and the budget ceiling from the operating review.", "expected_source_ids": ["Quarterly Operating Review"], "expected_page_ranges": [[1, 1], [2, 2]], "expected_terms": ["Okafor", "4200"], "expected_answer_mode": "grounded", "pdf_only": true, "tags": ["pdf", "pdf_only"], "notes": "both facts live only in the imported PDF"}
+# 14. Must-not-use-PDF — general query the PDF must not answer.
+{"case_id": "must_not_use_pdf", "query": "How do I rotate an Azure storage account access key?", "unrelated": true, "forbidden_source_ids": ["Quarterly Operating Review", "Annual Reliability Summary"], "expected_answer_mode": "refusal", "tags": ["pdf", "unrelated"], "notes": "imported reliability PDFs must stay out of an unrelated cloud-ops answer"}

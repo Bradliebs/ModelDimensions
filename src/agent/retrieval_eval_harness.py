@@ -31,9 +31,10 @@ documented baseline, not a bug to fix in this slice).
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import List, Optional
+from typing import Dict, List, Optional, Tuple
 
 from .workbench_service import WorkbenchService
 
@@ -1198,5 +1199,1167 @@ def write_hygiene_reports(results: List[HygieneCaseResult],
         encoding="utf-8")
     with jsonl_path.open("w", encoding="utf-8") as handle:
         handle.write(json.dumps({"summary": summary.to_dict()}) + "\n")
+        for r in results:
+            handle.write(json.dumps(r.to_dict()) + "\n")
+
+
+# =============================================================================
+# v6.7 Imported PDF Retrieval Evaluation — read-only
+# =============================================================================
+#
+# The v6.6 importer turns an *approved* PDF chunk preview into a knowledge pack
+# (manifest.json + knowledge.jsonl). Importing a pack does not make it
+# trustworthy: an imported PDF must *earn* its place by improving retrieval and
+# citation without bleeding wrong sources, dragging in off-topic neighbours, or
+# regressing the existing baseline. This layer measures exactly that, and only
+# measures — it reuses the same frozen read path the v3.0 harness and the v3.0.1
+# report-path probe use (``query_knowledge`` -> ``build_grounding_package`` ->
+# ``answer_query``) and writes nothing to any pack, index, ledger, registry, or
+# proposal queue.
+#
+# Three honest stages are traced per case:
+#   * raw      — the ordered ``query_knowledge`` candidates (always top-k; the
+#                backends apply no score gate, so an off-topic query still
+#                returns the pack's only chunks here — that is documented, not a
+#                defect).
+#   * selected — the grounded evidence after the v2.4 relevance/sufficiency gate
+#                (``build_grounding_package``). The gate is downgrade-only: a
+#                weak/no-support query yields *empty* evidence. This is where
+#                pack **isolation** is provable: an unrelated query selects no
+#                PDF chunk even though raw retrieval surfaced one.
+#   * final    — the cited report spans/citations from the consultant report
+#                composer. Citations can only reference selected evidence.
+#
+# Page lineage: retrieval candidates expose page provenance only through their
+# ``section`` string ("page N" / "pages N-M"), so this layer parses that and
+# builds a chunk_id -> (source, pages) map from the raw stage to enrich the
+# selected/final stages (selection is always a subset of retrieval).
+#
+# Comparison: the caller may supply a *baseline* result set (the same cases run
+# against a service that does **not** have the imported pack). The comparison is
+# pure: it diffs the two result sets to show which cases the pack improved, left
+# unchanged, or regressed, and whether it introduced any new wrong-source or
+# forbidden-source hits or affected any unrelated case. It never re-runs
+# retrieval and never mutates anything.
+
+# -- pass/fail thresholds (explicit, deterministic) ---------------------------
+
+# An expected-content case must retrieve *all* its expected sources to pass; with
+# a single expected source this is simply "the expected source was retrieved".
+MIN_EXPECTED_SOURCE_RECALL = 1.0
+# Token-overlap ratio at or above which two retrieved chunks are "near
+# duplicates" (exact-text duplicates are counted separately).
+_NEAR_DUP_JACCARD = 0.8
+
+# -- failure classifications (one per case; diagnostic only) ------------------
+
+PDF_NO_FAILURE = "no_failure"
+PDF_RETRIEVAL_MISS = "retrieval_miss"
+PDF_WRONG_SOURCE_RANKED = "wrong_source_ranked"
+PDF_EXPECTED_SOURCE_LOW_RANK = "expected_source_low_rank"
+PDF_EXPECTED_CHUNK_LOW_RANK = "expected_chunk_low_rank"
+PDF_OFF_TOPIC_NEIGHBOUR = "off_topic_neighbour"
+PDF_DUPLICATE_CHUNK_INTERFERENCE = "duplicate_chunk_interference"
+PDF_CHUNK_BOUNDARY_FAILURE = "chunk_boundary_failure"
+PDF_PAGE_LINEAGE_FAILURE = "page_lineage_failure"
+PDF_SELECTION_DROP = "selection_drop"
+PDF_CITATION_DROP = "citation_drop"
+PDF_INSUFFICIENT_EVIDENCE_CORRECT = "insufficient_evidence_correct"
+PDF_EXPECTED_GAP = "expected_gap"
+PDF_AMBIGUOUS_CASE = "ambiguous_case"
+PDF_PACK_REGRESSION = "pack_regression"
+
+PDF_FAILURE_CLASSES = (
+    PDF_NO_FAILURE, PDF_RETRIEVAL_MISS, PDF_WRONG_SOURCE_RANKED,
+    PDF_EXPECTED_SOURCE_LOW_RANK, PDF_EXPECTED_CHUNK_LOW_RANK,
+    PDF_OFF_TOPIC_NEIGHBOUR, PDF_DUPLICATE_CHUNK_INTERFERENCE,
+    PDF_CHUNK_BOUNDARY_FAILURE, PDF_PAGE_LINEAGE_FAILURE, PDF_SELECTION_DROP,
+    PDF_CITATION_DROP, PDF_INSUFFICIENT_EVIDENCE_CORRECT, PDF_EXPECTED_GAP,
+    PDF_AMBIGUOUS_CASE, PDF_PACK_REGRESSION,
+)
+
+
+# -- eval case format ---------------------------------------------------------
+
+@dataclass(frozen=True)
+class PdfImportRetrievalCase:
+    """One imported-PDF retrieval probe: a query plus its full expectations.
+
+    A case declares what should be retrieved/selected/cited and what must never
+    be, across all three stages. Source tokens match on exact ``source_id`` or
+    case-insensitive substring of the source name (the same friendly convention
+    the rest of the harness uses). Chunk ids match after stripping a ``src:``
+    citation prefix.
+
+    * ``pack_id`` — the imported pack under evaluation (label only).
+    * ``expected_source_ids`` / ``expected_chunk_ids`` — what *should* surface.
+    * ``expected_page_ranges`` — ``[[start, end], ...]`` page ranges that the
+      expected content should carry through (page-lineage check).
+    * ``forbidden_source_ids`` / ``forbidden_chunk_ids`` — presence is bleed.
+    * ``expected_terms`` / ``forbidden_terms`` — on-topic / off-topic markers.
+    * ``expected_answer_mode`` — ``"grounded"`` or ``"refusal"`` (``""`` = any).
+    * ``expected_citation_source_ids`` / ``expected_citation_chunk_ids`` — what
+      the final answer should cite.
+    * ``pdf_only`` — the answer exists *only* in imported PDF content (drives the
+      newly-answerable comparison signal).
+    * ``unrelated`` — the answer must **not** use imported PDF content (isolation
+      probe); list the pack's source in ``forbidden_source_ids``.
+    * ``expected_gap`` — no source should support the query (insufficient but
+      correct).
+    * ``ambiguous`` — multiple sources legitimately compete (no single truth).
+    * ``minimum_hit_k`` — expected source/chunk must appear within this rank.
+    """
+
+    case_id: str
+    query: str
+    pack_id: str = ""
+    expected_source_ids: List[str] = field(default_factory=list)
+    expected_chunk_ids: List[str] = field(default_factory=list)
+    expected_page_ranges: List[List[int]] = field(default_factory=list)
+    forbidden_source_ids: List[str] = field(default_factory=list)
+    forbidden_chunk_ids: List[str] = field(default_factory=list)
+    expected_terms: List[str] = field(default_factory=list)
+    forbidden_terms: List[str] = field(default_factory=list)
+    expected_answer_mode: str = ""
+    expected_citation_source_ids: List[str] = field(default_factory=list)
+    expected_citation_chunk_ids: List[str] = field(default_factory=list)
+    pdf_only: bool = False
+    unrelated: bool = False
+    expected_gap: bool = False
+    ambiguous: bool = False
+    minimum_hit_k: int = 5
+    notes: str = ""
+    tags: List[str] = field(default_factory=list)
+
+    @property
+    def has_expected(self) -> bool:
+        """Whether the case declares any expected source or chunk id."""
+        return bool(self.expected_source_ids or self.expected_chunk_ids)
+
+    @property
+    def expects_pdf_content(self) -> bool:
+        """Whether a correct answer should be grounded in imported PDF content."""
+        return (self.has_expected and not self.unrelated
+                and not self.expected_gap)
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "PdfImportRetrievalCase":
+        return cls(
+            case_id=str(data["case_id"]),
+            query=str(data["query"]),
+            pack_id=str(data.get("pack_id", "")),
+            expected_source_ids=list(data.get("expected_source_ids") or []),
+            expected_chunk_ids=list(data.get("expected_chunk_ids") or []),
+            expected_page_ranges=[list(r) for r in
+                                  (data.get("expected_page_ranges") or [])],
+            forbidden_source_ids=list(data.get("forbidden_source_ids") or []),
+            forbidden_chunk_ids=list(data.get("forbidden_chunk_ids") or []),
+            expected_terms=list(data.get("expected_terms") or []),
+            forbidden_terms=list(data.get("forbidden_terms") or []),
+            expected_answer_mode=str(data.get("expected_answer_mode", "")),
+            expected_citation_source_ids=list(
+                data.get("expected_citation_source_ids") or []),
+            expected_citation_chunk_ids=list(
+                data.get("expected_citation_chunk_ids") or []),
+            pdf_only=bool(data.get("pdf_only", False)),
+            unrelated=bool(data.get("unrelated", False)),
+            expected_gap=bool(data.get("expected_gap", False)),
+            ambiguous=bool(data.get("ambiguous", False)),
+            minimum_hit_k=int(data.get("minimum_hit_k", 5)),
+            notes=str(data.get("notes", "")),
+            tags=list(data.get("tags") or []),
+        )
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+
+def load_pdf_import_cases(path: str | Path) -> List[PdfImportRetrievalCase]:
+    """Load imported-PDF eval cases from JSONL (``#`` lines are comments)."""
+    cases: List[PdfImportRetrievalCase] = []
+    for line in Path(path).read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        cases.append(PdfImportRetrievalCase.from_dict(json.loads(line)))
+    return cases
+
+
+# -- stage items / traces -----------------------------------------------------
+
+@dataclass(frozen=True)
+class PdfStageItem:
+    """One observed item at a stage, carrying every lineage signal available."""
+
+    stage: str
+    chunk_id: str
+    source_id: Optional[str] = None
+    source_name: Optional[str] = None
+    pack_id: Optional[str] = None
+    page_start: Optional[int] = None
+    page_end: Optional[int] = None
+    rank: Optional[int] = None
+    score: Optional[float] = None
+    selection_reason: str = ""
+    text: str = ""
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+
+@dataclass(frozen=True)
+class PdfStageTrace:
+    """The ordered items observed at one stage (raw / selected / final)."""
+
+    stage: str
+    items: List[PdfStageItem] = field(default_factory=list)
+
+    @property
+    def chunk_ids(self) -> List[str]:
+        return [it.chunk_id for it in self.items if it.chunk_id]
+
+    @property
+    def source_names(self) -> List[str]:
+        out: List[str] = []
+        for it in self.items:
+            name = it.source_name or ""
+            if name and name not in out:
+                out.append(name)
+        return out
+
+    def to_dict(self) -> dict:
+        return {"stage": self.stage,
+                "items": [it.to_dict() for it in self.items]}
+
+
+# -- metric blocks ------------------------------------------------------------
+
+@dataclass(frozen=True)
+class PdfRetrievalMetrics:
+    """Raw-retrieval quality metrics for one case (``None`` when undefined)."""
+
+    retrieved_chunk_count: int
+    hit_at_1: Optional[bool]
+    hit_at_3: Optional[bool]
+    hit_at_5: Optional[bool]
+    expected_source_recall: Optional[float]
+    expected_chunk_recall: Optional[float]
+    expected_page_recall: Optional[float]
+    wrong_source_rate: Optional[float]
+    forbidden_source_hit_count: int
+    forbidden_chunk_hit_count: int
+    off_topic_inclusion_rate: float
+    duplicate_chunk_rate: float
+    near_duplicate_chunk_rate: float
+    missing_expected_source_count: int
+    missing_expected_chunk_count: int
+    rank_of_first_expected_source: Optional[int]
+    rank_of_first_expected_chunk: Optional[int]
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+
+@dataclass(frozen=True)
+class PdfSelectedMetrics:
+    """Selected-evidence (post-relevance-gate) metrics for one case."""
+
+    selected_chunk_count: int
+    selected_expected_source_recall: Optional[float]
+    selected_expected_chunk_recall: Optional[float]
+    selected_wrong_source_rate: Optional[float]
+    selected_forbidden_source_count: int
+    selected_off_topic_inclusion_rate: float
+    selected_page_lineage_accuracy: Optional[float]
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+
+@dataclass(frozen=True)
+class PdfCitationMetrics:
+    """Final report/chat citation metrics for one case."""
+
+    cited_chunk_count: int
+    cited_expected_source_recall: Optional[float]
+    cited_expected_chunk_recall: Optional[float]
+    cited_wrong_source_rate: Optional[float]
+    cited_forbidden_source_count: int
+    citation_page_lineage_accuracy: Optional[float]
+    uncited_factual_claim_count: int
+    unsupported_citation_count: int
+    citation_set_matches_selected_evidence: bool
+    final_answer_grounded: bool
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+
+@dataclass(frozen=True)
+class PdfImportCaseResult:
+    """The full three-stage outcome for one imported-PDF eval case."""
+
+    case_id: str
+    query: str
+    pack_id: str
+    passed: bool
+    reasons: List[str]
+    classification: str
+    answer_mode: str
+    refused: bool
+    raw: PdfStageTrace
+    selected: PdfStageTrace
+    final: PdfStageTrace
+    retrieval: PdfRetrievalMetrics
+    selected_metrics: PdfSelectedMetrics
+    citation: PdfCitationMetrics
+    tags: List[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict:
+        return {
+            "case_id": self.case_id,
+            "query": self.query,
+            "pack_id": self.pack_id,
+            "passed": self.passed,
+            "reasons": list(self.reasons),
+            "classification": self.classification,
+            "answer_mode": self.answer_mode,
+            "refused": self.refused,
+            "raw": self.raw.to_dict(),
+            "selected": self.selected.to_dict(),
+            "final": self.final.to_dict(),
+            "retrieval": self.retrieval.to_dict(),
+            "selected_metrics": self.selected_metrics.to_dict(),
+            "citation": self.citation.to_dict(),
+            "tags": list(self.tags),
+        }
+
+
+@dataclass(frozen=True)
+class PdfImportEvalSummary:
+    """Aggregate tallies across all imported-PDF eval cases."""
+
+    case_count: int
+    pass_count: int
+    fail_count: int
+    forbidden_source_hit_total: int
+    forbidden_chunk_hit_total: int
+    cited_forbidden_source_total: int
+    uncited_factual_claim_total: int
+    unsupported_citation_total: int
+    expected_source_recall: Optional[float]
+    expected_chunk_recall: Optional[float]
+    expected_page_recall: Optional[float]
+    cited_expected_source_recall: Optional[float]
+    classification_counts: Dict[str, int]
+    forbidden_bleed_reproduced: bool
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+
+@dataclass(frozen=True)
+class PdfImportComparison:
+    """Pure baseline-vs-pack diff across the same cases (no re-run)."""
+
+    case_count: int
+    cases_improved: int
+    cases_unchanged: int
+    cases_regressed: int
+    new_wrong_source_hits: int
+    new_forbidden_source_hits: int
+    newly_answerable_cases: int
+    unrelated_cases_affected: int
+    improved_case_ids: List[str]
+    regressed_case_ids: List[str]
+    unrelated_affected_case_ids: List[str]
+
+    @property
+    def pack_helps(self) -> bool:
+        """Whether the pack improved at least one case and regressed none."""
+        return self.cases_improved > 0 and self.cases_regressed == 0
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+
+# -- helpers ------------------------------------------------------------------
+
+def _parse_pages(section: Optional[str]) -> Tuple[Optional[int], Optional[int]]:
+    """Parse a candidate ``section`` into a (page_start, page_end) pair.
+
+    Understands the importer's two forms: ``"page N"`` -> ``(N, N)`` and
+    ``"pages N-M"`` -> ``(N, M)``. Anything else yields ``(None, None)``.
+    """
+    if not section:
+        return (None, None)
+    nums = [int(n) for n in re.findall(r"\d+", section)]
+    if not nums:
+        return (None, None)
+    if len(nums) == 1:
+        return (nums[0], nums[0])
+    return (nums[0], nums[1])
+
+
+def _tokens(text: str) -> set:
+    return {t for t in re.findall(r"[a-z0-9]+", (text or "").lower()) if t}
+
+
+def _jaccard(a: str, b: str) -> float:
+    ta, tb = _tokens(a), _tokens(b)
+    if not ta or not tb:
+        return 0.0
+    inter = len(ta & tb)
+    union = len(ta | tb)
+    return inter / union if union else 0.0
+
+
+def _pdf_source_token_matches(token: str, source_id: Optional[str],
+                              source_name: Optional[str]) -> bool:
+    """Whether a source token matches a (source_id, source_name) pair."""
+    if not token:
+        return False
+    if source_id and token == source_id:
+        return True
+    name = (source_name or "").lower()
+    return bool(name) and token.lower() in name
+
+
+def _item_matches_any_source(item: PdfStageItem, tokens: List[str]) -> bool:
+    return any(_pdf_source_token_matches(tok, item.source_id, item.source_name)
+               for tok in tokens)
+
+
+def _pages_overlap(a: Tuple[Optional[int], Optional[int]],
+                   rng: List[int]) -> bool:
+    """Whether item pages ``a`` overlap an expected ``[start, end]`` range."""
+    ps, pe = a
+    if ps is None or pe is None or len(rng) < 2:
+        return False
+    return ps <= rng[1] and rng[0] <= pe
+
+
+def _recall(expected: List[str], hit_fn) -> Optional[float]:
+    """Fraction of ``expected`` tokens satisfied by ``hit_fn(token)``."""
+    if not expected:
+        return None
+    hits = sum(1 for tok in expected if hit_fn(tok))
+    return hits / len(expected)
+
+
+# -- stage construction (read-only) -------------------------------------------
+
+def _pdf_raw_items(candidates: List[dict],
+                   pack_label: str) -> List[PdfStageItem]:
+    """Build raw-stage items from ``query_knowledge`` candidate dicts."""
+    items: List[PdfStageItem] = []
+    for cand in candidates:
+        ps, pe = _parse_pages(cand.get("section"))
+        items.append(PdfStageItem(
+            stage="raw",
+            chunk_id=_norm_chunk_id(str(cand.get("chunk_id") or "")),
+            source_id=str(cand.get("source_id") or "") or None,
+            source_name=cand.get("source_name"),
+            pack_id=pack_label or None,
+            page_start=ps,
+            page_end=pe,
+            rank=cand.get("rank"),
+            score=cand.get("activation"),
+            selection_reason="retrieved",
+            text=cand.get("text", "") or "",
+        ))
+    return items
+
+
+def _lineage_map(raw_items: List[PdfStageItem]) -> Dict[str, PdfStageItem]:
+    """Map chunk_id -> raw item so later stages can recover source/page lineage."""
+    out: Dict[str, PdfStageItem] = {}
+    for it in raw_items:
+        if it.chunk_id and it.chunk_id not in out:
+            out[it.chunk_id] = it
+    return out
+
+
+def _pdf_selected_items(evidence, lineage: Dict[str, PdfStageItem],
+                        pack_label: str) -> List[PdfStageItem]:
+    """Build selected-stage items from grounding-package evidence."""
+    items: List[PdfStageItem] = []
+    for ev in evidence:
+        if getattr(ev, "kind", "") != "knowledge":
+            continue
+        chunk_id = _norm_chunk_id(str(getattr(ev, "citation_id", "") or ""))
+        src = lineage.get(chunk_id)
+        items.append(PdfStageItem(
+            stage="selected",
+            chunk_id=chunk_id,
+            source_id=(src.source_id if src else None),
+            source_name=getattr(ev, "source_name", None)
+            or (src.source_name if src else None),
+            pack_id=pack_label or None,
+            page_start=(src.page_start if src else None),
+            page_end=(src.page_end if src else None),
+            rank=(src.rank if src else None),
+            score=(src.score if src else None),
+            selection_reason="passed_relevance_gate",
+            text=getattr(ev, "text", "") or "",
+        ))
+    return items
+
+
+def _pdf_final_items(spans, lineage: Dict[str, PdfStageItem],
+                     pack_label: str) -> List[PdfStageItem]:
+    """Build final-stage items from composed report spans."""
+    items: List[PdfStageItem] = []
+    for span in spans:
+        citation = str(getattr(span, "citation_id", "") or "")
+        chunk_id = _norm_chunk_id(citation)
+        src = lineage.get(chunk_id)
+        items.append(PdfStageItem(
+            stage="final",
+            chunk_id=chunk_id,
+            source_id=(src.source_id if src else None),
+            source_name=getattr(span, "source_name", None)
+            or (src.source_name if src else None),
+            pack_id=pack_label or None,
+            page_start=(src.page_start if src else None),
+            page_end=(src.page_end if src else None),
+            rank=(src.rank if src else None),
+            score=(src.score if src else None),
+            selection_reason="cited" if citation else "uncited_claim",
+            text=getattr(span, "text", "") or "",
+        ))
+    return items
+
+
+# -- metric computation -------------------------------------------------------
+
+def _pdf_retrieval_metrics(case: PdfImportRetrievalCase,
+                           items: List[PdfStageItem]) -> PdfRetrievalMetrics:
+    norm_expected_chunks = {_norm_chunk_id(c) for c in case.expected_chunk_ids}
+    norm_forbidden_chunks = {_norm_chunk_id(c) for c in case.forbidden_chunk_ids}
+
+    # First-hit ranks.
+    first_src_rank: Optional[int] = None
+    first_chunk_rank: Optional[int] = None
+    for it in items:
+        if (first_src_rank is None
+                and _item_matches_any_source(it, case.expected_source_ids)):
+            first_src_rank = it.rank
+        if (first_chunk_rank is None and it.chunk_id in norm_expected_chunks):
+            first_chunk_rank = it.rank
+
+    def _hit_at(k: int) -> Optional[bool]:
+        if not case.expected_source_ids:
+            return None
+        return first_src_rank is not None and first_src_rank <= k
+
+    src_recall = _recall(
+        case.expected_source_ids,
+        lambda tok: any(_pdf_source_token_matches(
+            tok, it.source_id, it.source_name) for it in items))
+    chunk_recall = _recall(
+        case.expected_chunk_ids,
+        lambda tok: _norm_chunk_id(tok) in {it.chunk_id for it in items})
+    page_recall: Optional[float]
+    if case.expected_page_ranges:
+        covered = sum(1 for rng in case.expected_page_ranges
+                      if any(_pages_overlap((it.page_start, it.page_end), rng)
+                             for it in items))
+        page_recall = covered / len(case.expected_page_ranges)
+    else:
+        page_recall = None
+
+    forbidden_src = sum(
+        1 for it in items
+        if _item_matches_any_source(it, case.forbidden_source_ids))
+    forbidden_chunk = sum(1 for it in items
+                          if it.chunk_id in norm_forbidden_chunks)
+
+    # Wrong-source rate: retrieved items whose source is neither expected nor an
+    # allowed on-topic case (ambiguous cases tolerate competing sources).
+    wrong_rate: Optional[float]
+    if items and case.expected_source_ids and not case.ambiguous:
+        wrong = sum(1 for it in items
+                    if not _item_matches_any_source(
+                        it, case.expected_source_ids))
+        wrong_rate = wrong / len(items)
+    else:
+        wrong_rate = None
+
+    if case.forbidden_terms and items:
+        off = sum(1 for it in items
+                  if any(term.lower() in (it.text or "").lower()
+                         for term in case.forbidden_terms))
+        off_rate = off / len(items)
+    else:
+        off_rate = 0.0
+
+    # Duplicate / near-duplicate detection over retrieved chunk text.
+    dup = 0
+    near = 0
+    seen_text: List[str] = []
+    for it in items:
+        is_dup = any(it.text == prev for prev in seen_text)
+        if is_dup:
+            dup += 1
+        elif any(_jaccard(it.text, prev) >= _NEAR_DUP_JACCARD
+                 for prev in seen_text):
+            near += 1
+        seen_text.append(it.text)
+    n = len(items)
+
+    missing_src = sum(
+        1 for tok in case.expected_source_ids
+        if not any(_pdf_source_token_matches(tok, it.source_id, it.source_name)
+                   for it in items))
+    missing_chunk = sum(
+        1 for c in norm_expected_chunks
+        if c not in {it.chunk_id for it in items})
+
+    return PdfRetrievalMetrics(
+        retrieved_chunk_count=n,
+        hit_at_1=_hit_at(1),
+        hit_at_3=_hit_at(3),
+        hit_at_5=_hit_at(5),
+        expected_source_recall=src_recall,
+        expected_chunk_recall=chunk_recall,
+        expected_page_recall=page_recall,
+        wrong_source_rate=wrong_rate,
+        forbidden_source_hit_count=forbidden_src,
+        forbidden_chunk_hit_count=forbidden_chunk,
+        off_topic_inclusion_rate=off_rate,
+        duplicate_chunk_rate=(dup / n if n else 0.0),
+        near_duplicate_chunk_rate=(near / n if n else 0.0),
+        missing_expected_source_count=missing_src,
+        missing_expected_chunk_count=missing_chunk,
+        rank_of_first_expected_source=first_src_rank,
+        rank_of_first_expected_chunk=first_chunk_rank,
+    )
+
+
+def _pdf_selected_metrics(case: PdfImportRetrievalCase,
+                          items: List[PdfStageItem]) -> PdfSelectedMetrics:
+    norm_expected_chunks = {_norm_chunk_id(c) for c in case.expected_chunk_ids}
+    src_recall = _recall(
+        case.expected_source_ids,
+        lambda tok: any(_pdf_source_token_matches(
+            tok, it.source_id, it.source_name) for it in items))
+    chunk_recall = _recall(
+        case.expected_chunk_ids,
+        lambda tok: _norm_chunk_id(tok) in {it.chunk_id for it in items})
+    forbidden_src = sum(
+        1 for it in items
+        if _item_matches_any_source(it, case.forbidden_source_ids))
+    if items and case.expected_source_ids and not case.ambiguous:
+        wrong = sum(1 for it in items
+                    if not _item_matches_any_source(
+                        it, case.expected_source_ids))
+        wrong_rate: Optional[float] = wrong / len(items)
+    else:
+        wrong_rate = None
+    if case.forbidden_terms and items:
+        off = sum(1 for it in items
+                  if any(term.lower() in (it.text or "").lower()
+                         for term in case.forbidden_terms))
+        off_rate = off / len(items)
+    else:
+        off_rate = 0.0
+
+    # Page-lineage accuracy over selected items that match an expected chunk.
+    page_acc: Optional[float]
+    if case.expected_page_ranges and norm_expected_chunks:
+        matched = [it for it in items if it.chunk_id in norm_expected_chunks]
+        if matched:
+            ok = sum(1 for it in matched
+                     if any(_pages_overlap((it.page_start, it.page_end), rng)
+                            for rng in case.expected_page_ranges))
+            page_acc = ok / len(matched)
+        else:
+            page_acc = None
+    else:
+        page_acc = None
+
+    return PdfSelectedMetrics(
+        selected_chunk_count=len(items),
+        selected_expected_source_recall=src_recall,
+        selected_expected_chunk_recall=chunk_recall,
+        selected_wrong_source_rate=wrong_rate,
+        selected_forbidden_source_count=forbidden_src,
+        selected_off_topic_inclusion_rate=off_rate,
+        selected_page_lineage_accuracy=page_acc,
+    )
+
+
+def _pdf_citation_metrics(case: PdfImportRetrievalCase,
+                          final_items: List[PdfStageItem],
+                          selected_items: List[PdfStageItem],
+                          answer) -> PdfCitationMetrics:
+    cited = [it for it in final_items if it.selection_reason == "cited"]
+    expected_cite_sources = (case.expected_citation_source_ids
+                             or case.expected_source_ids)
+    expected_cite_chunks = (case.expected_citation_chunk_ids
+                            or case.expected_chunk_ids)
+    src_recall = _recall(
+        expected_cite_sources,
+        lambda tok: any(_pdf_source_token_matches(
+            tok, it.source_id, it.source_name) for it in cited))
+    chunk_recall = _recall(
+        expected_cite_chunks,
+        lambda tok: _norm_chunk_id(tok) in {it.chunk_id for it in cited})
+    forbidden_src = sum(
+        1 for it in cited
+        if _item_matches_any_source(it, case.forbidden_source_ids))
+    if cited and case.expected_source_ids and not case.ambiguous:
+        wrong = sum(1 for it in cited
+                    if not _item_matches_any_source(
+                        it, case.expected_source_ids))
+        wrong_rate: Optional[float] = wrong / len(cited)
+    else:
+        wrong_rate = None
+
+    norm_expected_chunks = {_norm_chunk_id(c) for c in expected_cite_chunks}
+    page_acc: Optional[float]
+    if case.expected_page_ranges and norm_expected_chunks:
+        matched = [it for it in cited if it.chunk_id in norm_expected_chunks]
+        if matched:
+            ok = sum(1 for it in matched
+                     if any(_pages_overlap((it.page_start, it.page_end), rng)
+                            for rng in case.expected_page_ranges))
+            page_acc = ok / len(matched)
+        else:
+            page_acc = None
+    else:
+        page_acc = None
+
+    uncited_claims = sum(
+        1 for it in final_items
+        if it.selection_reason == "uncited_claim" and (it.text or "").strip())
+
+    selected_chunk_set = {it.chunk_id for it in selected_items}
+    citation_chunk_set = {it.chunk_id for it in cited if it.chunk_id}
+    unsupported = sum(1 for cid in citation_chunk_set
+                      if cid not in selected_chunk_set)
+    citation_matches = citation_chunk_set.issubset(selected_chunk_set)
+
+    refused = bool(getattr(answer, "refused", False))
+    grounded = (not refused) and bool(getattr(answer, "citations", None))
+
+    return PdfCitationMetrics(
+        cited_chunk_count=len(cited),
+        cited_expected_source_recall=src_recall,
+        cited_expected_chunk_recall=chunk_recall,
+        cited_wrong_source_rate=wrong_rate,
+        cited_forbidden_source_count=forbidden_src,
+        citation_page_lineage_accuracy=page_acc,
+        uncited_factual_claim_count=uncited_claims,
+        unsupported_citation_count=unsupported,
+        citation_set_matches_selected_evidence=citation_matches,
+        final_answer_grounded=grounded,
+    )
+
+
+# -- verdict + classification -------------------------------------------------
+
+def pdf_case_verdict(case: PdfImportRetrievalCase,
+                     retr: PdfRetrievalMetrics,
+                     sel: PdfSelectedMetrics,
+                     cit: PdfCitationMetrics) -> Tuple[bool, List[str]]:
+    """Deterministic pass/fail with human-readable reasons.
+
+    Hard gates (any failure fails the case): no forbidden source/chunk in the
+    *selected evidence* or *final citations*, no uncited factual claims, no
+    unsupported citations, citations are a subset of selected evidence.
+    Expected-content cases must also retrieve their expected source within
+    ``minimum_hit_k`` and recall it fully; gap/unrelated cases must stay
+    ungrounded.
+
+    Raw retrieval is deliberately *not* gated on forbidden presence: the
+    retrieval backends apply no score threshold and always return the top-k
+    candidates, so a forbidden/unrelated source in the same corpus is expected
+    to appear at the raw stage. Isolation is therefore measured where the system
+    can actually enforce it — the relevance-gated selected stage and the cited
+    answer. Raw forbidden presence is still recorded (and drives the
+    wrong-source classification of *failing* expected-content cases).
+    """
+    reasons: List[str] = []
+
+    if sel.selected_forbidden_source_count:
+        reasons.append("selected evidence included a forbidden source")
+    if cit.cited_forbidden_source_count:
+        reasons.append("final answer cited a forbidden source")
+    if cit.uncited_factual_claim_count:
+        reasons.append("final answer made an uncited factual claim")
+    if cit.unsupported_citation_count:
+        reasons.append("final answer cited evidence not in selected set")
+    if not cit.citation_set_matches_selected_evidence:
+        reasons.append("citation set is not a subset of selected evidence")
+
+    if case.expects_pdf_content:
+        if (retr.expected_source_recall is None
+                or retr.expected_source_recall < MIN_EXPECTED_SOURCE_RECALL):
+            reasons.append("expected source was not fully retrieved")
+        if (retr.rank_of_first_expected_source is None
+                or retr.rank_of_first_expected_source > case.minimum_hit_k):
+            reasons.append(
+                f"expected source not within top-{case.minimum_hit_k}")
+        if case.expected_chunk_ids and (retr.expected_chunk_recall or 0.0) <= 0:
+            reasons.append("expected chunk was not retrieved")
+        if (case.expected_page_ranges
+                and (retr.expected_page_recall or 0.0) < 1.0):
+            reasons.append("expected page lineage not preserved in retrieval")
+        if case.expected_citation_chunk_ids and (
+                cit.cited_expected_chunk_recall or 0.0) <= 0:
+            reasons.append("expected chunk was not cited")
+    elif case.expected_gap:
+        if cit.final_answer_grounded:
+            reasons.append("gap case produced a grounded answer")
+    elif case.unrelated:
+        if sel.selected_chunk_count:
+            reasons.append("unrelated query selected imported PDF evidence")
+
+    return (not reasons, reasons)
+
+
+def classify_pdf_case(case: PdfImportRetrievalCase,
+                      retr: PdfRetrievalMetrics,
+                      sel: PdfSelectedMetrics,
+                      cit: PdfCitationMetrics,
+                      passed: bool) -> str:
+    """Assign one diagnostic classification (priority cascade)."""
+    if case.expected_gap:
+        return (PDF_INSUFFICIENT_EVIDENCE_CORRECT if passed
+                else PDF_EXPECTED_GAP)
+    if case.unrelated:
+        if sel.selected_chunk_count or cit.cited_chunk_count:
+            return PDF_OFF_TOPIC_NEIGHBOUR
+        return PDF_NO_FAILURE
+    if passed:
+        return PDF_NO_FAILURE
+
+    # Failing expected-content cases: localise the first broken stage.
+    if (retr.forbidden_source_hit_count or sel.selected_forbidden_source_count
+            or cit.cited_forbidden_source_count):
+        return PDF_WRONG_SOURCE_RANKED
+    if case.ambiguous:
+        return PDF_AMBIGUOUS_CASE
+    if case.expects_pdf_content:
+        if retr.rank_of_first_expected_source is None:
+            return PDF_RETRIEVAL_MISS
+        if retr.rank_of_first_expected_source > case.minimum_hit_k:
+            return PDF_EXPECTED_SOURCE_LOW_RANK
+        if case.expected_chunk_ids and (retr.expected_chunk_recall or 0.0) <= 0:
+            if retr.near_duplicate_chunk_rate or retr.duplicate_chunk_rate:
+                return PDF_DUPLICATE_CHUNK_INTERFERENCE
+            return PDF_EXPECTED_CHUNK_LOW_RANK
+        if (case.expected_page_ranges
+                and (retr.expected_page_recall or 0.0) < 1.0):
+            return PDF_CHUNK_BOUNDARY_FAILURE
+        if (sel.selected_expected_source_recall is not None
+                and sel.selected_expected_source_recall <= 0):
+            return PDF_SELECTION_DROP
+        if (cit.cited_expected_source_recall is not None
+                and cit.cited_expected_source_recall <= 0):
+            return PDF_CITATION_DROP
+        if (sel.selected_page_lineage_accuracy is not None
+                and sel.selected_page_lineage_accuracy < 1.0) or (
+                cit.citation_page_lineage_accuracy is not None
+                and cit.citation_page_lineage_accuracy < 1.0):
+            return PDF_PAGE_LINEAGE_FAILURE
+    if retr.off_topic_inclusion_rate > 0:
+        return PDF_OFF_TOPIC_NEIGHBOUR
+    return PDF_WRONG_SOURCE_RANKED
+
+
+# -- per-case evaluation (read-only) ------------------------------------------
+
+def evaluate_pdf_import_case(service: WorkbenchService,
+                             case: PdfImportRetrievalCase, *,
+                             pack_label: str = "") -> PdfImportCaseResult:
+    """Trace one case through raw -> selected -> final and score it.
+
+    Read-only: three reads of the frozen path (``query_knowledge``,
+    ``build_grounding_package``, ``answer_query`` with the consultant report
+    composer), then pure measurement. Nothing is mutated.
+    """
+    # Lazy import mirrors :func:`probe_case`: the composer dependency stays out
+    # of module import so the harness imports nothing that can compose or write.
+    from slm.assistant_composer import ConsultantReportComposer
+
+    label = pack_label or case.pack_id
+
+    # STAGE 1 — raw retrieved candidates.
+    audit = service.query_knowledge(case.query)
+    raw_items = _pdf_raw_items(list(audit.candidates), label)
+    lineage = _lineage_map(raw_items)
+
+    # STAGE 2 — evidence selected past the relevance/sufficiency gate.
+    package = service.build_grounding_package(case.query)
+    selected_items = _pdf_selected_items(package.evidence, lineage, label)
+
+    # STAGE 3 — final cited report spans.
+    result = service.answer_query(
+        case.query, composer=ConsultantReportComposer())
+    final_items = _pdf_final_items(result.answer.spans, lineage, label)
+
+    retr = _pdf_retrieval_metrics(case, raw_items)
+    sel = _pdf_selected_metrics(case, selected_items)
+    cit = _pdf_citation_metrics(case, final_items, selected_items, result.answer)
+
+    passed, reasons = pdf_case_verdict(case, retr, sel, cit)
+    classification = classify_pdf_case(case, retr, sel, cit, passed)
+
+    return PdfImportCaseResult(
+        case_id=case.case_id or case.query[:40],
+        query=case.query,
+        pack_id=label,
+        passed=passed,
+        reasons=reasons,
+        classification=classification,
+        answer_mode=result.answer.mode.value,
+        refused=bool(result.refused),
+        raw=PdfStageTrace("raw", raw_items),
+        selected=PdfStageTrace("selected", selected_items),
+        final=PdfStageTrace("final", final_items),
+        retrieval=retr,
+        selected_metrics=sel,
+        citation=cit,
+        tags=list(case.tags),
+    )
+
+
+def run_pdf_import_eval(service: WorkbenchService,
+                        cases: List[PdfImportRetrievalCase], *,
+                        pack_label: str = "") -> List[PdfImportCaseResult]:
+    """Evaluate every case against ``service`` (read-only)."""
+    return [evaluate_pdf_import_case(service, c, pack_label=pack_label)
+            for c in cases]
+
+
+def summarize_pdf_import_eval(
+        results: List[PdfImportCaseResult]) -> PdfImportEvalSummary:
+    """Aggregate per-case results into imported-PDF eval tallies."""
+    counts = {name: 0 for name in PDF_FAILURE_CLASSES}
+    for r in results:
+        counts[r.classification] = counts.get(r.classification, 0) + 1
+
+    src_recall = _mean([r.retrieval.expected_source_recall for r in results
+                        if r.retrieval.expected_source_recall is not None])
+    chunk_recall = _mean([r.retrieval.expected_chunk_recall for r in results
+                          if r.retrieval.expected_chunk_recall is not None])
+    page_recall = _mean([r.retrieval.expected_page_recall for r in results
+                         if r.retrieval.expected_page_recall is not None])
+    cite_recall = _mean(
+        [r.citation.cited_expected_source_recall for r in results
+         if r.citation.cited_expected_source_recall is not None])
+
+    forbidden_total = sum(r.retrieval.forbidden_source_hit_count
+                          for r in results)
+    return PdfImportEvalSummary(
+        case_count=len(results),
+        pass_count=sum(1 for r in results if r.passed),
+        fail_count=sum(1 for r in results if not r.passed),
+        forbidden_source_hit_total=forbidden_total,
+        forbidden_chunk_hit_total=sum(
+            r.retrieval.forbidden_chunk_hit_count for r in results),
+        cited_forbidden_source_total=sum(
+            r.citation.cited_forbidden_source_count for r in results),
+        uncited_factual_claim_total=sum(
+            r.citation.uncited_factual_claim_count for r in results),
+        unsupported_citation_total=sum(
+            r.citation.unsupported_citation_count for r in results),
+        expected_source_recall=src_recall,
+        expected_chunk_recall=chunk_recall,
+        expected_page_recall=page_recall,
+        cited_expected_source_recall=cite_recall,
+        classification_counts=counts,
+        forbidden_bleed_reproduced=any(
+            r.selected_metrics.selected_forbidden_source_count
+            or r.citation.cited_forbidden_source_count
+            for r in results),
+    )
+
+
+# -- baseline-vs-pack comparison (pure) ---------------------------------------
+
+def _case_signature(r: PdfImportCaseResult) -> dict:
+    """A small comparable signature of one case outcome."""
+    return {
+        "expected_source_hit": bool(r.retrieval.hit_at_5),
+        "grounded": r.citation.final_answer_grounded,
+        "forbidden": (r.retrieval.forbidden_source_hit_count
+                      + r.citation.cited_forbidden_source_count),
+        "wrong": (r.retrieval.wrong_source_rate or 0.0),
+        "cited_expected": (r.citation.cited_expected_source_recall or 0.0),
+    }
+
+
+def compare_pdf_import_eval(
+        baseline: List[PdfImportCaseResult],
+        with_pack: List[PdfImportCaseResult]) -> PdfImportComparison:
+    """Diff two result sets (same cases, with vs without the pack).
+
+    Pure: it re-runs nothing. Cases are matched by ``case_id``; a case present
+    in only one set is ignored (the caller is expected to run identical cases).
+    """
+    base_by_id = {r.case_id: r for r in baseline}
+    improved: List[str] = []
+    regressed: List[str] = []
+    unrelated_affected: List[str] = []
+    unchanged = 0
+    new_wrong = 0
+    new_forbidden = 0
+    newly_answerable = 0
+
+    for wp in with_pack:
+        base = base_by_id.get(wp.case_id)
+        if base is None:
+            continue
+        b = _case_signature(base)
+        w = _case_signature(wp)
+
+        if w["forbidden"] > b["forbidden"]:
+            new_forbidden += 1
+        if w["wrong"] > b["wrong"] + 1e-9:
+            new_wrong += 1
+
+        # Unrelated cases must be unaffected by enabling the pack.
+        is_unrelated = "unrelated" in wp.tags
+        if is_unrelated and (
+                wp.selected.chunk_ids or wp.final.chunk_ids):
+            unrelated_affected.append(wp.case_id)
+
+        gained = (
+            (not b["expected_source_hit"] and w["expected_source_hit"])
+            or (not b["grounded"] and w["grounded"])
+            or (w["cited_expected"] > b["cited_expected"] + 1e-9))
+        lost = (
+            (b["expected_source_hit"] and not w["expected_source_hit"])
+            or (b["grounded"] and not w["grounded"])
+            or (w["forbidden"] > b["forbidden"])
+            or (w["wrong"] > b["wrong"] + 1e-9))
+
+        if not b["grounded"] and w["grounded"]:
+            newly_answerable += 1
+
+        if lost:
+            regressed.append(wp.case_id)
+        elif gained:
+            improved.append(wp.case_id)
+        else:
+            unchanged += 1
+
+    return PdfImportComparison(
+        case_count=len(with_pack),
+        cases_improved=len(improved),
+        cases_unchanged=unchanged,
+        cases_regressed=len(regressed),
+        new_wrong_source_hits=new_wrong,
+        new_forbidden_source_hits=new_forbidden,
+        newly_answerable_cases=newly_answerable,
+        unrelated_cases_affected=len(unrelated_affected),
+        improved_case_ids=improved,
+        regressed_case_ids=regressed,
+        unrelated_affected_case_ids=unrelated_affected,
+    )
+
+
+# -- rendering / writing ------------------------------------------------------
+
+def render_pdf_import_markdown(
+        results: List[PdfImportCaseResult],
+        summary: PdfImportEvalSummary, *,
+        pack_label: str, backend_label: str,
+        comparison: Optional[PdfImportComparison] = None) -> str:
+    """Render the imported-PDF retrieval evaluation as Markdown (no side effects)."""
+    lines: List[str] = []
+    lines.append(f"# Imported PDF retrieval evaluation — {pack_label} "
+                 f"({backend_label})")
+    lines.append("")
+    lines.append("Read-only, three-stage trace (raw retrieval -> selected "
+                 "evidence -> final citations) of an approved imported PDF "
+                 "pack. Changes no retrieval/ranking/chunking/grounding/"
+                 "composer/memory behaviour. Recommendations are diagnostic "
+                 "only.")
+    lines.append("")
+    lines.append("## Summary")
+    lines.append("")
+    lines.append(f"- cases: {summary.case_count} "
+                 f"(pass {summary.pass_count} / fail {summary.fail_count})")
+    if summary.forbidden_bleed_reproduced:
+        lines.append("- **forbidden bleed reproduced**: yes")
+    else:
+        lines.append("- **forbidden bleed reproduced**: no — zero forbidden "
+                     "sources/chunks at raw, selected, or cited stages")
+    lines.append(f"- expected-source recall: "
+                 f"{_fmt_opt(summary.expected_source_recall)} | "
+                 f"expected-chunk recall: "
+                 f"{_fmt_opt(summary.expected_chunk_recall)} | "
+                 f"expected-page recall: "
+                 f"{_fmt_opt(summary.expected_page_recall)}")
+    lines.append(f"- cited expected-source recall: "
+                 f"{_fmt_opt(summary.cited_expected_source_recall)}")
+    lines.append(f"- uncited factual claims: "
+                 f"{summary.uncited_factual_claim_total} | "
+                 f"unsupported citations: "
+                 f"{summary.unsupported_citation_total}")
+    lines.append("")
+    if comparison is not None:
+        lines.append("## Baseline vs pack")
+        lines.append("")
+        lines.append(f"- improved: {comparison.cases_improved} | "
+                     f"unchanged: {comparison.cases_unchanged} | "
+                     f"regressed: {comparison.cases_regressed}")
+        lines.append(f"- newly answerable: "
+                     f"{comparison.newly_answerable_cases}")
+        lines.append(f"- new wrong-source hits: "
+                     f"{comparison.new_wrong_source_hits} | "
+                     f"new forbidden-source hits: "
+                     f"{comparison.new_forbidden_source_hits}")
+        lines.append(f"- unrelated cases affected: "
+                     f"{comparison.unrelated_cases_affected}")
+        lines.append("")
+    lines.append("## Cases")
+    lines.append("")
+    lines.append("| case | result | classification | hit@5 | src/chunk/page "
+                 "recall | sel | cited | fbd | mode |")
+    lines.append("|---|---|---|---|---|---|---|---|---|")
+    for r in results:
+        verdict = "PASS" if r.passed else "FAIL"
+        hit5 = "—" if r.retrieval.hit_at_5 is None else (
+            "y" if r.retrieval.hit_at_5 else "n")
+        recall = (f"{_fmt_opt(r.retrieval.expected_source_recall)}/"
+                  f"{_fmt_opt(r.retrieval.expected_chunk_recall)}/"
+                  f"{_fmt_opt(r.retrieval.expected_page_recall)}")
+        fbd = (r.retrieval.forbidden_source_hit_count
+               + r.citation.cited_forbidden_source_count)
+        lines.append(
+            f"| {r.case_id} | {verdict} | {r.classification} | {hit5} | "
+            f"{recall} | {r.selected_metrics.selected_chunk_count} | "
+            f"{r.citation.cited_chunk_count} | {fbd} | {r.answer_mode} |")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def write_pdf_import_reports(
+        results: List[PdfImportCaseResult],
+        summary: PdfImportEvalSummary, *,
+        md_path: str | Path, jsonl_path: str | Path,
+        pack_label: str, backend_label: str,
+        comparison: Optional[PdfImportComparison] = None) -> None:
+    """Write the imported-PDF eval Markdown and JSONL reports (only when asked)."""
+    md_path = Path(md_path)
+    jsonl_path = Path(jsonl_path)
+    md_path.parent.mkdir(parents=True, exist_ok=True)
+    jsonl_path.parent.mkdir(parents=True, exist_ok=True)
+    md_path.write_text(
+        render_pdf_import_markdown(
+            results, summary, pack_label=pack_label,
+            backend_label=backend_label, comparison=comparison),
+        encoding="utf-8")
+    with jsonl_path.open("w", encoding="utf-8") as handle:
+        payload = {"summary": summary.to_dict()}
+        if comparison is not None:
+            payload["comparison"] = comparison.to_dict()
+        handle.write(json.dumps(payload) + "\n")
         for r in results:
             handle.write(json.dumps(r.to_dict()) + "\n")

@@ -3036,6 +3036,119 @@ call. To roll back an import, delete the created pack directory — because the
 importer touches nothing else, removal is complete and local. The next planned
 slice is **Imported PDF Retrieval Evaluation**.
 
+## v6.7 Imported PDF Retrieval Evaluation (read-only; measures, never tunes)
+
+An approved PDF import (v6.6) writes pack files, but writing a pack is not the
+same as trusting it. Before imported PDF content is allowed to influence
+answers, v6.7 asks a measurement-only question: **does enabling this pack
+actually improve retrieval, source selection, and final citations — without
+introducing wrong-source bleed, off-topic inclusion, citation drift, or a
+regression against the baseline?** The harness only measures; it changes no
+retrieval, ranking, chunking, grounding, composer, or chat-routing behaviour.
+
+### Three-stage trace
+
+Every eval case is traced through the frozen read path and scored at each stage:
+
+1. **Raw retrieval** — the `query_knowledge` candidates. The retrieval backends
+   apply no score threshold and always return the top-k, so an unrelated source
+   in the same corpus is *expected* to appear here. Raw presence is therefore
+   measured, not gated.
+2. **Selected evidence** — what survives the relevance/sufficiency gate in
+   `build_grounding_package`. This is the first stage the system can actually
+   keep a source *out*, so isolation is enforced here.
+3. **Final citations** — the cited spans of the composed consultant report.
+   Citation drift, uncited factual claims, and unsupported citations are caught
+   here.
+
+Each stage carries full lineage — source id/name, chunk id, and page range —
+so a page-specific fact can be checked end to end (page 2 stays page 2).
+
+### Baseline-vs-pack comparison
+
+With `--compare-without-pack` the same cases are run against an empty-knowledge
+baseline and the two result sets are diffed (a pure comparison; nothing is
+re-retrieved). The diff reports cases the pack **improved**, left **unchanged**,
+or **regressed**, plus any new wrong-source or forbidden-source hits, the number
+of newly answerable cases, and whether any **unrelated** case was affected. The
+pack "helps" only when it improves at least one case while regressing none,
+adding no new bleed, and leaving every unrelated case untouched.
+
+### Metrics
+
+- **Retrieval:** hit@1/3/5, expected-source / expected-chunk / expected-page
+  recall, rank of first expected source, wrong-source rate, off-topic inclusion
+  rate, duplicate / near-duplicate chunk rate.
+- **Selected:** selected expected-source / chunk recall, selected forbidden /
+  wrong-source counts, selected page-lineage accuracy.
+- **Citations:** cited expected-source / chunk recall, cited forbidden count,
+  citation page-lineage accuracy, uncited factual claims, unsupported citations,
+  whether citations are a subset of selected evidence, and final grounding.
+
+### Failure classifications
+
+Each case gets one diagnostic class (priority cascade): `retrieval_miss`,
+`wrong_source_ranked`, `expected_source_low_rank`, `expected_chunk_low_rank`,
+`off_topic_neighbour`, `duplicate_chunk_interference`, `chunk_boundary_failure`,
+`page_lineage_failure`, `selection_drop`, `citation_drop`,
+`insufficient_evidence_correct`, `expected_gap`, `ambiguous_case`,
+`pack_regression`, or `no_failure`. These localise *which stage* broke for a
+failing case; they are diagnostic only and decide nothing about a source's
+truth.
+
+### CLI
+
+```bash
+# Evaluate an imported pack and print the report.
+python app/workbench.py retrieval-eval pdf-import \
+  --cases demos/retrieval_pdf_import_cases.jsonl \
+  --pack packs/built/my_pdf_pack
+
+# Compare against an empty-knowledge baseline and write the report to a file
+# (silent on stdout; only the report is written).
+python app/workbench.py retrieval-eval pdf-import \
+  --cases demos/retrieval_pdf_import_cases.jsonl \
+  --pack packs/built/my_pdf_pack \
+  --compare-without-pack --out reports/pdf_import_eval.md
+```
+
+The imported pack is copied to a throwaway directory before loading, so the
+approved pack on disk stays byte-identical.
+
+### Sample output
+
+```text
+# Imported PDF retrieval evaluation — my_pdf_pack (hybrid)
+
+## Summary
+- cases: 14 (pass 13 / fail 1)
+- forbidden bleed reproduced: no — zero forbidden sources/chunks at selected or
+  cited stages
+- expected-source recall: 1.00 | expected-chunk recall: n/a | expected-page
+  recall: 1.00
+- cited expected-source recall: 1.00
+- uncited factual claims: 0 | unsupported citations: 0
+```
+
+### Components
+
+| File | Role |
+| --- | --- |
+| `src/agent/retrieval_eval_harness.py` | v6.7 layer: `PdfImportRetrievalCase`, three-stage trace builders, retrieval/selected/citation metric blocks, `pdf_case_verdict`, `classify_pdf_case`, `evaluate_pdf_import_case`, `run_pdf_import_eval`, `summarize_pdf_import_eval`, the pure `compare_pdf_import_eval`, and the Markdown renderer; imports no writer/registry/proposal/OCR/LLM client and opens no socket |
+| `demos/retrieval_pdf_import_cases.jsonl` | illustrative 14-case corpus covering direct/decision/paraphrase lookups, near-neighbour competition, page-specific and multi-page facts, table-like content, insufficient-evidence and forbidden-unrelated queries, stale neighbours, chunk-boundary sensitivity, and PDF-only vs must-not-use-PDF isolation |
+| `app/workbench.py` | the `retrieval-eval pdf-import` CLI (`--cases`, `--pack`, `--backend`, `--compare-without-pack`, `--out`); loads the pack from a throwaway copy and runs read-only |
+| `evals/test_pdf_import_retrieval_eval.py` | PDF-only answerability, top-k recall, page lineage, selected/cited isolation, near-neighbour competition, citation⊆selected, insufficient-evidence handling, baseline-vs-pack improvement/regression/unrelated-affected diffs, determinism, pack byte-identity, no durable-state writes, CLI stdout/`--out` behaviour, corpus well-formedness, and import-purity + no-network checks |
+
+**Limitations and non-goals.** v6.7 measures only. It does **not** change
+retrieval, ranking, chunking, grounding, composer, or chat-routing behaviour;
+it does not modify the imported pack, write the memory ledger, mutate the source
+registry, or create/apply any proposal. It performs no OCR and no LLM call.
+Because raw retrieval is unfiltered by design, the harness scores isolation at
+the relevance-gated selected stage and the cited answer, not at raw — and says
+so. If an honest run shows a pack does not help, that is a recorded finding, not
+a trigger to tune retrieval: any retrieval change must first reproduce a failing
+case under a separately scoped slice.
+
 ## License
 
 To be decided.
