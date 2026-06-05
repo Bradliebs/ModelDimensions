@@ -1,7 +1,0 @@
-# Offline rows fixture for the HF importer demo (coding domain).
-# One JSON object per line. Blank lines and lines starting with '#' are skipped.
-{"text": "In Python, use a list comprehension like [x*x for x in range(5)] to build a list without an explicit loop.", "label": "python"}
-{"text": "A JSONL file stores one JSON object per line, which makes append-only logs easy to stream line by line.", "label": "data"}
-{"text": "Pytest discovers tests in files named test_*.py and functions prefixed with test_.", "label": "testing"}
-{"text": "Use a dataclass to model a small record with typed fields without writing boilerplate __init__ code.", "label": "python"}
-{"text": "A virtual environment isolates a project's dependencies so they do not collide with system packages.", "label": "tooling"}

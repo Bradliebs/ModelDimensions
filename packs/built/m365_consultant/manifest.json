@@ -1,0 +1,9 @@
+{
+  "pack_id": "m365_consultant",
+  "name": "m365-consultant",
+  "description": "Curated Microsoft 365 consulting reference built from local field notes (Purview, Defender for Cloud Apps, Copilot Studio, Power Platform, SharePoint).",
+  "created_at": "2026-06-03T15:19:46.752451+00:00",
+  "default_knowledge_backend": "deterministic",
+  "default_domain": "microsoft",
+  "settings": {}
+}

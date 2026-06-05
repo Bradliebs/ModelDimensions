@@ -1,31 +1,29 @@
-# Core
+# Core numerics
 torch>=2.0
 numpy>=1.24
 scipy>=1.10
 
-# Encoders
+# Encoders / language models (used by concept_cells.encoders and cc_service.encoder)
 sentence-transformers>=2.2
 transformers>=4.30
 
-# Data + plots
+# Datasets (load_wikipedia, retro training prep)
 datasets>=2.10
+
+# Plotting (concept-cell experiments)
 matplotlib>=3.7
 seaborn>=0.12
 tqdm>=4.65
 
-# SLM controller layer (v0.8): typed, validated decision schemas
+# SLM controller layer (typed, validated decision schemas)
 pydantic>=2.0
 
-# Workbench UI (v1.1, optional): the CLI works without this
-streamlit>=1.30
-
-# Curated knowledge packs (v1.8): YAML pack specs (JSON specs need no extra dep)
-pyyaml>=6.0
-
-# Document ingest (optional): Word/Excel text for the `ingest <path>` command.
-# .txt/.md/.pdf need no extra dep; these add .docx and .xlsx support.
-python-docx>=1.1
-openpyxl>=3.1
+# cc_service runtime (FastAPI bank service + CLI clients)
+fastapi>=0.104
+uvicorn>=0.24
+httpx>=0.25
+typer>=0.9
+rich>=13.0
 
 # Dev
 pytest>=7.0

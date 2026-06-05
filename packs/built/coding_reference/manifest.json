@@ -1,0 +1,9 @@
+{
+  "pack_id": "coding_reference",
+  "name": "coding-reference",
+  "description": "Curated Python coding reference built from local demo docs.",
+  "created_at": "2026-06-03T15:05:57.001264+00:00",
+  "default_knowledge_backend": "deterministic",
+  "default_domain": "coding",
+  "settings": {}
+}

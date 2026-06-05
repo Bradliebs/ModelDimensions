@@ -1,0 +1,9 @@
+{
+  "pack_id": "m365_coding_assistant_v21",
+  "name": "m365-coding-assistant-v21",
+  "description": "Practical Microsoft 365 and coding assistant pack: curated local field notes for M365 administration, Purview labels and DLP, Power Platform / PowerApps formulas, SharePoint / Teams / Copilot Studio, and local coding-agent workflow rules. Answers are grounded in these sources only; the SLM layer is optional and evidence-bounded.",
+  "created_at": "2026-06-03T16:26:10.143501+00:00",
+  "default_knowledge_backend": "deterministic",
+  "default_domain": "microsoft",
+  "settings": {}
+}

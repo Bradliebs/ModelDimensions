@@ -1,8 +1,0 @@
-# v5.2 existing memory records (demo seed).
-# These stand in for *current* memory / project-state the conflict detector
-# checks proposals against. Nothing here is written or mutated by the detector;
-# it is read only. Crafted so the v5.0 demo candidates surface a duplicate, a
-# contradiction, and a project-state supersession.
-{"_record": "existing_memory", "memory_id": "mem-0001", "memory_type": "fact", "claim": "Pydantic validates a typed model at construction time and raises ValidationError on invalid input.", "evidence_source_id": "pydantic-docs", "created_at": "2026-05-01T00:00:00+00:00"}
-{"_record": "existing_memory", "memory_id": "mem-0002", "memory_type": "decision", "claim": "The team decided not to use the hybrid retrieval backend as the default for value sprints.", "evidence_source_id": "adr-retrieval", "created_at": "2026-04-01T00:00:00+00:00"}
-{"_record": "existing_memory", "memory_id": "mem-0003", "memory_type": "project_state", "claim": "The source registry currently exposes registry and audit layers.", "evidence_source_id": "build-notes", "created_at": "2026-01-15T00:00:00+00:00"}

@@ -4,6 +4,41 @@ An experimental memory architecture based on the high-dimensional separation
 theorems from Tyukin, Gorban et al. (2018), *High-Dimensional Brain: A Tool
 for Encoding and Rapid Learning of Memories by Single Neurons*.
 
+> ## Consolidation notice (post-workbench cut)
+>
+> This repository previously fused two products: the concept-cell SLM (this
+> project) and an unrelated governed-RAG / document-ingest / pack workbench.
+> The workbench layer has been **removed** and the parallel MiniLM tree from
+> `H:\MiniLM\` has been **brought in**. The result is one repo with three
+> intentional surfaces:
+>
+> | Surface | Path | Purpose |
+> |---|---|---|
+> | Concept-cell research core | `src/concept_cells/` | Frozen geometry, whitening, binding, thresholds |
+> | SLM controller layer (v0.8/0.9) | `src/slm/`, `src/agent/` | Auditable controllers + grounded response policy |
+> | Concept-cell SQLite service | `src/cc_service/` | FastAPI-backed live bank (the 14 GB `cc_service/bank.db` outside the repo) |
+> | RetroGPT model + training | `src/retro/` | nanoGPT-derived RETRO model, training scripts |
+> | Loader / eval utilities | `scripts/` | Wikipedia/coding/PDF loaders, theta calibration, retrieval eval |
+> | Heavy integration tests | `tests/cc_service/` | Skipped by default; opt in with `pytest -m heavy` |
+> | Concept-cell experiments | `experiments/exp0*.py` `exp1*.py` | Numbered experiments; see ARCHITECTURE.md |
+> | Project log + paper | `docs/PROJECT_LOG.md`, `docs/Knowledge_Free_RETRO_Paper.pdf` | History and the underlying research paper |
+>
+> A safety branch `legacy/workbench-pre-consolidation` on `origin` preserves
+> the pre-consolidation tree. **Sections further down in this README that
+> describe a Workbench, Streamlit UI, PDF intake, M365 packs, project
+> packs, or knowledge-source registries describe deleted code** and will be
+> rewritten in a later slice. The headline numbers, ARCHITECTURE.md, the v0.7
+> through v1.0-rc2 status, and the SLM controller / response-policy guarantees
+> remain accurate.
+>
+> Tests:
+>
+> ```bash
+> pytest -q              # 55 offline tests across concept_cells, slm, agent
+> pytest -q -m heavy     # adds cc_service tests (need fastapi + cc_service deps)
+> ```
+
+
 ## Status
 
 Preliminary. Six experiments completed; mechanism demonstrated at small scale
