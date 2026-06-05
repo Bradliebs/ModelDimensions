@@ -68,6 +68,7 @@ class NavSection:
 
 NAV_SECTIONS: Tuple[NavSection, ...] = (
     NavSection("home", "Home", "What this system can do and what needs attention."),
+    NavSection("projects", "Projects", "Create a project, add documents, ask questions and export reports."),
     NavSection("ask", "Ask", "Ask a question and inspect the governed answer and evidence."),
     NavSection("reports", "Reports", "Generate a consultant-style written report from evidence."),
     NavSection("sources", "Sources", "The source registry: authority, freshness and warnings."),

@@ -22,5 +22,10 @@ streamlit>=1.30
 # Curated knowledge packs (v1.8): YAML pack specs (JSON specs need no extra dep)
 pyyaml>=6.0
 
+# Document ingest (optional): Word/Excel text for the `ingest <path>` command.
+# .txt/.md/.pdf need no extra dep; these add .docx and .xlsx support.
+python-docx>=1.1
+openpyxl>=3.1
+
 # Dev
 pytest>=7.0

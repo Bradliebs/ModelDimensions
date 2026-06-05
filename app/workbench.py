@@ -34,6 +34,7 @@ from agent.project_packs import PackRegistry  # noqa: E402
 from agent import pack_builder  # noqa: E402
 from agent import pack_evaluator  # noqa: E402
 from agent import hf_dataset_importer  # noqa: E402
+from agent import document_ingest  # noqa: E402
 _DEFAULT_LEDGER = ROOT / "demos" / "workbench_ledger.jsonl"
 _DEFAULT_QUEUE = ROOT / "demos" / "workbench_proposals.jsonl"
 _SEED_FILE = ROOT / "demos" / "seed_concept_cells_project.jsonl"
@@ -200,6 +201,7 @@ def _format_assistant(result) -> str:
 _HELP = """\
 Commands:
   add <text>            write a new memory
+  ingest <path>         read a .pdf/.docx/.xlsx/.txt/.md and write it straight into the memory bank (queryable now)
   query <text>          retrieve -> verify -> ground (shows the audit trail)
   delete <memory_id>    delete a memory (it can no longer be cited)
   ledger                show the memory ledger (active / deleted)
@@ -489,6 +491,20 @@ def _repl(service: WorkbenchService,
                 continue
             entry = service.add_memory(arg, source="workbench")
             print(f"  stored {entry.memory_id}")
+        elif cmd == "ingest":
+            if not arg:
+                print("  usage: ingest <path>")
+                continue
+            try:
+                result = service.ingest_document(arg)
+            except FileNotFoundError:
+                print(f"  no such file: {arg}")
+                continue
+            except document_ingest.DocumentIngestError as exc:
+                print(f"  {exc}")
+                continue
+            print(f"  ingested {result.chunk_count} chunk(s) from "
+                  f"{result.source} into the memory bank (queryable now)")
         elif cmd == "query":
             if not arg:
                 print("  usage: query <text>")
@@ -4033,11 +4049,172 @@ def _page_settings(st, cm, config) -> None:  # pragma: no cover - requires strea
         st.write(f"**{label}:** {value}")
 
 
+# --------------------------------------------------------------------------- #
+# Projects — the usable, governed data-to-answer workspace (v7.0)
+# --------------------------------------------------------------------------- #
+
+def _projects_workspace():  # pragma: no cover - requires streamlit
+    from agent.project_workspace import ProjectWorkspace
+
+    return ProjectWorkspace()
+
+
+def _projects_documents_tab(st, ws, project_id) -> None:  # pragma: no cover
+    from agent import project_workspace as pw
+
+    st.caption("Add a PDF you have permission to use. It is checked and prepared "
+               "automatically. Anything risky is held for review — never imported "
+               "silently.")
+    uploaded = st.file_uploader("PDF document", type=["pdf"], key="proj_pdf")
+    title = st.text_input("Where is this from? (source or link)", key="proj_src")
+    owner = st.text_input("Who owns it?", key="proj_owner")
+    permission = st.text_input("Your permission to use it (e.g. licence, internal)",
+                               key="proj_perm")
+    if st.button("Add document", key="proj_add") and uploaded is not None:
+        doc = ws.add_document(
+            project_id, uploaded.getvalue(), filename=uploaded.name,
+            source_url=title.strip(), owner=owner.strip(),
+            permission=permission.strip(),
+            authority_level="official" if permission.strip() else "")
+        if doc.available_for_answers:
+            st.success(f"{doc.filename}: {doc.status_label}.")
+        elif doc.status == pw.STATUS_FAILED:
+            st.error(f"{doc.filename}: {doc.reason}")
+        else:
+            st.warning(f"{doc.filename}: {doc.status_label}. {doc.reason}")
+
+    st.markdown("**Documents**")
+    docs = ws.list_documents(project_id)
+    if not docs:
+        st.caption("No documents yet. Add a PDF above.")
+        return
+    for d in docs:
+        icon = "✅" if d.available_for_answers else (
+            "⛔" if d.status == pw.STATUS_BLOCKED else "⚠️")
+        with st.expander(f"{icon} {d.filename} — {d.status_label}"):
+            if d.reason:
+                st.caption(d.reason)
+            if d.available_for_answers:
+                st.caption(f"{d.chunk_count} passage(s) available for answers.")
+            for finding in d.findings:
+                st.write("- " + finding)
+
+
+def _projects_ask_tab(st, ws, project_id) -> None:  # pragma: no cover
+    st.caption("Ask a question. Answers are grounded only in this project's "
+               "ready documents. A relevance score is not a measure of truth.")
+    query = st.text_area("Your question", key="proj_q", height=90)
+    if st.button("Ask", key="proj_ask") and query.strip():
+        st.session_state["proj_answer"] = (project_id, ws.ask(project_id, query.strip()))
+
+    stored = st.session_state.get("proj_answer")
+    if not stored or stored[0] != project_id:
+        st.info("Ask a question to see a grounded answer with its evidence.")
+        return
+    answer = stored[1]
+    view, inspector, citations = answer.view, answer.inspector, answer.citations
+
+    st.info(f"Status: {view.status_label}")
+    for section in view.sections:
+        if section.kind == "judgement":
+            st.warning(f"**{section.title}** (advisory judgement — not grounded "
+                       "in retrieved evidence)")
+        elif section.kind == "gap":
+            st.error(f"**{section.title}**")
+        else:
+            st.markdown(f"**{section.title}**")
+        if section.body:
+            st.write(section.body)
+        for item in section.items:
+            st.write("- " + item)
+
+    st.markdown("**Evidence**")
+    if not inspector.available:
+        st.caption("No retrieved evidence for this answer.")
+    else:
+        st.caption(f"Retrieved {inspector.retrieved_count} · "
+                   f"cited {inspector.cited_count}")
+        for e in inspector.retrieved:
+            tag = "✅ cited" if e.cited else "• retrieved"
+            with st.expander(f"{tag} · {e.source_name or e.source_id} "
+                             f"(rank {e.rank})"):
+                st.caption(f"Authority: {e.authority_label} · relevance score "
+                           f"{e.score:.3f} (not confidence)")
+                if e.supporting_text:
+                    st.write(e.supporting_text)
+    _ = citations  # citations are reflected in the report export
+
+
+def _projects_reports_tab(st, ws, project_id) -> None:  # pragma: no cover
+    from datetime import datetime, timezone
+
+    st.caption("Turn the latest answer into a written report you can share.")
+    stored = st.session_state.get("proj_answer")
+    if not stored or stored[0] != project_id:
+        st.info("Ask a question first; then generate a report from the answer.")
+        return
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    report = ws.render_report(project_id, stored[1], generated_at=now)
+    st.markdown(report)
+    st.download_button("Download report (Markdown)", report,
+                       file_name="project_report.md", mime="text/markdown",
+                       use_container_width=True)
+
+
+def _projects_advanced_tab(st) -> None:  # pragma: no cover
+    st.caption("Advanced governance tools live in the other workspaces in the "
+               "sidebar — Imports (step-by-step import), Knowledge Packs, "
+               "Reviews, Monitoring, Sources and Memory. You do not need them for "
+               "the everyday create → add → ask → report workflow.")
+
+
+def _page_projects(st, cm, config) -> None:  # pragma: no cover - requires streamlit
+    """The simple, governed data-to-answer workspace.
+
+    Create a project, add documents, ask questions and export reports — without
+    a CLI or any governance vocabulary. Every governed action is delegated to
+    the existing pipeline; this page writes nothing on its own beyond the
+    user-initiated, governed document import.
+    """
+    ws = _projects_workspace()
+    st.caption("Simple by default. Create a project, add documents you have "
+               "permission to use, ask questions, and export a cited report.")
+
+    projects = ws.list_projects()
+    with st.expander("➕ New project", expanded=not projects):
+        name = st.text_input("Project name", key="proj_new_name")
+        desc = st.text_input("Description (optional)", key="proj_new_desc")
+        if st.button("Create project", key="proj_create") and name.strip():
+            created = ws.create_project(name.strip(), description=desc.strip())
+            st.session_state["proj_select"] = created.name
+            projects = ws.list_projects()
+
+    if not projects:
+        st.info("No projects yet. Create one above to get started.")
+        return
+
+    options = {p.name: p.project_id for p in projects}
+    sel_name = st.selectbox("Project", list(options), key="proj_select")
+    project_id = options[sel_name]
+
+    documents, ask, reports, advanced = st.tabs(
+        ["Documents", "Ask", "Reports", "Advanced"])
+    with documents:
+        _projects_documents_tab(st, ws, project_id)
+    with ask:
+        _projects_ask_tab(st, ws, project_id)
+    with reports:
+        _projects_reports_tab(st, ws, project_id)
+    with advanced:
+        _projects_advanced_tab(st)
+
+
 _PAGE_RENDERERS = {
     "home": _page_home, "ask": _page_ask, "reports": _page_reports,
     "sources": _page_sources, "imports": _page_imports, "packs": _page_packs,
     "reviews": _page_reviews, "monitoring": _page_monitoring,
     "memory": _page_memory, "settings": _page_settings,
+    "projects": _page_projects,
 }
 
 

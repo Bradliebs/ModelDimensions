@@ -40,6 +40,11 @@ demos/packs/*/knowledge.jsonl
 # scripts/build_starter_packs.ps1; the specs are tracked, the built packs are not
 packs/built/
 
+# User projects and imported document packs (v7.0): runtime artefacts created
+# through the Projects workspace; never committed.
+packs/projects/
+packs/pdf_imports/
+
 # Value sprint local proposal queue (v2.5B): the report tables
 # (reports/value_sprint_latest.{md,jsonl}) are tracked, but the opt-in
 # proposal queue is regenerated locally and is not.

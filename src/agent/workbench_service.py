@@ -48,6 +48,7 @@ from agent.retrieval_backends import (
 )
 from agent.memory_proposals import ProposalBatch
 from agent.note_ingestion import extract_candidate_memories, load_text_file
+from agent import document_ingest
 from agent.orchestrator import DeterministicEncoder, EncoderProtocol, MemoryBank
 from agent.pack_maintenance import (
     FreshnessPolicy,
@@ -98,6 +99,20 @@ _HISTORICAL_OVERLAP = 0.4
 # trigger this warning; only sources a curator has flagged as stale do, so the
 # label distinguishes a known-stale source from a fresh one.
 _STALE_POLICIES = {"stale", "outdated", "deprecated"}
+
+
+@dataclass
+class IngestResult:
+    """Summary of one document ingested straight into the memory bank.
+
+    ``memory_ids`` are the ids minted for each chunk written. ``source`` is the
+    provenance label attached to every chunk (the file name unless overridden).
+    """
+
+    source: str
+    suffix: str
+    chunk_count: int
+    memory_ids: List[str]
 
 
 @dataclass
@@ -429,6 +444,43 @@ class WorkbenchService:
                                 source=source, tags=tags)
         self._persist_bank()
         return entry
+
+    def ingest_document(self, path, source: Optional[str] = None,
+                        tags: Optional[List[str]] = None) -> IngestResult:
+        """Extract text from a document and write its chunks into the bank.
+
+        Supports ``.txt``, ``.md``, ``.pdf``, ``.docx`` and ``.xlsx`` (see
+        :mod:`agent.document_ingest`). The file is read, split into chunks, and
+        each chunk is stored via :meth:`add_memory`, so it is queryable
+        immediately by ``query_memory`` / ``query_all``.
+
+        NOTE: this writes directly into the concept-cell bank, deliberately
+        bypassing the human-approval proposal queue that governs the PDF and
+        Hugging Face importers. That is the intended "easy path": ingested text
+        is trusted at write time. Use ``import``/``import-knowledge`` instead
+        when content must be reviewed before it can be cited.
+
+        Raises :class:`FileNotFoundError` if the file is absent and
+        :class:`agent.document_ingest.DocumentIngestError` for an unsupported
+        type or a missing optional library.
+        """
+        doc_path = Path(path)
+        text = document_ingest.extract_text(doc_path)
+        chunks = document_ingest.chunk_text(text)
+        label = source or doc_path.name
+        tag_list = list(tags) if tags else []
+        if "ingested" not in tag_list:
+            tag_list.append("ingested")
+        memory_ids: List[str] = []
+        for chunk in chunks:
+            entry = self.add_memory(chunk, source=label, tags=tag_list)
+            memory_ids.append(entry.memory_id)
+        return IngestResult(
+            source=label,
+            suffix=doc_path.suffix.lower(),
+            chunk_count=len(memory_ids),
+            memory_ids=memory_ids,
+        )
 
     # -- query --
 

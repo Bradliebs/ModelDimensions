@@ -286,11 +286,12 @@ app/workbench.py`); the CLI is unchanged and still works without Streamlit.
 > versioned independently as **UI v1.0** (`consultant-workbench-ui-v1.0`) rather
 > than reusing a backend version number.
 
-A sidebar navigates ten task-oriented pages:
+A sidebar navigates eleven task-oriented pages:
 
 | Page | What it shows |
 |---|---|
 | Home | What the system can do, headline metrics, and what needs attention |
+| Projects | The simple data-to-answer workspace: create a project, add documents, ask questions, export a cited report — no CLI or governance vocabulary |
 | Ask | Primary workspace — grounded answers with evidence, citations, and gaps separated from advisory judgement |
 | Reports | Consultant-style written report drafted from the evidence base |
 | Sources | Source registry with effective status and supersession warnings |
@@ -317,6 +318,42 @@ extraction-quality display; findings and risk review; proposed chunk preview;
 chunk exclusion; approval scope selection; dry-run import; explicit knowledge-pack
 creation; retrieval evaluation; and an activation request. If the backend is not
 present in a build, the page says so honestly instead of offering the workflow.
+
+### Projects: the usable data-to-answer workflow (v7.0)
+
+The **Projects** page is the simple-by-default front door to the same governed
+backend. A new user can create a project, upload a clean PDF, ask a question,
+receive a cited answer, inspect the evidence, and export a written report —
+without a CLI, without editing JSON or JSONL, and without learning any
+governance terminology.
+
+The principle is *simple by default, governed underneath*. Nothing is
+simplified away: every step delegates to the existing pipeline.
+
+- **Create a project** — names a self-contained workspace under `packs/projects/`
+  (a runtime location, never committed).
+- **Add a document** — uploads a PDF with a little provenance (source, owner,
+  permission). The document is validated, staged, assessed, previewed and
+  imported through the governed `pdf_import_workflow`. A document only becomes
+  *Available for answers* if it passes; anything risky is held as *Needs review*
+  or *Blocked* and is **never imported silently**.
+- **Ask** — questions are answered using only that project's ready documents,
+  through the same grounded Ask pipeline, with the same evidence inspector and
+  the same separation of grounded answer from advisory judgement.
+- **Reports** — the latest answer can be turned into a consultant-style report
+  and downloaded as Markdown.
+
+Guarantees (enforced by `src/agent/project_workspace.py` and its tests):
+
+- Adding a document writes only a governed knowledge pack (`manifest.json` and
+  `knowledge.jsonl`); it never writes memory, never activates a pack, and never
+  mutates the source registry.
+- Answering writes nothing.
+- Blocked or needs-review documents are excluded from answers.
+
+The pure orchestration layer lives in `src/agent/project_workspace.py`; the
+Projects page in `app/workbench.py` is a thin Streamlit view over it. Advanced
+governance tools remain available, unchanged, in the other sidebar workspaces.
 
 The workflow is the only mutation-capable page, and it stays fully governed:
 uploading a PDF — and assessing, previewing, validating, dry-running, evaluating,

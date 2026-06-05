@@ -76,7 +76,7 @@ def test_navigation_renders_all_sections():
     sections = cm.navigation()
     keys = [s.key for s in sections]
     assert keys == [
-        "home", "ask", "reports", "sources", "imports",
+        "home", "projects", "ask", "reports", "sources", "imports",
         "packs", "reviews", "monitoring", "memory", "settings",
     ]
     assert all(s.label and s.blurb for s in sections)
