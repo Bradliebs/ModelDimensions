@@ -3549,6 +3549,104 @@ by the pure layer (`classify_pack_hits`) and in the CLI when a governed `--state
 manifest is supplied. It is generic by construction: there is no
 `hf_active_monitor` or `pdf_active_monitor` and no source-specific monitoring.
 
+## v7.2 Governed Regression Review Queue (governance, not execution; fail-closed)
+
+The v7.2 layer is the **governed human review queue** that sits between advisory
+monitoring (v7.1) and the separately governed activation lifecycle (v7.0). It
+turns a monitoring *recommendation* into a reviewable item, lets an authorised
+reviewer decide on it, and — on approval only — emits a lifecycle *action
+request*. It is inert by construction: it never activates, deactivates,
+supersedes, rolls back or blocks a pack, never mutates active-pack state, pack
+contents, retrieval indexes, the source registry, the memory ledger or a
+proposal, and never calls an LLM.
+
+> The spec named this slice "v6.7", which **collides** with the existing v6.7
+> (Imported PDF Retrieval Evaluation). Following the prior v7.0/v7.1
+> collision-avoidance convention, it ships as **v7.2**.
+
+**Lifecycle chain.**
+
+```text
+v7.1 monitoring run ──▶ import ──▶ review item (pending)
+                                      │
+        reviewer decision (authorised role only)
+                                      │
+   approve ─▶ action_requested ─▶ RegressionActionRequest (REQUESTED, NOT EXECUTED)
+   reject / defer / request_more_evidence / mark_duplicate / close_without_action
+                                      │
+                          (separate v7.0 lifecycle layer
+                           independently re-validates and executes)
+```
+
+**Import.** `import_monitoring_recommendation` copies only ids, hashes, bounded
+findings (`finding_code`, `severity`, `case_ids`, `confidence`,
+`candidate_pack_ids`) and the recommendation — **never retrieved text**. By
+default only review-worthy recommendations import (`investigate`,
+`deactivate_recommended`, `rollback_recommended`, `block_future_activation`,
+`insufficient_evidence_to_recommend`); `keep_active` imports nothing. Review-item
+ids are deterministic SHA-256 fingerprints of the monitoring-run fingerprint, the
+recommendation fingerprint and the affected pack ids, so the same recommendation
+imports idempotently.
+
+**Decisions and roles.** A reviewer records exactly one decision —
+`approve`, `reject`, `defer`, `request_more_evidence`, `mark_duplicate` or
+`close_without_action` — with a non-blank reviewer identity and reason. Roles are
+enforced: only a `governance_approver` may `approve`; the other decisions are open
+to `monitoring_reviewer`, `pack_owner` and `governance_approver`. Each decision
+produces an immutable `RegressionReviewRecord`.
+
+**Approval is fail-closed.** `approve` additionally requires that the item is not
+awaiting requested evidence, that staleness validation passes, that the live
+active-state hash and pack fingerprints still match what was reviewed, and that
+the recommendation is not `keep_active`. A stale item (active state changed, pack
+fingerprint changed, monitoring run invalidated, baseline replaced, policy
+changed, rollback target invalid, recommendation superseded, pack no longer
+active, or regression no longer present) **cannot be approved**.
+
+**Action requests are requests, not actions.** An approval emits a
+`RegressionActionRequest` (`request_deactivation`, `request_rollback`,
+`request_activation_block`, `request_investigation`, `request_watch`,
+`request_additional_evidence`) into a **distinct** `reviews/`
+`regression_action_requests.jsonl` file. It carries the required downstream
+execution-approval type (e.g. `deactivation_approval`) and starts in status
+`requested` with no `executed_at`. Marking it executed requires **both** an
+execution record id **and** a lifecycle audit reference, supplied by the separate
+v7.0 layer — this layer never sets them.
+
+**Persistence.** The review queue, the append-only audit trail and the action
+requests are three separate atomic JSONL files under `reviews/`. The queue is
+sorted and rewritten atomically; the audit log is strictly append-only; no record
+ever contains retrieved text.
+
+**CLI (governance-only; writes only with `--write`).**
+
+```text
+regression-review import   --monitoring-report P [--recommendation R] [--write]
+regression-review list     [--status S]
+regression-review inspect  --review-id ID [--state P]
+regression-review validate --review-id ID [--state P]
+regression-review decide   --review-id ID --decision D --reviewer N \
+                           --role R --reason "..." [--evidence-ack] [--write]
+regression-review actions  [--status S]
+regression-review action-inspect --action-request-id ID
+```
+
+Global flags (`--queue`, `--audit`, `--actions`, `--state`, `--deterministic`)
+precede the subcommand. `list`, `inspect`, `validate` and `actions` write
+nothing; `import` and `decide` persist only with `--write`. `decide` loads the
+live governed manifest read-only (via `ActivationStateManager.load_state()`) and
+passes it into staleness validation; it never writes the activation state or its
+audit. Output labels approvals "APPROVED FOR REQUEST ONLY", action requests "NOT
+EXECUTED by this layer", and stale items "STALE — cannot be approved".
+`--deterministic` omits wall-clock timestamps for stable ids.
+
+**Governance invariants.** A recommendation is not an approval. A review approval
+is not an execution. An action *requested* is not an action *completed*. Stale
+evidence cannot be approved. Rejection does not erase monitoring evidence.
+Deactivation does not delete a pack. A rollback recommendation does not authorise
+a rollback by itself. Every state-changing lifecycle action remains the separate,
+independently re-validated responsibility of v7.0.
+
 ## License
 
 To be decided.

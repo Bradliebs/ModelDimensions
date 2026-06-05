@@ -2700,7 +2700,244 @@ def _active_pack_monitor_cli(argv: list[str]) -> int:
     return 2
 
 
-def _retrieval_eval_hf_import_cli(argv: list[str]) -> int:
+def _regression_review_cli(argv: list[str]) -> int:
+    """Governed human review queue for active-pack monitoring recommendations (v7.2).
+
+    Sits between advisory monitoring (v7.1) and the separately governed
+    activation lifecycle (v7.0). It imports a monitoring recommendation into a
+    review queue, lets an authorised reviewer approve/reject/defer/request
+    evidence/mark duplicate/close, and — on approval only — emits a
+    :class:`RegressionActionRequest`. It **never** executes a lifecycle action:
+    it does not activate, deactivate, supersede, roll back or block a pack, never
+    mutates active-pack state, pack contents, retrieval indexes, a source
+    registry, a memory ledger or a proposal, and never calls an LLM. A
+    recommendation is not approval; an approval is not execution; a stale item
+    cannot be approved. ``import`` and ``decide`` write only the review files and
+    only with ``--write``; ``list``/``inspect``/``validate``/``actions`` write
+    nothing. Subcommands::
+
+        regression-review import   --monitoring-report P [--recommendation R] [--write]
+        regression-review list     [--queue P] [--status S]
+        regression-review inspect  --review-id ID [--queue P] [--state P]
+        regression-review validate --review-id ID [--queue P] [--state P]
+        regression-review decide   --review-id ID --decision D --reviewer N
+                                   --role R --reason "..." [--state P] [--write]
+        regression-review actions  [--actions P] [--status S]
+        regression-review action-inspect --action-request-id ID [--actions P]
+    """
+    from agent import active_pack_monitor as apm
+    from agent import knowledge_pack_activation as kpa
+    from agent import regression_review_queue as rrq
+
+    parser = argparse.ArgumentParser(
+        prog="workbench.py regression-review",
+        description="Governed human review queue for monitoring recommendations "
+                    "(v7.2). Review is governance, not execution: an approval "
+                    "emits an action request only — it never changes pack state.")
+    parser.add_argument("--queue", default=rrq.DEFAULT_QUEUE_PATH,
+                        help="review queue JSONL path")
+    parser.add_argument("--audit", default=rrq.DEFAULT_AUDIT_PATH,
+                        help="append-only review audit JSONL path")
+    parser.add_argument("--actions", default=rrq.DEFAULT_ACTION_PATH,
+                        help="action-request JSONL path (distinct from the queue)")
+    parser.add_argument("--state", default=kpa.DEFAULT_STATE_PATH,
+                        help="governed activation manifest (for staleness checks)")
+    parser.add_argument("--deterministic", action="store_true",
+                        help="omit wall-clock timestamps (stable ids)")
+    sub = parser.add_subparsers(dest="action", required=True)
+
+    pim = sub.add_parser("import", help="import monitoring recommendation(s) to review")
+    pim.add_argument("--monitoring-report", required=True, dest="monitoring_report",
+                     help="monitoring run JSON/JSONL (a recommendation source)")
+    pim.add_argument("--recommendation", default=None,
+                     help="force-import this exact recommendation code")
+    pim.add_argument("--include-keep-active", action="store_true",
+                     dest="include_keep_active",
+                     help="also import keep_active recommendations")
+    pim.add_argument("--write", action="store_true",
+                     help="persist the queue + audit (default off: dry-run)")
+
+    pls = sub.add_parser("list", help="list review items (critical first)")
+    pls.add_argument("--status", default=None, help="filter by item status")
+
+    pin = sub.add_parser("inspect", help="show one review item + validation")
+    pin.add_argument("--review-id", required=True, dest="review_id")
+
+    pva = sub.add_parser("validate", help="validate one review item (staleness)")
+    pva.add_argument("--review-id", required=True, dest="review_id")
+
+    pde = sub.add_parser("decide", help="record a governed review decision")
+    pde.add_argument("--review-id", required=True, dest="review_id")
+    pde.add_argument("--decision", required=True,
+                     choices=[rrq.ReviewDecision.APPROVE, rrq.ReviewDecision.REJECT,
+                              rrq.ReviewDecision.DEFER,
+                              rrq.ReviewDecision.REQUEST_MORE_EVIDENCE,
+                              rrq.ReviewDecision.MARK_DUPLICATE,
+                              rrq.ReviewDecision.CLOSE_WITHOUT_ACTION])
+    pde.add_argument("--reviewer", required=True, help="reviewer identity (required)")
+    pde.add_argument("--role", required=True,
+                     choices=[rrq.ReviewerRole.MONITORING_REVIEWER,
+                              rrq.ReviewerRole.PACK_OWNER,
+                              rrq.ReviewerRole.GOVERNANCE_APPROVER],
+                     help="declared reviewer role")
+    pde.add_argument("--reason", required=True, help="review reason (required)")
+    pde.add_argument("--evidence-ack", action="store_true", dest="evidence_ack",
+                     help="acknowledge the monitoring evidence was reviewed")
+    pde.add_argument("--requested-evidence", default="", dest="requested_evidence")
+    pde.add_argument("--defer-until", default="", dest="defer_until")
+    pde.add_argument("--duplicate-of", default="", dest="duplicate_of")
+    pde.add_argument("--write", action="store_true",
+                     help="persist the decision + audit (default off: dry-run)")
+
+    pac = sub.add_parser("actions", help="list action requests (NOT executed here)")
+    pac.add_argument("--status", default=None, help="filter by action status")
+
+    pai = sub.add_parser("action-inspect", help="show one action request")
+    pai.add_argument("--action-request-id", required=True, dest="action_request_id")
+
+    args = parser.parse_args(argv)
+    now = "" if args.deterministic else None
+
+    def _load_state():
+        mgr = kpa.ActivationStateManager(state_path=args.state)
+        return mgr.load_state()
+
+    if args.action == "import":
+        rows = [r for r in apm.load_monitoring_history(args.monitoring_report)
+                if r.get("_record") == "active_pack_monitoring_run"]
+        if not rows:
+            print("[regression-review] no monitoring run records in report")
+            return 0
+        existing = rrq.load_review_queue(args.queue)
+        imported: list = []
+        for row in rows:
+            item = rrq.import_monitoring_recommendation(
+                row, recommendation=args.recommendation,
+                created_at=now,
+                include_keep_active=args.include_keep_active)
+            if item is not None:
+                imported.append(item)
+        if not imported:
+            print("[regression-review] nothing review-worthy to import "
+                  "(e.g. keep_active); queue unchanged")
+            return 0
+        merged = existing
+        audit = []
+        for item in imported:
+            merged = rrq.add_review_item(merged, item)
+            audit.append(rrq.make_audit_record(
+                event="imported", review_item_id=item.review_item_id,
+                actor="import", at=item.created_at, status=item.status,
+                detail=item.recommendation))
+            print(f"[regression-review] {item.review_item_id} "
+                  f"{item.recommendation} severity={item.severity} "
+                  f"-> proposed {item.proposed_action_type} (NOT EXECUTED)")
+        if args.write:
+            rrq.save_review_queue(merged, args.queue)
+            rrq.append_review_audit(audit, args.audit)
+            print(f"[regression-review] wrote queue ({len(merged)} item(s)) "
+                  f"to {args.queue}")
+        else:
+            print("[regression-review] dry-run: re-run with --write to persist")
+        return 0
+
+    if args.action == "list":
+        items = rrq.list_review_items(rrq.load_review_queue(args.queue),
+                                      status=args.status)
+        print(rrq.render_review_queue_markdown(items, now=now))
+        return 0
+
+    if args.action in ("inspect", "validate"):
+        items = rrq.load_review_queue(args.queue)
+        item = rrq.get_review_item(items, args.review_id)
+        if item is None:
+            parser.error(f"unknown review item {args.review_id!r}")
+        state = _load_state() if Path(args.state).exists() else None
+        validation = rrq.validate_review_item(item, current_state=state, now=now)
+        if args.action == "validate":
+            label = "VALID" if validation.ok else "STALE — cannot be approved"
+            print(f"[regression-review] {item.review_item_id}: {label}")
+            for code, reason in zip(validation.staleness_codes, validation.reasons):
+                print(f"  - {code}: {reason}")
+            return 0 if validation.ok else 1
+        print(rrq.render_review_item_markdown(item, validation=validation))
+        return 0
+
+    if args.action == "decide":
+        items = rrq.load_review_queue(args.queue)
+        item = rrq.get_review_item(items, args.review_id)
+        if item is None:
+            parser.error(f"unknown review item {args.review_id!r}")
+        state = _load_state() if Path(args.state).exists() else None
+        validation = rrq.validate_review_item(item, current_state=state, now=now)
+        try:
+            outcome = rrq.review_item(
+                item, args.decision, reviewer=args.reviewer, role=args.role,
+                reason=args.reason, evidence_acknowledged=args.evidence_ack,
+                validation=validation, defer_until=args.defer_until,
+                requested_evidence=args.requested_evidence,
+                duplicate_of_review_item_id=args.duplicate_of,
+                reviewed_at=now)
+        except ValueError as exc:
+            raise SystemExit(f"[regression-review] {exc}")
+        merged = rrq.add_review_item(
+            [r for r in items if r.review_item_id != item.review_item_id],
+            outcome.item)
+        print(f"[regression-review] {item.review_item_id}: "
+              f"{args.decision} -> status {outcome.item.status}")
+        audit = [rrq.make_audit_record(
+            event="decided", review_item_id=item.review_item_id,
+            review_record_id=outcome.record.review_record_id,
+            actor=args.reviewer, at=outcome.record.reviewed_at,
+            status=outcome.item.status, detail=args.decision)]
+        actions = rrq.load_action_requests(args.actions)
+        if outcome.action_request is not None:
+            ar = outcome.action_request
+            actions = rrq.add_action_request(actions, ar)
+            audit.append(rrq.make_audit_record(
+                event="action_requested", review_item_id=item.review_item_id,
+                review_record_id=outcome.record.review_record_id,
+                action_request_id=ar.action_request_id, actor=args.reviewer,
+                at=ar.requested_at, status=ar.status, detail=ar.requested_action))
+            print("[regression-review] APPROVED FOR REQUEST ONLY — emitted "
+                  f"action request {ar.action_request_id} "
+                  f"({ar.requested_action}); NOT EXECUTED. Lifecycle execution "
+                  "is a separate, independently validated step.")
+        if args.write:
+            rrq.save_review_queue(merged, args.queue)
+            rrq.append_review_audit(audit, args.audit)
+            if outcome.action_request is not None:
+                rrq.save_action_requests(actions, args.actions)
+            print(f"[regression-review] persisted decision to {args.queue}")
+        else:
+            print("[regression-review] dry-run: re-run with --write to persist")
+        return 0
+
+    if args.action == "actions":
+        actions = rrq.list_action_requests(
+            rrq.load_action_requests(args.actions), status=args.status)
+        if not actions:
+            print("[regression-review] no action requests")
+            return 0
+        for ar in actions:
+            print(f"[regression-review] {ar.action_request_id} "
+                  f"{ar.requested_action} status={ar.status} (NOT EXECUTED "
+                  "by this layer)")
+        return 0
+
+    if args.action == "action-inspect":
+        ar = rrq.get_action_request(
+            rrq.load_action_requests(args.actions), args.action_request_id)
+        if ar is None:
+            parser.error(f"unknown action request {args.action_request_id!r}")
+        print(rrq.render_action_request_markdown(ar))
+        return 0
+
+    parser.error(f"unknown regression-review action {args.action!r}")
+    return 2
+
+
+
     """Bridge an imported HF eval pack to retrieval-eval cases (read-only; v6.9).
 
     Reads an approved imported eval pack directory (``manifest.json`` +
@@ -3064,6 +3301,8 @@ def main(argv: list[str] | None = None) -> int:
         return _knowledge_packs_cli(argv[1:])
     if argv and argv[0] == "active-pack-monitor":
         return _active_pack_monitor_cli(argv[1:])
+    if argv and argv[0] == "regression-review":
+        return _regression_review_cli(argv[1:])
     if argv and argv[0] == "pdf-intake":
         return _pdf_intake_cli(argv[1:])
     if argv and argv[0] == "pdf-preview":
