@@ -3923,6 +3923,10 @@ def _render_streamlit() -> None:  # pragma: no cover - requires streamlit
 
     sections = cm.navigation()
     labels = [s.label for s in sections]
+    imports_label = next(s.label for s in sections if s.key == "imports")
+    if st.sidebar.button("➕ Add data", key="cm_add_data", use_container_width=True,
+                         help="Bring new knowledge in via the governed Imports workflow."):
+        st.session_state["cm_nav"] = imports_label
     choice = st.sidebar.radio("Workspace", labels, key="cm_nav")
     section = next(s for s in sections if s.label == choice)
 
