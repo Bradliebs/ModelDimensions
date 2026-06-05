@@ -174,6 +174,45 @@ _SEVERITY_RANK = {
 }
 
 
+class PdfIntakeMode(str, Enum):
+    """How strictly to apply external-source governance to a PDF.
+
+    The mode tunes the *severity* of governance findings only. It introduces no
+    new decision tier, lane, queue, or lifecycle state: a PDF is still routed
+    through the same five :class:`DataIntakeDecision` outcomes.
+
+    * ``EXTERNAL_TRUSTED_SOURCE`` (the default) keeps the full v6.4 behaviour:
+      missing provenance, missing permission, and stale metadata each constrain
+      the decision so that external knowledge is never trusted unverified.
+    * ``LOCAL_PROJECT_DOCUMENT`` is for a user's own project files. Provenance,
+      permission, and staleness become informational warnings only, so ordinary
+      user-owned PDFs are usable by default. Every content/safety blocker
+      (encryption, no text layer, scanned-image-only, poor extraction, PII,
+      confidential/restricted markers, malformed file) is unchanged.
+    """
+
+    LOCAL_PROJECT_DOCUMENT = "local_project_document"
+    EXTERNAL_TRUSTED_SOURCE = "external_trusted_source"
+
+
+# Governance-only findings relaxed to informational warnings for a user's own
+# project document. Content and safety findings are never in this set.
+_LOCAL_RELAXED_CODES = frozenset({
+    PdfFindingCode.PDF_MISSING_PROVENANCE,
+    PdfFindingCode.PDF_MISSING_PERMISSION,
+    PdfFindingCode.PDF_STALE_BY_METADATA,
+})
+
+
+def _normalize_mode(mode) -> "PdfIntakeMode":
+    if isinstance(mode, PdfIntakeMode):
+        return mode
+    try:
+        return PdfIntakeMode(_norm(mode))
+    except ValueError:
+        return PdfIntakeMode.EXTERNAL_TRUSTED_SOURCE
+
+
 # --------------------------------------------------------------------------- #
 # Frozen data structures.
 # --------------------------------------------------------------------------- #
@@ -191,6 +230,9 @@ class PdfParseQuality:
     replacement_character_count: int = 0
     extraction_quality_score: float = 0.0
     extraction_quality_band: str = "unusable"
+    extraction_outcome: str = "unusable"
+    zero_text_reason: str = ""
+    fallback_attempted: bool = False
 
     def to_dict(self) -> dict:
         return {
@@ -202,6 +244,9 @@ class PdfParseQuality:
             "replacement_character_count": self.replacement_character_count,
             "extraction_quality_score": self.extraction_quality_score,
             "extraction_quality_band": self.extraction_quality_band,
+            "extraction_outcome": self.extraction_outcome,
+            "zero_text_reason": self.zero_text_reason,
+            "fallback_attempted": self.fallback_attempted,
         }
 
 
@@ -284,6 +329,16 @@ class PdfIntakeCandidate:
     intended_use: str = ""
     authority_level: str = ""
     notes: str = ""
+    intake_mode: str = PdfIntakeMode.EXTERNAL_TRUSTED_SOURCE.value
+    owner_permission_declared: bool = False
+
+    @property
+    def mode(self) -> "PdfIntakeMode":
+        return _normalize_mode(self.intake_mode)
+
+    @property
+    def is_local_project_document(self) -> bool:
+        return self.mode == PdfIntakeMode.LOCAL_PROJECT_DOCUMENT
 
     @property
     def is_internal_owned(self) -> bool:
@@ -295,7 +350,11 @@ class PdfIntakeCandidate:
 
     @property
     def has_permission(self) -> bool:
-        return bool(self.declared_permission_or_licence.strip()) or self.is_internal_owned
+        return (
+            bool(self.declared_permission_or_licence.strip())
+            or self.is_internal_owned
+            or bool(self.owner_permission_declared)
+        )
 
     def to_dict(self) -> dict:
         return {
@@ -306,6 +365,8 @@ class PdfIntakeCandidate:
             "intended_use": self.intended_use,
             "authority_level": self.authority_level,
             "notes": self.notes,
+            "intake_mode": self.mode.value,
+            "owner_permission_declared": self.owner_permission_declared,
         }
 
 
@@ -482,6 +543,31 @@ def sample_pdf_text(data: bytes) -> Tuple[List[str], str]:
     return page_texts, full_text
 
 
+def flat_scan_pdf_text(data: bytes) -> Tuple[List[str], str]:
+    """Fallback parser: recover text from *every* content stream in the file.
+
+    The primary :func:`sample_pdf_text` walks the page tree
+    (``/Type /Page`` -> ``/Contents`` -> stream). Some PDFs have a malformed or
+    unconventional page tree that hides recoverable text from that walk. This
+    second pass ignores the page tree and reads declared text operands from all
+    decoded content streams. It still performs no optical recovery of image
+    text and builds no document fragments; the result is a bounded plain string.
+    """
+    objects = _object_map(data)
+    texts: List[str] = []
+    for num in sorted(objects):
+        body = objects[num]
+        if _EMBEDDED_FILE_RE.search(body):  # never inspect embedded-file payloads
+            continue
+        if not _STREAM_RE.search(body):
+            continue
+        text = _stream_text(body).strip()
+        if text:
+            texts.append(text)
+    full_text = "\n".join(texts)[:MAX_TEXT_CHARS]
+    return texts, full_text
+
+
 def _info_dict_body(data: bytes, objects: dict) -> bytes:
     ref = _INFO_REF_RE.search(data)
     if ref:
@@ -518,6 +604,9 @@ def calculate_parse_quality(
     page_texts: Sequence[str],
     page_count: int,
     full_text: str,
+    *,
+    has_images: bool = False,
+    fallback_attempted: bool = False,
 ) -> PdfParseQuality:
     """Compute deterministic parse-quality metrics and a coarse band.
 
@@ -525,8 +614,20 @@ def calculate_parse_quality(
     decode-replacement characters and pathological whitespace. Thresholds are
     module constants; the bands are intentionally coarse to avoid false
     precision.
+
+    ``extraction_outcome`` is a richer, advisory classification layered on top
+    of the band (it is not a new governance state): ``good``/``acceptable`` for
+    usable text, ``poor_but_previewable`` for low-but-non-zero text, and
+    ``requires_ocr``/``requires_fallback``/``unusable`` for the zero-text cases.
+    When the score is 0.0, ``zero_text_reason`` always records *why* so a 0.0 is
+    never assigned silently.
     """
-    char_count = len(full_text)
+    # Count characters actually extracted from page content — not the newline
+    # separators inserted when joining pages. Without this, a scanned PDF with
+    # many empty pages reports hundreds of phantom "characters" (one per page
+    # break), which would mislabel a zero-text scan as poor-but-previewable and
+    # wrongly report a text layer.
+    char_count = min(sum(len(text) for text in page_texts), MAX_TEXT_CHARS)
     pages_with_text = sum(1 for text in page_texts if text)
     effective_pages = page_count if page_count > 0 else len(page_texts)
 
@@ -555,6 +656,30 @@ def calculate_parse_quality(
     else:
         band = "good"
 
+    # Richer, advisory extraction outcome (no new governance state).
+    zero_text_reason = ""
+    if char_count == 0:
+        if has_images:
+            outcome = "requires_ocr"
+            zero_text_reason = (
+                "no text layer was found and page images are present; the "
+                "document looks scanned and needs OCR to read")
+        elif fallback_attempted:
+            outcome = "requires_fallback"
+            zero_text_reason = (
+                "content streams were present but no text could be decoded even "
+                "after a second parser was tried")
+        else:
+            outcome = "unusable"
+            zero_text_reason = "no text layer and no recoverable content streams were found"
+    elif band == "good":
+        outcome = "good"
+    elif band == "acceptable":
+        outcome = "acceptable"
+    else:
+        # Low but non-zero text: still previewable, never silently zeroed.
+        outcome = "poor_but_previewable"
+
     return PdfParseQuality(
         extracted_char_count=char_count,
         pages_with_text=pages_with_text,
@@ -564,6 +689,9 @@ def calculate_parse_quality(
         replacement_character_count=replacement_count,
         extraction_quality_score=score,
         extraction_quality_band=band,
+        extraction_outcome=outcome,
+        zero_text_reason=zero_text_reason,
+        fallback_attempted=fallback_attempted,
     )
 
 
@@ -629,7 +757,20 @@ def inspect_pdf_metadata(path) -> PdfMetadataSummary:
                                   file_hash=file_hash, file_size_bytes=file_size,
                                   read_error=f"parse failure: {exc}")
 
-    quality = calculate_parse_quality(page_texts, page_count, full_text)
+    # Second parser: when the page-tree walk recovers no text but content
+    # streams exist (and the file is not image-only), try a flat stream scan so
+    # a recoverable-but-awkward PDF is not wrongly reported as empty. This
+    # distinguishes "no text layer" from "first parser missed the text".
+    fallback_attempted = False
+    if not full_text.strip() and not possible_images and _STREAM_RE.search(data):
+        fallback_attempted = True
+        fb_texts, fb_full = flat_scan_pdf_text(data)
+        if fb_full.strip():
+            page_texts, full_text = fb_texts, fb_full
+
+    quality = calculate_parse_quality(
+        page_texts, page_count, full_text,
+        has_images=possible_images, fallback_attempted=fallback_attempted)
     char_count = quality.extracted_char_count
     has_text_layer = char_count > 0
     avg_chars = quality.average_chars_per_page
@@ -709,6 +850,11 @@ def infer_pdf_findings(
     moment = now or _utc_now()
     meta = candidate.metadata
     findings: List[PdfIntakeFinding] = []
+    local = candidate.is_local_project_document
+
+    def _gov_sev(strict: IntakeSeverity) -> IntakeSeverity:
+        """Relax a governance finding to a warning for a local project document."""
+        return IntakeSeverity.INFO if local else strict
 
     # 1. Readability / encryption gate (fail closed first).
     if meta.read_error:
@@ -729,11 +875,19 @@ def infer_pdf_findings(
 
     # 2. Provenance and permission (operator-declared; embedded metadata never counts).
     if not candidate.has_provenance:
-        findings.append(_finding(PdfFindingCode.PDF_MISSING_PROVENANCE, IntakeSeverity.REVIEW,
-                                 "no declared source URL or owner; provenance must be established"))
+        findings.append(_finding(
+            PdfFindingCode.PDF_MISSING_PROVENANCE, _gov_sev(IntakeSeverity.REVIEW),
+            "no declared source URL or owner; provenance must be established"
+            if not local else
+            "no source URL or owner was given; this is fine for your own project "
+            "document, recorded as a note"))
     if not candidate.has_permission:
-        findings.append(_finding(PdfFindingCode.PDF_MISSING_PERMISSION, IntakeSeverity.REVIEW,
-                                 "no declared permission/licence and not declared internal-owned"))
+        findings.append(_finding(
+            PdfFindingCode.PDF_MISSING_PERMISSION, _gov_sev(IntakeSeverity.REVIEW),
+            "no declared permission/licence and not declared internal-owned"
+            if not local else
+            "no permission was declared; confirm you own or may use this document "
+            "in this project"))
 
     # 3. Parseability: text layer, scanning, OCR, extraction quality.
     if not meta.has_text_layer:
@@ -781,7 +935,7 @@ def infer_pdf_findings(
         findings.append(_finding(PdfFindingCode.PDF_NO_CREATION_DATE, IntakeSeverity.INFO,
                                  "no creation/modification date in metadata to judge freshness"))
     elif (moment - recent).days > STALE_AFTER_DAYS:
-        findings.append(_finding(PdfFindingCode.PDF_STALE_BY_METADATA, IntakeSeverity.KNOWLEDGE_BLOCK,
+        findings.append(_finding(PdfFindingCode.PDF_STALE_BY_METADATA, _gov_sev(IntakeSeverity.KNOWLEDGE_BLOCK),
                                  "document metadata date is old; treat as possibly outdated, not as false"))
 
     # 7. Intended use (eval-only intent caps below the knowledge tier).
@@ -876,6 +1030,62 @@ def _rationale(decision: DataIntakeDecision, findings: Sequence[PdfIntakeFinding
 
 
 # --------------------------------------------------------------------------- #
+# Plain-language projection (for a normal, non-technical UI).
+# --------------------------------------------------------------------------- #
+
+# Friendly, non-jargon wording for each finding code. The normal UI shows these;
+# the raw ``code`` strings belong under an "Advanced details" disclosure only.
+_PLAIN_LANGUAGE: dict = {
+    PdfFindingCode.PDF_UNREADABLE: "This file could not be read as a PDF.",
+    PdfFindingCode.PDF_ENCRYPTED: "This PDF is encrypted, so its content cannot be used.",
+    PdfFindingCode.PDF_PASSWORD_REQUIRED: "This PDF needs a password to open.",
+    PdfFindingCode.PDF_MISSING_PROVENANCE: "No source link was given (optional for your own files).",
+    PdfFindingCode.PDF_MISSING_PERMISSION: "Confirm you own or may use this document in this project.",
+    PdfFindingCode.PDF_NO_TEXT_LAYER: "No selectable text was found in this PDF.",
+    PdfFindingCode.PDF_REQUIRES_OCR: "This looks scanned; it needs OCR before its text can be read.",
+    PdfFindingCode.PDF_SCANNED_IMAGE_ONLY: "This looks like a scanned, image-only document.",
+    PdfFindingCode.PDF_LOW_TEXT_EXTRACTION_QUALITY: "Only low-quality text could be extracted.",
+    PdfFindingCode.PDF_SPARSE_TEXT: "Very little text could be extracted from this PDF.",
+    PdfFindingCode.PDF_TOO_LARGE_FOR_INITIAL_IMPORT: "This file is large; it was held back for now.",
+    PdfFindingCode.PDF_POSSIBLE_PII: "This document may contain personal information; please review it.",
+    PdfFindingCode.PDF_CONFIDENTIAL_MARKER: "This document is marked confidential; please review it.",
+    PdfFindingCode.PDF_RESTRICTED_MARKER: "This document is marked restricted; please review it.",
+    PdfFindingCode.PDF_STALE_BY_METADATA: "This document's date is old; it may be out of date.",
+    PdfFindingCode.PDF_NO_CREATION_DATE: "No date was found, so its age is unknown.",
+    PdfFindingCode.PDF_EVAL_ONLY_INTENDED_USE: "This was added for evaluation only, not as knowledge.",
+    PdfFindingCode.PDF_TABLE_HEAVY: "This document has tables; their layout may not be perfectly captured.",
+    PdfFindingCode.PDF_IMAGE_HEAVY: "This document has images; image content is not read.",
+    PdfFindingCode.PDF_FORM_HEAVY: "This document has form fields; form data is not read.",
+    PdfFindingCode.PDF_EMBEDDED_FILES_PRESENT: "This PDF has attached files; please review it.",
+    PdfFindingCode.PDF_DUPLICATE_HEADERS_FOOTERS_RISK: "Repeated headers or footers were detected.",
+    PdfFindingCode.PDF_METADATA_UNVERIFIED: "The document's own title/author details are shown as-is and not verified.",
+    PdfFindingCode.PDF_APPROVED_OFFICIAL_SOURCE: "Recorded as an official source.",
+    PdfFindingCode.PDF_APPROVED_INTERNAL_SOURCE: "Recorded as an internal, owned source.",
+    PdfFindingCode.NEEDS_HUMAN_REVIEW: "A person should review this before it is used.",
+}
+
+
+def plain_language_findings(result: "PdfIntakeResult") -> List[str]:
+    """Return friendly, non-technical one-line messages for a normal UI.
+
+    No raw finding codes appear here; those belong under an Advanced details
+    disclosure (see :func:`technical_finding_lines`).
+    """
+    lines: List[str] = []
+    for finding in result.findings:
+        lines.append(_PLAIN_LANGUAGE.get(finding.code, finding.message))
+    return lines
+
+
+def technical_finding_lines(result: "PdfIntakeResult") -> List[str]:
+    """Return raw ``severity / code: message`` lines for an Advanced details view."""
+    return [
+        f"[{finding.severity.value}] {finding.code.value}: {finding.message}"
+        for finding in result.findings
+    ]
+
+
+# --------------------------------------------------------------------------- #
 # Mapping to the shared ExternalDatasetCandidate (for interop with v6.2A).
 # --------------------------------------------------------------------------- #
 
@@ -934,6 +1144,8 @@ def assess_pdf_intake(
     permission: str = "",
     intended_use: str = "",
     authority_level: str = "",
+    intake_mode=PdfIntakeMode.EXTERNAL_TRUSTED_SOURCE,
+    owner_permission_declared: bool = False,
     now: Optional[datetime] = None,
 ) -> PdfIntakeResult:
     """Assess one local PDF deterministically. Reads the file only; writes nothing."""
@@ -947,6 +1159,8 @@ def assess_pdf_intake(
         intended_use=intended_use or "",
         authority_level=authority_level or "",
         notes="embedded PDF metadata is treated as unverified",
+        intake_mode=_normalize_mode(intake_mode).value,
+        owner_permission_declared=bool(owner_permission_declared),
     )
     findings = infer_pdf_findings(candidate, now=moment)
     decision = _decide(findings)
@@ -975,12 +1189,15 @@ def assess_pdf_paths(
     permission: str = "",
     intended_use: str = "",
     authority_level: str = "",
+    intake_mode=PdfIntakeMode.EXTERNAL_TRUSTED_SOURCE,
+    owner_permission_declared: bool = False,
     now: Optional[datetime] = None,
 ) -> List[PdfIntakeResult]:
     return [
         assess_pdf_intake(path, source_url=source_url, owner=owner,
                           permission=permission, intended_use=intended_use,
-                          authority_level=authority_level, now=now)
+                          authority_level=authority_level, intake_mode=intake_mode,
+                          owner_permission_declared=owner_permission_declared, now=now)
         for path in paths
     ]
 

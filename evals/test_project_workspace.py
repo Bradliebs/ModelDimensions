@@ -146,7 +146,8 @@ def test_document_without_provenance_needs_review(tmp_path):
     ws = _workspace(tmp_path)
     project = ws.create_project("P")
     doc = ws.add_document(project.project_id, _clean_pdf_bytes(),
-                          filename="bare.pdf", now=_NOW)
+                          filename="bare.pdf", now=_NOW,
+                          intake_mode="external_trusted_source")
 
     assert doc.status == pw.STATUS_NEEDS_REVIEW
     assert doc.available_for_answers is False
@@ -197,7 +198,7 @@ def test_ask_ignores_documents_that_are_not_ready(tmp_path):
     project = ws.create_project("P")
     # Only a needs-review document exists -> nothing is answerable.
     ws.add_document(project.project_id, _clean_pdf_bytes(), filename="bare.pdf",
-                    now=_NOW)
+                    now=_NOW, intake_mode="external_trusted_source")
 
     answer = ws.ask(project.project_id, _MATCHING_QUERY)
     assert answer.inspector.retrieved_count == 0

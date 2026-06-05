@@ -229,14 +229,18 @@ def stage_upload(data: bytes, *, filename: str, workspace) -> Path:
 # --------------------------------------------------------------------------- #
 
 def assess(path, *, source_url: str = "", owner: str = "", permission: str = "",
-           intended_use: str = "", authority_level: str = "", now=None):
+           intended_use: str = "", authority_level: str = "",
+           intake_mode: str = "external_trusted_source",
+           owner_permission_declared: bool = False, now=None):
     """Assess one staged PDF. Reads the file only; writes nothing."""
     _require_backend()
     from agent.pdf_intake_adapter import assess_pdf_intake
 
     return assess_pdf_intake(
         path, source_url=source_url, owner=owner, permission=permission,
-        intended_use=intended_use, authority_level=authority_level, now=now,
+        intended_use=intended_use, authority_level=authority_level,
+        intake_mode=intake_mode, owner_permission_declared=owner_permission_declared,
+        now=now,
     )
 
 

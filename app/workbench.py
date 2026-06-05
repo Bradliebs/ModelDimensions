@@ -3910,7 +3910,8 @@ def _page_imports_pdf(st) -> None:  # pragma: no cover - requires streamlit
     if st.button("Assess intake", key="pdf_assess_btn"):
         ss.pdf_assess = wf.assess(
             path, source_url=source_url, owner=owner, permission=permission,
-            intended_use=intended_use, authority_level=authority)
+            intended_use=intended_use, authority_level=authority,
+            intake_mode="external_trusted_source")
         ss.pop("pdf_preview", None)
     assess = ss.get("pdf_assess")
     if assess is None:
@@ -3919,11 +3920,21 @@ def _page_imports_pdf(st) -> None:  # pragma: no cover - requires streamlit
     st.markdown(f"**Intake decision:** {assess.decision.value} — {assess.rationale}")
     quality = assess.candidate.metadata.parse_quality
     st.markdown(f"**Extraction quality:** {quality.extraction_quality_band} "
-                f"(score {quality.extraction_quality_score})")
+                f"(outcome {quality.extraction_outcome}; score "
+                f"{quality.extraction_quality_score}; "
+                f"{quality.extracted_char_count} chars, "
+                f"{quality.pages_with_text} page(s) with text)")
+    if quality.zero_text_reason:
+        st.caption(f"No text extracted: {quality.zero_text_reason}")
     if assess.findings:
-        st.markdown("**Findings & risk**")
-        for finding in assess.findings:
-            st.write(f"- [{finding.severity.value}] {finding.code.value}: {finding.message}")
+        from agent.pdf_intake_adapter import (
+            plain_language_findings, technical_finding_lines)
+        st.markdown("**What this means**")
+        for line in plain_language_findings(assess):
+            st.write("- " + line)
+        with st.expander("Advanced details (technical finding codes)"):
+            for line in technical_finding_lines(assess):
+                st.write("- " + line)
     else:
         st.caption("No governance findings.")
     if assess.blocked:
@@ -4063,18 +4074,23 @@ def _projects_documents_tab(st, ws, project_id) -> None:  # pragma: no cover
     from agent import project_workspace as pw
 
     st.caption("Add a PDF you have permission to use. It is checked and prepared "
-               "automatically. Anything risky is held for review — never imported "
-               "silently.")
+               "automatically. Your own project files are usable by default; "
+               "anything risky is held for review — never imported silently.")
     uploaded = st.file_uploader("PDF document", type=["pdf"], key="proj_pdf")
-    title = st.text_input("Where is this from? (source or link)", key="proj_src")
-    owner = st.text_input("Who owns it?", key="proj_owner")
-    permission = st.text_input("Your permission to use it (e.g. licence, internal)",
-                               key="proj_perm")
+    title = st.text_input("Where is this from? (source or link — optional)",
+                          key="proj_src")
+    owner = st.text_input("Who owns it? (optional)", key="proj_owner")
+    permission = st.text_input(
+        "Licence or permission note (optional)", key="proj_perm")
+    declared = st.checkbox(
+        "I own this document or have permission to use it in this project.",
+        key="proj_perm_declared")
     if st.button("Add document", key="proj_add") and uploaded is not None:
         doc = ws.add_document(
             project_id, uploaded.getvalue(), filename=uploaded.name,
             source_url=title.strip(), owner=owner.strip(),
             permission=permission.strip(),
+            owner_permission_declared=bool(declared),
             authority_level="official" if permission.strip() else "")
         if doc.available_for_answers:
             st.success(f"{doc.filename}: {doc.status_label}.")
@@ -4096,8 +4112,12 @@ def _projects_documents_tab(st, ws, project_id) -> None:  # pragma: no cover
                 st.caption(d.reason)
             if d.available_for_answers:
                 st.caption(f"{d.chunk_count} passage(s) available for answers.")
+            # Plain-language findings only; no raw codes in the normal UI.
             for finding in d.findings:
                 st.write("- " + finding)
+            if not d.available_for_answers and d.status != pw.STATUS_BLOCKED:
+                st.caption("What you can do: confirm permission above, re-add the "
+                           "document, or continue with the warning.")
 
 
 def _projects_ask_tab(st, ws, project_id) -> None:  # pragma: no cover

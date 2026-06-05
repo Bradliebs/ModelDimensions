@@ -219,6 +219,8 @@ class ProjectWorkspace:
                      source_url: str = "", owner: str = "", permission: str = "",
                      intended_use: str = "knowledge_candidate",
                      authority_level: str = "", domain: str = "general",
+                     intake_mode: str = "local_project_document",
+                     owner_permission_declared: bool = False,
                      now=None) -> DocumentView:
         """Add and process one PDF through the governed pipeline.
 
@@ -229,6 +231,12 @@ class ProjectWorkspace:
         Exception path (not approved for knowledge): nothing is imported. The
         document is recorded as *Needs review* or *Blocked* with a plain reason.
         Genuinely risky documents are never processed automatically.
+
+        Uploads default to ``intake_mode="local_project_document"``: a user's own
+        project files are usable by default (missing provenance, missing source
+        URL, or stale metadata are warnings, not blockers). Content/safety
+        blockers — encryption, no text layer, scanned-only, poor extraction, PII,
+        confidential/restricted markers — are unchanged.
         """
         from agent import pdf_import_workflow as wf
 
@@ -250,7 +258,8 @@ class ProjectWorkspace:
                 assessment = wf.assess(
                     path, source_url=source_url, owner=owner,
                     permission=permission, intended_use=intended_use,
-                    authority_level=authority_level, now=now)
+                    authority_level=authority_level, intake_mode=intake_mode,
+                    owner_permission_declared=owner_permission_declared, now=now)
             except Exception as exc:  # defensive: malformed/unreadable PDF
                 record = self._make_record(
                     doc_id=doc_id, filename=filename, pack_id="",
