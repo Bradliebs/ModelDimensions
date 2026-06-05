@@ -3711,6 +3711,190 @@ def _page_imports(st, cm, config) -> None:  # pragma: no cover - requires stream
         st.markdown(f"{icon} **{adapter.label}** — {adapter.status_label}")
         st.caption(adapter.note)
 
+    st.divider()
+    _page_imports_pdf(st)
+
+
+def _page_imports_pdf(st) -> None:  # pragma: no cover - requires streamlit
+    """The governed PDF upload workflow.
+
+    Every read-only step (upload, assess, preview, dry-run, evaluate, propose,
+    activation request) writes nothing. The only write is the explicit "Create
+    knowledge pack" button, which writes pack files only — it never activates a
+    pack, creates memory, changes retrieval, or bypasses the provenance and
+    permission checks the backend enforces.
+    """
+    import tempfile
+    from datetime import datetime, timezone
+
+    from agent import pdf_import_workflow as wf
+
+    st.subheader("Import a PDF")
+    avail = wf.backend_availability()
+    if not avail.available:
+        st.info(avail.reason + " This step is not available in this build.")
+        return
+
+    ss = st.session_state
+    st.caption("Steps: " + " → ".join(s.label for s in wf.PDF_WORKFLOW_STEPS))
+    if "pdf_workspace" not in ss:
+        ss.pdf_workspace = tempfile.mkdtemp(prefix="pdf_import_")
+
+    uploaded = st.file_uploader(
+        "Drag and drop or select a PDF", type=["pdf"], key="pdf_upload")
+
+    st.markdown("**Source metadata**")
+    source_url = st.text_input("Provenance / source URL", key="pdf_src")
+    owner = st.text_input("Owner", key="pdf_owner")
+    permission = st.text_input("Permission or licence", key="pdf_perm")
+    intended_use = st.selectbox(
+        "Intended use", ["knowledge_candidate", "eval_only"], key="pdf_use")
+    authority = st.selectbox(
+        "Authority level", ["unknown", "community", "reputable", "official"],
+        key="pdf_auth")
+    source_title = st.text_input("Source title", key="pdf_title")
+    domain = st.selectbox(
+        "Domain", ["general", "coding", "medical", "legal", "microsoft",
+                   "project_docs"], key="pdf_domain")
+    pack_id_raw = st.text_input("Pack id", key="pdf_packid")
+
+    if uploaded is None:
+        st.info("Upload a PDF to begin. Uploading stages the file only — nothing "
+                "is imported, activated, or added to memory.")
+        return
+
+    path = wf.stage_upload(
+        uploaded.getvalue(), filename=uploaded.name, workspace=ss.pdf_workspace)
+
+    if st.button("Assess intake", key="pdf_assess_btn"):
+        ss.pdf_assess = wf.assess(
+            path, source_url=source_url, owner=owner, permission=permission,
+            intended_use=intended_use, authority_level=authority)
+        ss.pop("pdf_preview", None)
+    assess = ss.get("pdf_assess")
+    if assess is None:
+        return
+
+    st.markdown(f"**Intake decision:** {assess.decision.value} — {assess.rationale}")
+    quality = assess.candidate.metadata.parse_quality
+    st.markdown(f"**Extraction quality:** {quality.extraction_quality_band} "
+                f"(score {quality.extraction_quality_score})")
+    if assess.findings:
+        st.markdown("**Findings & risk**")
+        for finding in assess.findings:
+            st.write(f"- [{finding.severity.value}] {finding.code.value}: {finding.message}")
+    else:
+        st.caption("No governance findings.")
+    if assess.blocked:
+        st.error("Intake is blocked; import cannot proceed.")
+        return
+
+    if st.button("Preview chunks", key="pdf_preview_btn"):
+        preview_obj = wf.preview(
+            path, intake_result=assess, source_url=source_url, owner=owner,
+            permission=permission, intended_use=intended_use,
+            authority_level=authority)
+        ss.pdf_preview = wf.preview_to_dict(preview_obj)
+    preview = ss.get("pdf_preview")
+    if preview is None:
+        return
+
+    chunks = preview["chunks"]
+    st.markdown(f"**Proposed chunks (preview only):** {len(chunks)}")
+    st.dataframe([
+        {
+            "chunk_id": c["chunk_id"],
+            "pages": f'{c["page_start"]}-{c["page_end"]}',
+            "chars": c["char_count"],
+            "warnings": ", ".join(c.get("warning_codes", [])),
+            "preview": c["text_preview"][:120],
+        }
+        for c in chunks
+    ])
+
+    all_ids = [c["chunk_id"] for c in chunks]
+    excluded = st.multiselect("Exclude chunks", all_ids, key="pdf_excluded")
+    approved = [cid for cid in all_ids if cid not in excluded]
+    st.caption(f"{len(approved)} chunk(s) approved; {len(excluded)} excluded.")
+    if not approved:
+        st.warning("Approve at least one chunk to continue.")
+        return
+
+    approved_by = st.text_input("Approver", key="pdf_approver")
+    allow_conf = st.checkbox(
+        "Acknowledge and allow confidential content", key="pdf_allowconf")
+    pack_id = wf.normalize_pack_id(pack_id_raw or source_title or "pdf-pack")
+    st.caption(f"Pack id: {pack_id}")
+
+    def _approval():
+        return wf.build_approval(
+            preview, approval_id=f"appr-{pack_id}",
+            approved_by=approved_by or "console-user",
+            approved_at=datetime.now(timezone.utc).isoformat(),
+            approved_chunk_ids=approved, excluded_chunk_ids=excluded,
+            intended_pack_id=pack_id, intended_use=intended_use,
+            source_title=source_title, authority_level=authority,
+            provenance=source_url, permission_or_licence=permission,
+            domain=domain, allow_confidential=allow_conf)
+
+    if st.button("Dry-run import", key="pdf_dryrun_btn"):
+        ss.pdf_dryrun = wf.dry_run(preview, _approval(), pack_id=pack_id)
+    dry = ss.get("pdf_dryrun")
+    if dry is not None:
+        st.markdown(f"**Dry-run status:** {dry.status.value} — writes nothing. "
+                    f"{dry.message}")
+        for finding in dry.findings:
+            st.write(f"- [{finding.severity.value}] {finding.message}")
+
+    st.warning("Creating the pack writes pack files only. It does not activate the "
+               "pack, add memory, change retrieval, or update the source registry.")
+    if st.button("Create knowledge pack", key="pdf_create_btn"):
+        ss.pdf_create = wf.create_pack(
+            preview, _approval(), pack_id=pack_id, confirm=True)
+    created = ss.get("pdf_create")
+    if created is None:
+        return
+    if not created.written:
+        st.error(f"Pack not created: {created.status.value} — {created.message}")
+        for finding in created.findings:
+            st.write(f"- [{finding.severity.value}] {finding.message}")
+        return
+
+    st.success(f"Pack created at {created.pack_dir} (status {created.status.value}). "
+               "Not activated.")
+    pack_dir = created.pack_dir
+
+    if st.button("Run retrieval evaluation", key="pdf_eval_btn"):
+        ss.pdf_eval = wf.evaluate(pack_dir)
+    evaluation = ss.get("pdf_eval")
+    if evaluation is not None:
+        summary = evaluation.summary
+        st.markdown(f"**Retrieval evaluation:** {summary.pass_count}/"
+                    f"{summary.case_count} cases passed (read-only).")
+
+    if st.button("Propose registry entry", key="pdf_reg_btn"):
+        ss.pdf_reg = wf.propose_registry(pack_dir)
+    proposal = ss.get("pdf_reg")
+    if proposal is not None:
+        st.markdown(f"**Registry proposal:** {proposal.decision.value} — requires "
+                    "human approval; nothing was written.")
+
+    activator = st.text_input("Activation approver", key="pdf_act_approver")
+    if st.button("Request activation", key="pdf_act_btn"):
+        ss.pdf_act = wf.request_activation(
+            pack_dir, approval_id=f"act-{pack_id}",
+            approved_by=activator or "console-user",
+            approved_at=datetime.now(timezone.utc).isoformat())
+    activation = ss.get("pdf_act")
+    if activation is not None:
+        if activation.ok:
+            st.info("Activation requirements satisfied; submit through governance "
+                    "to activate. Nothing was activated here.")
+        else:
+            st.warning("Activation not granted here. Governance still requires:")
+            for finding in activation.blocking_findings:
+                st.write(f"- {finding.code.value}: {finding.message}")
+
 
 def _page_settings(st, cm, config) -> None:  # pragma: no cover - requires streamlit
     view = cm.build_settings(config)

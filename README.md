@@ -294,7 +294,7 @@ A sidebar navigates ten task-oriented pages:
 | Ask | Primary workspace — grounded answers with evidence, citations, and gaps separated from advisory judgement |
 | Reports | Consultant-style written report drafted from the evidence base |
 | Sources | Source registry with effective status and supersession warnings |
-| Imports | Supported/coming-soon intake adapters and the governed intake lifecycle |
+| Imports | Supported/coming-soon intake adapters, the governed intake lifecycle, and a working PDF upload workflow when the governed PDF backend is available |
 | Packs | Knowledge packs and which are active |
 | Reviews | Memory, source, regression, and action requests — approval is shown as distinct from execution |
 | Monitoring | Active-pack monitoring findings, labelled **advisory only** |
@@ -308,10 +308,35 @@ execution, monitoring is labelled advisory, and unsupported capabilities are
 shown honestly rather than hidden. The destructive "delete memory" control from
 the old demo screen has been removed.
 
+### Imports: governed PDF workflow
+
+When the governed PDF backend is available, the Imports page surfaces a working,
+task-oriented PDF upload workflow that walks every governed step end to end:
+drag-and-drop or file selection; source metadata entry; intake assessment;
+extraction-quality display; findings and risk review; proposed chunk preview;
+chunk exclusion; approval scope selection; dry-run import; explicit knowledge-pack
+creation; retrieval evaluation; and an activation request. If the backend is not
+present in a build, the page says so honestly instead of offering the workflow.
+
+The workflow is the only mutation-capable page, and it stays fully governed:
+uploading a PDF — and assessing, previewing, validating, dry-running, evaluating,
+proposing a registry entry, or requesting activation — **never** creates memory,
+activates a pack, updates retrieval, or bypasses provenance/permission checks.
+The single write is the explicit "Create knowledge pack" button, which writes the
+pack's own files only (`manifest.json` + `knowledge.jsonl`) and still does not
+activate the pack, touch memory, change retrieval, or write the source registry.
+Approval names the exact chunk ids and is bound to the source file hash and the
+preview fingerprint, so it fails closed if the document or preview changes. The
+UI controller lives in `src/agent/pdf_import_workflow.py` and orchestrates the
+existing v6.4–v7.0 PDF pipeline; created packs are written under
+`packs/pdf_imports/` as runtime artefacts.
+
 | File | Purpose |
 |---|---|
 | `src/agent/console_model.py` | Pure, read-only view models for every page |
 | `evals/test_console_model.py` | Tests for the view-model layer (read-only guarantees) |
+| `src/agent/pdf_import_workflow.py` | Governed, mutation-capable controller behind the Imports PDF workflow; orchestrates assess → preview → approve → validate → dry-run → explicit pack creation → retrieval eval → registry proposal → activation request; the only write is a confirmed pack creation |
+| `evals/test_pdf_import_workflow.py` | Governance tests: read-only steps write nothing, pack creation needs explicit confirmation and writes only pack files, chunk exclusion is honoured, and activation/registry/memory are never mutated |
 
 ```bash
 python -m pytest evals/test_console_model.py -q   # UI view-model tests, offline
