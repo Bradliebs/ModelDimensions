@@ -275,6 +275,48 @@ Pieces:
 python -m pytest evals/test_workbench_service.py -q   # workbench tests, offline
 ```
 
+## Consultant Workbench UI (UI v1.0)
+
+The optional Streamlit app is now the **Consultant Workbench** — a single
+read-only product shell over the full governed backend, replacing the earlier
+memory-ledger demo screen. Launch it the same way (`streamlit run
+app/workbench.py`); the CLI is unchanged and still works without Streamlit.
+
+> Naming note: the backend already ships layers v7.0–v7.3, so this UI slice is
+> versioned independently as **UI v1.0** (`consultant-workbench-ui-v1.0`) rather
+> than reusing a backend version number.
+
+A sidebar navigates ten task-oriented pages:
+
+| Page | What it shows |
+|---|---|
+| Home | What the system can do, headline metrics, and what needs attention |
+| Ask | Primary workspace — grounded answers with evidence, citations, and gaps separated from advisory judgement |
+| Reports | Consultant-style written report drafted from the evidence base |
+| Sources | Source registry with effective status and supersession warnings |
+| Imports | Supported/coming-soon intake adapters and the governed intake lifecycle |
+| Packs | Knowledge packs and which are active |
+| Reviews | Memory, source, regression, and action requests — approval is shown as distinct from execution |
+| Monitoring | Active-pack monitoring findings, labelled **advisory only** |
+| Memory | Active memories and pending proposals |
+| Settings | Read-only environment, backend, and file-presence summary |
+
+Design constraints: all rendering reads from the pure view-model layer in
+`src/agent/console_model.py`; page loads never mutate memory, sources, packs,
+reviews, or monitoring state. Approval controls are visibly distinct from
+execution, monitoring is labelled advisory, and unsupported capabilities are
+shown honestly rather than hidden. The destructive "delete memory" control from
+the old demo screen has been removed.
+
+| File | Purpose |
+|---|---|
+| `src/agent/console_model.py` | Pure, read-only view models for every page |
+| `evals/test_console_model.py` | Tests for the view-model layer (read-only guarantees) |
+
+```bash
+python -m pytest evals/test_console_model.py -q   # UI view-model tests, offline
+```
+
 ## Importing Notes
 
 v1.2 adds **ingestion with a human approval queue**. You can import a Markdown or

@@ -14,7 +14,8 @@ Run as a CLI (default, no extra dependencies):
     python app/workbench.py --demo          # run the Friday -> Monday example
     python app/workbench.py --no-seed       # start with an empty workbench
 
-Or, if Streamlit is installed, as a local web app:
+Or, if Streamlit is installed, as the read-only Consultant Workbench UI shell
+(``agent.console_model`` view models; no mutation from page loads):
 
     streamlit run app/workbench.py
 """
@@ -3571,56 +3572,179 @@ def _under_streamlit() -> bool:
         return False
 
 
-def _render_streamlit() -> None:  # pragma: no cover - requires streamlit
+# The Streamlit UI is a thin, read-only renderer over the pure view-model layer
+# in ``agent.console_model``. All governance, retrieval and grounding stay in the
+# backend; this shell only reads and displays. It is excluded from coverage
+# because it requires a running Streamlit session.
+
+def _cm_service():  # pragma: no cover - requires streamlit
+    """Lazily build a read-only WorkbenchService for the Ask/Reports pages."""
     import streamlit as st
-
-    st.set_page_config(page_title="Concept Memory Workbench v1.1")
-    st.title("Concept Memory Workbench v1.1")
-    st.caption("Offline workbench over the frozen v1.0 memory. "
-               "Retrieval is not grounding; the verifier decides.")
-
-    if "service" not in st.session_state:
+    if "cm_service" not in st.session_state:
         svc = WorkbenchService(ledger_path=str(_DEFAULT_LEDGER), fresh=True)
         if _SEED_FILE.exists():
             svc.seed_from(_SEED_FILE)
-        st.session_state.service = svc
-    service: WorkbenchService = st.session_state.service
+        st.session_state.cm_service = svc
+    return st.session_state.cm_service
 
-    with st.expander("Add memory"):
-        text = st.text_input("Memory text", key="add_text")
-        tags = st.text_input("Tags (comma-separated)", key="add_tags")
-        if st.button("Add") and text.strip():
-            tag_list = [t.strip() for t in tags.split(",") if t.strip()]
-            entry = service.add_memory(text.strip(), source="workbench",
-                                       tags=tag_list)
-            st.success(f"Stored {entry.memory_id}")
 
-    st.subheader("Query memory")
-    query = st.text_input("Query text", key="query_text")
-    if st.button("Query") and query.strip():
-        audit = service.query_memory(query.strip())
-        st.write({
-            "candidate_retrieved": audit.candidate_retrieved,
-            "verifier_verdict": audit.verifier_verdict,
-            "memory_used": audit.memory_used,
-            "refused": audit.refused,
-            "cited_memory_ids": audit.cited_memory_ids,
-        })
-        st.code("\n".join(
-            f"{c.memory_id} (rank {c.rank}, act {c.activation:.4f}) "
-            f"-> {c.verdict.upper()}" for c in audit.candidates
-        ) or "(no candidates)")
-        st.text(audit.response_text)
+def _page_home(st, cm, config) -> None:  # pragma: no cover - requires streamlit
+    home = cm.build_home(config)
+    cols = st.columns(max(1, len(home.metrics)))
+    for col, metric in zip(cols, home.metrics):
+        col.metric(metric.label, metric.value, help=metric.detail)
+    st.subheader("What needs attention")
+    for line in home.plain_status:
+        st.write("- " + line)
+    st.subheader("What this system can do")
+    for cap in home.capabilities:
+        st.markdown(f"**{cap.title}** — {cap.description}")
+    for err in home.errors:
+        st.warning(f"{err.section}: {err.message}")
 
-    st.subheader("Memory ledger")
-    st.dataframe(service.export_ledger())
 
-    if st.button("Delete first active memory"):
-        active = service.ledger.active_entries()
-        if active:
-            mid = active[0].memory_id
-            service.delete_memory(mid)
-            st.warning(f"Deleted {mid}; it can no longer be cited.")
+def _page_ask(st, cm, config) -> None:  # pragma: no cover - requires streamlit
+    st.caption("Ask a question. Answers are grounded in evidence; gaps are shown honestly.")
+    labels = [label for _, label in cm.ANSWER_MODES]
+    st.selectbox("Answer style", labels, key="ask_mode",
+                 help="Auto uses the governed router; other styles are advisory hints.")
+    query = st.text_input("Your question", key="ask_query")
+    if st.button("Ask") and query.strip():
+        view = cm.run_ask(_cm_service(), query.strip(),
+                          registry_path=config.registry_path)
+        st.info(f"Status: {view.status_label}")
+        for section in view.sections:
+            if section.kind == "judgement":
+                st.warning(f"**{section.title}** (advisory judgement)")
+            elif section.kind == "gap":
+                st.error(f"**{section.title}**")
+            else:
+                st.markdown(f"**{section.title}**")
+            if section.body:
+                st.write(section.body)
+            for item in section.items:
+                st.write("- " + item)
+        st.caption("Next safe action: " + view.safe_next_action)
+
+
+def _page_reports(st, cm, config) -> None:  # pragma: no cover - requires streamlit
+    st.caption("Generate a consultant-style written report from the evidence base.")
+    query = st.text_input("Report question", key="report_query")
+    if st.button("Draft report") and query.strip():
+        from slm.assistant_composer import ConsultantReportComposer
+        result = _cm_service().answer_query(
+            query.strip(), composer=ConsultantReportComposer())
+        st.text(getattr(result.answer, "text", str(result.answer)))
+        if result.evidence_ids:
+            st.caption("Evidence: " + ", ".join(result.evidence_ids))
+
+
+def _page_sources(st, cm, config) -> None:  # pragma: no cover - requires streamlit
+    view = cm.build_sources(config)
+    if view.empty:
+        st.info(f"{view.empty.title} — {view.empty.detail}")
+        return
+    if view.warnings:
+        st.warning("Registry warnings:\n" + "\n".join("- " + w for w in view.warnings))
+    st.dataframe([r.to_dict() for r in view.rows])
+
+
+def _page_packs(st, cm, config) -> None:  # pragma: no cover - requires streamlit
+    view = cm.build_packs(config)
+    st.metric("Active packs", view.active_count)
+    if view.empty:
+        st.info(f"{view.empty.title} — {view.empty.detail}")
+        return
+    st.dataframe([r.to_dict() for r in view.rows])
+
+
+def _page_reviews(st, cm, config) -> None:  # pragma: no cover - requires streamlit
+    view = cm.build_reviews(config)
+    st.caption("Approval authorises a request — it is never the same as execution.")
+    for cat in view.categories:
+        st.subheader(f"{cat.label} ({cat.pending} pending)")
+        if cat.empty:
+            st.info(f"{cat.empty.title} — {cat.empty.detail}")
+            continue
+        for row in cat.rows:
+            st.markdown(f"**{row.title}** · {row.status_label}")
+            st.caption(row.detail)
+            st.button("Approve request", key=f"approve_{cat.key}_{row.item_id}",
+                      disabled=not row.can_approve,
+                      help="Disabled for stale or non-pending items.")
+
+
+def _page_monitoring(st, cm, config) -> None:  # pragma: no cover - requires streamlit
+    view = cm.build_monitoring(config)
+    st.warning(view.advisory_notice)
+    if not view.has_history:
+        st.info(f"{view.empty.title} — {view.empty.detail}")
+        return
+    if view.critical_findings:
+        st.subheader("Critical signals")
+        for f in view.critical_findings:
+            st.error(f"{f.finding_code}: {f.diagnostic_note}")
+    st.markdown(f"**Recommendation:** {view.recommendation_label} "
+                f"(confidence: {view.confidence})")
+    if view.other_findings:
+        st.subheader("Other signals")
+        for f in view.other_findings:
+            st.write(f"- {f.finding_code} ({f.severity})")
+
+
+def _page_memory(st, cm, config) -> None:  # pragma: no cover - requires streamlit
+    view = cm.build_memory(config, ledger_rows=_cm_service().export_ledger())
+    st.metric("Active memories", view.active_count)
+    if view.proposal_pending:
+        st.caption(f"{view.proposal_pending} memory proposal(s) awaiting review.")
+    if view.empty:
+        st.info(f"{view.empty.title} — {view.empty.detail}")
+        return
+    st.dataframe([r.to_dict() for r in view.rows])
+
+
+def _page_imports(st, cm, config) -> None:  # pragma: no cover - requires streamlit
+    view = cm.build_imports()
+    st.caption("Governed intake lifecycle: " + " → ".join(view.lifecycle_steps))
+    for adapter in view.adapters:
+        icon = "✅" if adapter.supported else "•"
+        st.markdown(f"{icon} **{adapter.label}** — {adapter.status_label}")
+        st.caption(adapter.note)
+
+
+def _page_settings(st, cm, config) -> None:  # pragma: no cover - requires streamlit
+    view = cm.build_settings(config)
+    st.info(view.read_only_notice)
+    for label, value in view.items:
+        st.write(f"**{label}:** {value}")
+
+
+_PAGE_RENDERERS = {
+    "home": _page_home, "ask": _page_ask, "reports": _page_reports,
+    "sources": _page_sources, "imports": _page_imports, "packs": _page_packs,
+    "reviews": _page_reviews, "monitoring": _page_monitoring,
+    "memory": _page_memory, "settings": _page_settings,
+}
+
+
+def _render_streamlit() -> None:  # pragma: no cover - requires streamlit
+    import streamlit as st
+    from agent import console_model as cm
+
+    config = cm.ConsoleConfig.default(ROOT)
+    st.set_page_config(page_title=cm.PRODUCT_NAME, layout="wide")
+    st.sidebar.title(cm.PRODUCT_NAME)
+    st.sidebar.caption(cm.PRODUCT_TAGLINE)
+    st.sidebar.caption(f"{cm.CONSOLE_UI_VERSION} · env: {config.environment}")
+
+    sections = cm.navigation()
+    labels = [s.label for s in sections]
+    choice = st.sidebar.radio("Workspace", labels, key="cm_nav")
+    section = next(s for s in sections if s.label == choice)
+
+    st.title(section.label)
+    st.caption(section.blurb)
+    _PAGE_RENDERERS[section.key](st, cm, config)
 
 
 if _under_streamlit():  # pragma: no cover - requires streamlit
