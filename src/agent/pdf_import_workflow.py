@@ -141,6 +141,73 @@ def normalize_pack_id(text: str) -> str:
     return slug[:64]
 
 
+# --------------------------------------------------------------------------- #
+# Step 1 (UI-side): upload validation (pure, read-only)
+# --------------------------------------------------------------------------- #
+
+# A conservative client-side ceiling. The backend enforces its own governance;
+# this is a fast pre-check so an oversized or non-PDF upload is rejected before
+# it is staged, assessed, or chunked.
+DEFAULT_MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # 50 MiB
+
+
+@dataclass(frozen=True)
+class UploadValidation:
+    ok: bool
+    code: str
+    reason: str
+    size_bytes: int
+
+
+def validate_upload(data: bytes, *, filename: str = "",
+                    max_bytes: int = DEFAULT_MAX_UPLOAD_BYTES) -> UploadValidation:
+    """Pre-stage check of uploaded bytes. Pure; reads nothing from disk.
+
+    Rejects empty files, non-PDF extensions, content without a ``%PDF-`` header
+    (MIME/magic-byte check), and files over ``max_bytes``.
+    """
+    size = len(data or b"")
+    name = (filename or "").strip().lower()
+    if size == 0:
+        return UploadValidation(False, "empty", "The uploaded file is empty.", 0)
+    if name and not name.endswith(".pdf"):
+        return UploadValidation(
+            False, "not_pdf_extension",
+            f"Only PDF files are accepted; received {filename!r}.", size)
+    if bytes(data[:5]) != b"%PDF-":
+        return UploadValidation(
+            False, "not_pdf_content",
+            "The file does not look like a PDF (missing %PDF- header).", size)
+    if max_bytes and size > max_bytes:
+        limit_mb = max_bytes / (1024 * 1024)
+        return UploadValidation(
+            False, "too_large",
+            f"The file is {size / (1024 * 1024):.1f} MB; the limit is "
+            f"{limit_mb:.0f} MB.", size)
+    return UploadValidation(True, "ok", "", size)
+
+
+def find_duplicate_pack(file_hash: str, *, import_root=None) -> str:
+    """Return the id of an already-created pack with the same source file hash.
+
+    Read-only scan of created-pack manifests under ``import_root``. Returns an
+    empty string when there is no duplicate (or nothing has been created yet).
+    """
+    import json
+
+    root = Path(import_root) if import_root is not None else DEFAULT_IMPORT_ROOT
+    if not file_hash or not root.exists():
+        return ""
+    for manifest_path in sorted(root.glob("*/manifest.json")):
+        try:
+            data = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except Exception:  # pragma: no cover - skip unreadable manifests
+            continue
+        if str(data.get("source_file_hash", "")) == str(file_hash):
+            return str(data.get("pack_id", manifest_path.parent.name))
+    return ""
+
+
 def stage_upload(data: bytes, *, filename: str, workspace) -> Path:
     """Write uploaded bytes into a staging workspace and return the path.
 

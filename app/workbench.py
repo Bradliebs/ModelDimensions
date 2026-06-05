@@ -3763,6 +3763,12 @@ def _page_imports_pdf(st) -> None:  # pragma: no cover - requires streamlit
                 "is imported, activated, or added to memory.")
         return
 
+    upload_check = wf.validate_upload(uploaded.getvalue(), filename=uploaded.name)
+    if not upload_check.ok:
+        st.error(upload_check.reason)
+        return
+    st.caption(f"Validated PDF · {upload_check.size_bytes / 1024:.0f} KB.")
+
     path = wf.stage_upload(
         uploaded.getvalue(), filename=uploaded.name, workspace=ss.pdf_workspace)
 
@@ -3825,6 +3831,11 @@ def _page_imports_pdf(st) -> None:  # pragma: no cover - requires streamlit
         "Acknowledge and allow confidential content", key="pdf_allowconf")
     pack_id = wf.normalize_pack_id(pack_id_raw or source_title or "pdf-pack")
     st.caption(f"Pack id: {pack_id}")
+
+    duplicate = wf.find_duplicate_pack(preview["file_hash"])
+    if duplicate:
+        st.warning(f"A pack with this exact source was already created: "
+                   f"'{duplicate}'. Creating another will not overwrite it.")
 
     def _approval():
         return wf.build_approval(

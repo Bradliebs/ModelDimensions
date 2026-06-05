@@ -176,6 +176,58 @@ def test_normalize_pack_id_produces_valid_ids():
 
 
 # --------------------------------------------------------------------------- #
+# UI-side upload validation (pure; no writes)
+# --------------------------------------------------------------------------- #
+
+def test_validate_upload_accepts_a_real_pdf():
+    check = wf.validate_upload(_clean_pdf_bytes(), filename="report.pdf")
+    assert check.ok is True
+    assert check.code == "ok"
+    assert check.size_bytes > 0
+
+
+def test_validate_upload_rejects_empty_file():
+    check = wf.validate_upload(b"", filename="report.pdf")
+    assert check.ok is False
+    assert check.code == "empty"
+
+
+def test_validate_upload_rejects_non_pdf_extension():
+    check = wf.validate_upload(_clean_pdf_bytes(), filename="report.txt")
+    assert check.ok is False
+    assert check.code == "not_pdf_extension"
+
+
+def test_validate_upload_rejects_non_pdf_content():
+    check = wf.validate_upload(b"not a pdf at all", filename="report.pdf")
+    assert check.ok is False
+    assert check.code == "not_pdf_content"
+
+
+def test_validate_upload_rejects_oversized_file():
+    check = wf.validate_upload(_clean_pdf_bytes(), filename="report.pdf",
+                               max_bytes=10)
+    assert check.ok is False
+    assert check.code == "too_large"
+
+
+def test_find_duplicate_pack_detects_created_pack(tmp_path):
+    path = _stage(tmp_path)
+    preview = _preview_dict(path)
+    approval = _approval(preview)
+    import_root = tmp_path / "packs"
+    wf.create_pack(preview, approval, pack_id="quarterly-review",
+                   import_root=import_root, confirm=True, now=_IMPORT_NOW)
+
+    found = wf.find_duplicate_pack(preview["file_hash"], import_root=import_root)
+    assert found == "quarterly-review"
+
+    assert wf.find_duplicate_pack("nonexistent-hash", import_root=import_root) == ""
+    assert wf.find_duplicate_pack(preview["file_hash"],
+                                  import_root=tmp_path / "empty") == ""
+
+
+# --------------------------------------------------------------------------- #
 # Read-only steps write nothing
 # --------------------------------------------------------------------------- #
 
