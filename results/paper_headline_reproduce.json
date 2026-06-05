@@ -1,0 +1,66 @@
+{
+  "produced_by": "experiments/exp14_paper_headline_reproduce.py",
+  "config": {
+    "n_batches": 100,
+    "batch_size": 8,
+    "seed": 42,
+    "tolerance_nats": 0.05,
+    "data_dir": "H:\\MiniLM\\nanogpt\\data\\bank"
+  },
+  "paper_claims": {
+    "55M_bank_trained": {
+      "semantic_gap": 0.164,
+      "random_harm": -0.003
+    },
+    "404M_kfree": {
+      "semantic_gap": 0.167,
+      "random_harm": -0.041
+    }
+  },
+  "agreement": {
+    "55M_bank_trained": {
+      "semantic_gap": "match",
+      "random_harm": "match"
+    },
+    "404M_kfree": {
+      "semantic_gap": "match",
+      "random_harm": "match"
+    }
+  },
+  "measurements": {
+    "55M_bank_trained": {
+      "checkpoint_path": "H:\\MiniLM\\nanogpt\\out-retro-bank\\ckpt_best.pt",
+      "val_without": 4.4711428022384645,
+      "val_with_random": 4.4631123352050786,
+      "val_with_real": 4.29514000415802,
+      "val_with_real1": 4.349880709648132,
+      "stderr_none": 0.021695571174011125,
+      "stderr_random": 0.021656763680700197,
+      "stderr_real": 0.022395166852102293,
+      "semantic_gap_real_vs_random": 0.1679723310470589,
+      "total_gap_real_vs_without": 0.17600279808044483,
+      "random_harm_none_vs_random": 0.008030467033385946,
+      "n_batches": 100,
+      "batch_size": 8,
+      "elapsed_sec": 8.969667196273804,
+      "device": "cuda"
+    },
+    "404M_kfree": {
+      "checkpoint_path": "H:\\MiniLM\\nanogpt\\out-retro-kfree-large\\ckpt_best.pt",
+      "val_without": 4.699680590629578,
+      "val_with_random": 4.7373824262619015,
+      "val_with_real": 4.546167697906494,
+      "val_with_real1": 4.612421751022339,
+      "stderr_none": 0.017092026691758338,
+      "stderr_random": 0.01706013575504252,
+      "stderr_real": 0.018478004810415248,
+      "semantic_gap_real_vs_random": 0.19121472835540754,
+      "total_gap_real_vs_without": 0.153512892723084,
+      "random_harm_none_vs_random": -0.037701835632323544,
+      "n_batches": 100,
+      "batch_size": 8,
+      "elapsed_sec": 30.15717339515686,
+      "device": "cuda"
+    }
+  }
+}
