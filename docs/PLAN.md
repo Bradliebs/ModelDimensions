@@ -1,85 +1,130 @@
-# Plan: reproduce the paper's headline from this repo
+# Plan: paper validation + V1 grounded-answer system
 
-This document is the working contract for the next slice of work. The agent
-follows it. No drift, no scope creep, no "while I'm here" cleanups.
+This document is the working contract. The agent follows it. No drift, no
+scope creep, no "while I'm here" cleanups.
 
-## Destination
+## Two artefacts, one library
 
-The system described in `docs/Knowledge_Free_RETRO_Paper.docx` must be
-demonstrable from this single repo, using the checkpoints and bank already on
-disk. "Demonstrable" means three things:
+This plan delivers two distinct things that share one library (the 1.8M-cell
+concept-cell bank at `H:\MiniLM\cc_service\bank.db`):
 
-1. The paper's §4.2 / §5.4 held-out triple (`val_with_real`, `val_with_random`,
-   `val_without`) is reproduced from `src/retro/` against the 55M
-   bank-trained baseline **and** the 404M knowledge-free model. Numbers are
-   written to a JSON artifact and asserted by a pytest.
-2. The 1.8M-cell concept-cell bank at `H:\MiniLM\cc_service\bank.db` is
-   measured for selectivity and rejection at deployed scale, addressing the
-   open threat-to-validity flagged in paper §9a. Numbers are written to a JSON
-   artifact.
-3. One end-to-end script demonstrates the architecture: query → bank
-   retrieval → grounded answer or honest refusal, against the real 13 GB
-   bank, with no UI and no governance layer.
+**A. Paper validation (Steps 1+2).** Reproduces the headline numbers from
+`docs/Knowledge_Free_RETRO_Paper.docx`. Proves the bank does real semantic
+work when a CCA-trained model reads it. This is the research contribution;
+after these steps it sits as a published result.
+
+**B. V1 grounded-answer system (Steps 3+4+5).** A usable system that
+answers questions by querying the bank, using an instruction-tuned SLM
+(Phi-3-mini-4k-instruct) as the generator. This is **not** the paper's
+architecture — the paper's 404M kfree model is not instruction-tuned and
+produces incoherent Wikipedia-style continuations. V1 substitutes
+*pipeline-level grounding* (retrieve → rerank → silence-gate → generate →
+verify) for the paper's *architectural grounding* (CCA layers).
+
+These are different artefacts with different value props. They share the
+bank and the encoder. They do not share the generator.
+
+## What V1 is — pipeline contract
+
+V1 is **not classical RAG**. Classical RAG = "stuff k cells in the prompt
+and hope." V1 = retrieve + rerank + silence-gate + generate + verify, with
+the verifier subsystem acting as the grounding enforcer.
+
+```
+question
+  ↓
+MiniLM encode (encoder identity verified against bank meta)
+  ↓
+SqliteBank top-k retrieval (k=8)
+  ↓
+Reranker (drop anything below rerank_min_score = 0.10)
+  ↓
+IF zero cells survive  →  "[silence: no matching memory in library]"
+  ↓
+Format prompt: "Answer only from these cells. Cite as [cell_id]."
+  ↓
+Phi-3-mini-4k-instruct generate (4-bit, temperature 0)
+  ↓
+Verifier: do claims align with cited cells? (src/agent/verifier.py)
+  ↓
+IF verified           →  return answer + citations
+IF NOT verified       →  "[silence: model wandered beyond library]"
+```
+
+The verifier is the load-bearing component that makes V1 honest. Without
+it, V1 would be vanilla RAG with a fancy library.
 
 ## Scope lock
 
 ### In scope
 
-- `evals/test_paper_headline_reproduces.py` — pytest asserting the held-out
-  gaps from step 1's JSON are within tolerance of the paper.
-- `experiments/exp14_paper_headline_reproduce.py` — runs
-  `src/retro/eval_retro_heldout.py` (or its in-repo replacement) against both
-  checkpoints; writes `results/paper_headline_reproduce.json`.
+- `evals/test_paper_headline_reproduces.py` — pytest asserting Step 1's
+  measured gaps are within tolerance of the paper.
+- `experiments/exp14_paper_headline_reproduce.py` — runs the held-out
+  eval against both checkpoints; writes
+  `results/paper_headline_reproduce.json`.
 - `experiments/exp15_bank_selectivity_at_scale.py` — selectivity / rejection
-  probe against `H:\MiniLM\cc_service\bank.db` via
-  `src/agent/sqlite_bank.py`; writes `results/bank_selectivity_at_1p8m.json`.
-- `scripts/demo_end_to_end.py` — one CLI script: `python demo_end_to_end.py
-  "your question"` → either a cited answer or `[silence: no matching memory]`.
-- Minor patches to `src/retro/eval_retro_heldout.py` only as needed to make it
-  runnable as a module from the repo root with configurable `--data-dir` and
-  `--ckpt` flags. No functional changes to the eval logic itself.
-- One paragraph added to `README.md` once results land, pointing at the
-  reproduced numbers and how to re-run them.
+  probe against the bank; writes `results/bank_selectivity_at_1p8m.json`.
+- `src/agent/answer_pipeline.py` — V1 pipeline: retrieve → rerank →
+  silence-gate → generate → verify. Reuses
+  `src/agent/sqlite_bank.py`, `src/agent/candidate_retrieval.py`,
+  `src/agent/verifier.py`. Pulls in Phi-3 as the generator.
+- `src/agent/bank_admin.py` — minimal editing API: `add_cell(text, source)`,
+  `remove_cell(cell_id, reason)`, both with provenance logging into a new
+  `provenance_log` table in an overlay store.
+- `scripts/ask.py` — CLI front door: `python scripts/ask.py "question"` →
+  routes through `answer_pipeline.py`, prints cited answer or silence.
+- `scripts/setup.py` — one-command setup: verifies bank path, model
+  presence, encoder identity, runs a smoke `ask`. Writes
+  `results/setup_check.json`.
+- `evals/test_answer_pipeline.py` — known/unknown/noise behavioural tests.
+- `evals/test_bank_admin.py` — add cell → answer changes → remove → silence.
+- Minor patches to `src/retro/eval_retro_heldout.py` only as needed to make
+  it runnable as a module from the repo root (sys.path nudge — already
+  done in this slice).
+- `docs/RUNBOOK.md` — single short runbook: how to ask, add/remove cells,
+  re-run validations, recover from common failures.
+- One paragraph added to `README.md` once results land.
 
 ### Out of scope (do not touch in this slice)
 
-- Training. Every checkpoint exists. No `train_*.py` is run.
-- The SLM controller layer beyond what `scripts/demo_end_to_end.py` needs to
-  ground an answer. `src/slm/`, `src/agent/orchestrator.py`,
-  `src/agent/response_policy.py`, `src/agent/verifier.py` are used as-is.
-- Governance, source registry, review queues, lifecycle states, approval
-  metadata, RAI/SSSC, or anything else from the deleted workbench.
-- The M365 consulting assistant example from §14 of the architecture
-  write-up. Reintroducing project packs is rebuilding the workbench.
-- Full README rewrite. One paragraph addition only, at the end.
-- Investigating the cc_service encoder-singleton design. The DI fix from
-  commit `9845de4` already unblocked the tests; further redesign is its own
-  slice.
+- Training. Every checkpoint exists. No `train_*.py` runs.
+- Reintroducing the workbench (project packs, source registry as a UI,
+  review queues, lifecycle states, M365 consulting example, governance
+  workflows beyond the minimum editing API).
+- Multi-user, auth, network APIs, web UI.
+- Encoder swap, model swap, retraining the verifier.
 - Touching `H:\MiniLM\`. All reads go via absolute paths or
-  `src/agent/sqlite_bank.py`. Copies are non-destructive.
-- Creating any markdown beyond this file (`PLAN.md`) and the one README
+  `src/agent/sqlite_bank.py`. Writes (Step 4 admin API) land in a NEW
+  SQLite file under `results/v1_bank/overlay.db` — the production bank is
+  read-only in V1; mutations go to an overlay store so a wrong `add_cell`
+  cannot corrupt the 13 GB bank.
+- Creating any markdown beyond `PLAN.md`, `RUNBOOK.md`, and the one README
   paragraph.
 
 ### Hard rules
 
-- Each step is an independently committable slice. If a step blocks, commit
+- Each step is independently committable. If a step blocks, commit
   what's done and surface the blocker; do not skip ahead.
-- If the measured numbers disagree with the paper, **report the gap
-  honestly**. Do not tune thresholds, data ranges, or batch counts to make
-  numbers match.
+- If measured numbers disagree with the paper, **report the gap honestly**.
+  Do not tune thresholds, data ranges, or batch counts to match.
 - If a path doesn't exist or a file is missing, stop and ask. Do not
   fabricate fallback data.
-- No new modules under `src/` unless a step requires it. New code lives under
-  `experiments/`, `scripts/`, or `evals/`.
+- No new modules under `src/` unless a step explicitly requires it. New
+  code lives under `experiments/`, `scripts/`, `evals/`, or one of the
+  three new `src/agent/` modules listed above.
 - No commits without an explicit "do it" from the user. The standing rule
   from the consolidation slice still applies.
 
 ## Steps
 
-### Step 1 — Reproduce the held-out triple
+### Step 1 — Reproduce the paper's held-out triple
 
-**Deliverable:** `results/paper_headline_reproduce.json` containing, for each
-of `{55M_bank_trained, 404M_kfree}`:
+**Purpose:** Validate the bank does real semantic work. This is the research
+contribution. After this step, the bank is trusted as a knowledge source.
+
+**Deliverable:** `results/paper_headline_reproduce.json` with, for each of
+`{55M_bank_trained, 404M_kfree}`:
 
 ```json
 {
@@ -96,7 +141,7 @@ of `{55M_bank_trained, 404M_kfree}`:
 }
 ```
 
-Plus a top-level block comparing measured vs paper-claimed:
+Plus a top-level comparison block:
 
 ```json
 {
@@ -109,109 +154,171 @@ Plus a top-level block comparing measured vs paper-claimed:
 }
 ```
 
-**Steps:**
+**Steps:** smoke-load → 5-batch smoke → full eval → repeat for 404M → write
+JSON.
 
-1. Smoke-load each checkpoint (no eval, just `torch.load` + model construct)
-   to confirm the wiring works. If VRAM blows up, stop and report.
-2. Run eval with `--n-batches 5` against the 55M checkpoint to confirm the
-   data path. Numbers will be noisy; that's fine — we're checking it runs.
-3. Full eval (paper's `--n-batches` default) for 55M. Write JSON entry.
-4. Same smoke + full eval for the 404M checkpoint.
-5. Stop condition: JSON written and the "agreement" field is honestly
-   filled (match / drift / blocker), regardless of whether the numbers
-   match the paper.
-
-**Pytest:** `evals/test_paper_headline_reproduces.py` re-reads the JSON and
-asserts each measured semantic gap is within ±0.05 nats of the paper claim
-(tolerance is generous because of batch-sampling variance). If the JSON
-doesn't exist yet, the test skips with an explicit reason.
+**Pytest:** `evals/test_paper_headline_reproduces.py` asserts each measured
+semantic gap is within ±0.05 nats of the paper claim. Skips with explicit
+reason if JSON missing.
 
 ### Step 2 — Measure bank selectivity at 1.8M cells
 
-**Deliverable:** `results/bank_selectivity_at_1p8m.json` containing:
+**Purpose:** Confirm the bank discriminates known from unknown queries at
+deployed scale. Addresses paper §9a's open threat-to-validity.
 
-- `n_cells`: confirmed cell count from the bank.
-- `known_queries`: ~20 queries whose answer is provably in the bank
-  (Wikipedia article titles + first sentences); reports top-1 hit rate,
-  median activation, median rank of the correct cell.
-- `unknown_queries`: ~20 queries that are syntactically plausible but
-  semantically absent (made-up names, scrambled phrases); reports
-  false-fire rate at the bank's configured `rerank_min_score` (0.10).
-- `noise_queries`: ~10 randomly-sampled non-text tokens / gibberish; reports
-  false-fire rate.
-- `latency_p50_ms`, `latency_p95_ms` over all queries — addresses the paper's
-  "sub-200ms" claim directly.
+**Deliverable:** `results/bank_selectivity_at_1p8m.json`:
 
-**Steps:**
+- `n_cells`: confirmed cell count (don't trust the log; measure it).
+- `known_queries` (~20): top-1 hit rate, median activation, median rank.
+- `unknown_queries` (~20): false-fire rate at `rerank_min_score = 0.10`.
+- `noise_queries` (~10): false-fire rate.
+- `latency_p50_ms`, `latency_p95_ms`.
 
-1. Open `H:\MiniLM\cc_service\bank.db` via `src/agent/sqlite_bank.py`
-   (read-only). Confirm `n_cells == 1_817_204` per the project log; if it
-   differs, record actual count, do not assume the log is right.
-2. Build the three query sets. The known set is generated by sampling
-   `source_texts.text` rows directly from the DB. No fabrication.
-3. Run all queries; record activations and timing.
-4. Write JSON. No assertions yet — this is measurement, not a regression
-   gate. The paper itself flags this as an open question, so honest numbers
-   beat any pass/fail outcome.
+**Steps:** open bank read-only → confirm cell count → build query sets
+(known sampled from `source_texts.text` rows, no fabrication) → run → write
+JSON. No assertions — measurement, not regression gate.
 
-### Step 3 — End-to-end grounded-answer demo
+### Step 3 — V1 grounded-answer pipeline
 
-**Deliverable:** `scripts/demo_end_to_end.py`. Single CLI:
+**Purpose:** Build the working V1 system. End-to-end question → cited
+answer or honest silence.
 
-```bash
-python scripts/demo_end_to_end.py "Who founded Microsoft?"
-python scripts/demo_end_to_end.py "What is the airspeed of a banana?"
-```
+**Deliverables:**
 
-Behaviour:
+- `src/agent/answer_pipeline.py` (~250 lines): the full pipeline.
+- `scripts/ask.py` (~40 lines): CLI front door.
+- `evals/test_answer_pipeline.py`: behavioural tests for known (must
+  answer with citation), unknown (must silence), noise (must silence).
 
-1. Encode query with the same encoder the bank was built with (read from
-   the bank's `meta.encoder_model` — fail loudly on mismatch).
-2. Retrieve top-k from the bank.
-3. Apply the bank's `rerank_min_score` (0.10) — if nothing survives, print
-   `[silence: no matching memory]` and exit 0.
-4. Otherwise, print the top-N retrieved cells with their cell_id and
-   source_text. The "grounded answer" is the cited evidence itself, not a
-   generated response. **No LLM generation in this demo.** Generation is
-   what the 404M model in step 1 does; this script is the inspection layer.
-5. Exit code: 0 if either a cited answer or an honest refusal; 1 only on
-   actual error (missing bank, encoder mismatch, etc).
+**Components:**
 
-**Steps:**
+- **Generator:** Phi-3-mini-4k-instruct. 4-bit quantized via `bitsandbytes`.
+  Loaded once and cached. Deterministic (`temperature=0`, `do_sample=False`).
+- **Retrieval:** `src/agent/sqlite_bank.py` top-k (k=8).
+- **Reranker:** `src/agent/candidate_retrieval.py` with
+  `rerank_min_score = 0.10`.
+- **Verifier:** `src/agent/verifier.py` + `src/slm/equivalence_judge.py`.
+  Checks every generated claim is supported by at least one cited cell.
+- **Silence gates:** two — pre-generation (no cells clear floor) and
+  post-generation (verifier rejects).
 
-1. Write the script. ~80 lines.
-2. Smoke-test with both a known-answer query and a known-unknown query.
-3. Confirm both paths behave as designed.
+**Dependencies to add to `requirements.txt`:**
+
+- `transformers`
+- `accelerate`
+- `bitsandbytes`
+
+**Model download:** Phi-3-mini-4k-instruct (~2.5 GB at 4-bit). Lands in
+`HF_HOME` (default `~/.cache/huggingface/`). Documented in RUNBOOK.
+
+**Behavioural tests (the contract):**
+
+| Query type | Expected |
+|---|---|
+| "Who founded Microsoft?" (known) | Cited answer naming Gates/Allen, with `[cell_id]` |
+| "What is the boiling point of helium?" (known) | Cited answer with temperature, `[cell_id]` |
+| "Who was the third leader of Atlantis?" (plausible but absent) | `[silence: no matching memory]` |
+| "asdf qwerty zxcv" (noise) | `[silence: no matching memory]` |
+| "Who founded Microsoft and what is the capital of Mars?" (mixed) | Cited answer to the known part, silence on the absent part — OR full silence if verifier can't separate. Documented either way. |
+
+### Step 4 — Editable bank with provenance (overlay store)
+
+**Purpose:** Editability is one of the five named attributes. Add it
+without risking the 13 GB production bank.
+
+**Decision:** Mutations go to an **overlay SQLite store** at
+`results/v1_bank/overlay.db`. `answer_pipeline.py` queries the production
+bank AND the overlay, unioning results. Removing a cell from the production
+bank is implemented as adding a `tombstone` row to the overlay — the
+production bank file is never written.
+
+**Deliverable:** `src/agent/bank_admin.py` (~150 lines):
+
+- `add_cell(text: str, source: str) -> cell_id` — encodes via MiniLM,
+  writes to overlay with `source_id`, `ingested_at`, `content_hash`.
+- `remove_cell(cell_id: int, reason: str) -> None` — writes tombstone to
+  overlay.
+- `list_provenance(cell_id: int) -> list[ProvenanceEvent]` — query log.
+- All operations write to `provenance_log` table with timestamp, action,
+  cell_id, source, reason, content_hash.
+
+**One test (`evals/test_bank_admin.py`):**
+
+1. Ask a question whose answer isn't in the production bank → assert
+   silence.
+2. `add_cell("...the answer...", source="test")` to overlay.
+3. Ask the same question → assert answer returned with the new cell's
+   citation.
+4. `remove_cell(cell_id, reason="test cleanup")`.
+5. Ask again → assert silence returned.
+6. Inspect `list_provenance(cell_id)` → assert all three events present.
+
+### Step 5 — Long-run usability rail
+
+**Purpose:** Robust over time. The system must still work in 3 months
+without remembering 20 setup steps.
+
+**Deliverables:**
+
+- `scripts/setup.py` (~80 lines): verifies bank path, model presence,
+  encoder identity (bank's `meta.encoder_model` vs current MiniLM model
+  name), runs one smoke `ask`. Writes `results/setup_check.json`. Exits
+  non-zero if anything fails, with clear remediation hints.
+- `docs/RUNBOOK.md` (~150 lines, one page printed): the only doc a future
+  user (or future you) needs. Sections: prerequisites, first-time setup,
+  ask, add cell, remove cell, re-run paper validation, common failures.
+- Encoder identity check wired into `answer_pipeline.py` at startup — a
+  mismatched encoder fails loudly instead of silently returning garbage.
+
+**No test for setup.py** beyond the smoke run it does itself. It IS the test.
 
 ## Definition of done
 
-The slice is done when all three artifacts exist:
+The slice is done when:
 
-- `results/paper_headline_reproduce.json` (real numbers, honestly compared)
-- `results/bank_selectivity_at_1p8m.json` (real numbers, no assertions)
-- `scripts/demo_end_to_end.py` (works against the real bank)
+- `results/paper_headline_reproduce.json` exists with honest comparison.
+- `results/bank_selectivity_at_1p8m.json` exists with measured numbers.
+- `python scripts/ask.py "Who founded Microsoft?"` returns a cited answer.
+- `python scripts/ask.py "asdf qwerty"` returns `[silence: no matching memory]`.
+- `python scripts/setup.py` returns exit 0 and writes a green
+  `results/setup_check.json`.
+- `evals/test_answer_pipeline.py` and `evals/test_bank_admin.py` pass.
+- All pre-existing 78 tests still pass.
 
-…and the new pytest `evals/test_paper_headline_reproduces.py` either passes
-or fails with a clear "measured X, paper claims Y, gap exceeds tolerance"
-message.
+## Stop conditions
 
-## Stop conditions (any of these stops the slice)
-
-- The 404M checkpoint won't load in available VRAM. Commit step 1's 55M
-  result and stop. Report the VRAM blocker.
-- An eval data file referenced by `eval_retro_heldout.py` is missing. Stop
-  and ask. Do not regenerate from a different source.
-- The bank's `encoder_model` meta doesn't match the encoder the loaders use.
-  Stop and ask before forcing an override.
-- More than one test outside `evals/test_paper_headline_reproduces.py`
-  starts failing. Stop. Diagnose. Do not "fix" unrelated breakage in this
-  slice.
+- 404M won't load in 8.6 GB VRAM (bf16 eval-only). Commit Step 1's 55M
+  result and stop. Report blocker.
+- Eval data file referenced by `eval_retro_heldout.py` is missing. Stop
+  and ask.
+- Bank's `encoder_model` meta doesn't match the encoder loaders use. Stop
+  and ask.
+- Phi-3-mini-4k-instruct download fails or doesn't fit at 4-bit on the
+  3070. Stop and ask before substituting a different model.
+- More than one test outside the new test files starts failing. Stop.
+  Diagnose. Do not "fix" unrelated breakage in this slice.
+- Verifier flags >50% of cited answers as unverified on known queries —
+  signals the verifier is mis-calibrated for this generator. Stop and
+  ask whether to weaken verifier, change prompt, or accept lower yield.
 
 ## What this is not
 
 - Not a paper rewrite. The paper stands.
 - Not a release. No version bump, no tag.
-- Not a new architectural direction. The architecture is what the paper
-  describes; this slice makes that architecture *demonstrable from this
-  repo*.
 - Not a workbench reboot. The deleted workbench stays deleted.
+- Not classical RAG. The verifier is what makes V1 not-just-RAG.
+- Not the paper's architecture either. V1 substitutes pipeline-level
+  grounding for CCA-level grounding. Honest about that gap.
+
+## Order of operations
+
+1. Commit this amended PLAN.md.
+2. Step 1 (paper validation, 55M + 404M).
+3. Step 2 (bank selectivity).
+4. Step 3 (V1 pipeline). Phi-3 download happens here.
+5. Step 4 (editable overlay).
+6. Step 5 (setup + runbook).
+7. README paragraph.
+
+Each step ends with a commit. Steps 3, 4, 5 are independent enough that any
+could be deferred without breaking the earlier ones.

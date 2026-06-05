@@ -30,17 +30,23 @@ REQUIRES:
 
 import argparse
 import math
+import sys
 import time
 from pathlib import Path
 
 import numpy as np
 import torch
 
-from model_retro import RetroConfig, RetroGPT
+# Allow running from any CWD: ensure this script's directory is importable
+# so `model_retro` resolves regardless of how the script is launched.
+_SCRIPT_DIR = Path(__file__).resolve().parent
+if str(_SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(_SCRIPT_DIR))
+
+from model_retro import RetroConfig, RetroGPT  # noqa: E402
 
 
 # ---- Paths (defaults, overridable via CLI) ----
-_SCRIPT_DIR = Path(__file__).resolve().parent
 DATA_DIR = _SCRIPT_DIR / "data" / "bank"
 CKPT_PATH = _SCRIPT_DIR / "out-retro-bank" / "ckpt_best.pt"
 
