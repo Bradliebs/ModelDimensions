@@ -3647,6 +3647,121 @@ Deactivation does not delete a pack. A rollback recommendation does not authoris
 a rollback by itself. Every state-changing lifecycle action remains the separate,
 independently re-validated responsibility of v7.0.
 
+## v7.3 Governed Lifecycle Action Executor (execution, independently re-validated; fail-closed)
+
+The v7.3 layer is the **governed executor** that finally *performs* one approved
+lifecycle action. It sits after the v7.2 review queue: a review approval emits an
+action *request*; this layer consumes that request, requires a **separate,
+single-use execution approval**, independently re-validates all evidence and the
+live governed state, performs **exactly one** permitted lifecycle action
+**atomically by reusing the v7.0 primitives** (it never reimplements a
+transition), verifies the result, and records an immutable execution audit event.
+
+> The spec named this slice "v6.8", which is out of order with the existing
+> v6.9/v7.0/v7.1/v7.2 layers it depends on. Following the prior
+> collision-avoidance convention, it ships as **v7.3**
+> (`EXECUTOR_LAYER_VERSION = "lifecycle-action-executor-v7.3"`).
+
+**Lifecycle chain.**
+
+```text
+v7.2 RegressionActionRequest (REQUESTED) ──▶ separate execution approval (single-use)
+                                                  │
+                            independent revalidation (fail-closed)
+                                                  │
+                            deterministic execution plan + fingerprint
+                                                  │
+   dry-run ─▶ writes nothing            write ─▶ exactly one v7.0 primitive call
+                                                  │
+                            post-action verification (state + audit)
+                                                  │
+                            immutable LifecycleExecutionAuditRecord
+```
+
+**Execution approval ≠ review approval.** A `LifecycleExecutionApproval` is a
+distinct, single-use authorisation to *execute* one exact request. It binds to
+the action request id, the action type, the active-state hash, and the affected
+pack fingerprints, so an approval for a deactivation can never authorise a
+rollback, and an approval minted for one governed state can never authorise a
+changed state. Approval ids are deterministic SHA-256 fingerprints.
+
+**Independent revalidation (fail-closed).** Before doing anything,
+`validate_lifecycle_execution` re-checks — without mutating anything — that the
+action request is approved and still actionable (not already executed or
+cancelled), that a matching `RegressionReviewRecord` actually approved it, that
+the execution approval is unexpired, unconsumed, and exactly bound, that the
+monitoring and recommendation fingerprints are unchanged, that the live
+active-state hash and pack fingerprints still match, that the environment
+matches, and that the requested transition is still valid (the pack is still
+active for a deactivation; the rollback target is recorded, reconstructable and
+not already current). Any mismatch refuses execution.
+
+**Deterministic plan.** `build_execution_plan` describes exactly what will change
+*before* it changes — the lifecycle primitive, the expected resulting state hash,
+the precise expected record changes, the files expected to change, the files
+expected to remain byte-identical (all pack directories, chunk files, retrieval
+indexes, the source registry and the memory ledger), and a `lifeplan-` plan
+fingerprint. An execution approval may be bound to a plan fingerprint; if the
+plan changes, execution is refused.
+
+**Action mapping.** `request_deactivation` → `knowledge_pack_activation.deactivate`;
+`request_rollback` → `knowledge_pack_activation.rollback`;
+`request_activation_block` → a bounded `ActivationBlockRecord` (records intent to
+block a future activation; **does not** deactivate anything);
+`request_investigation` / `request_watch` / `request_new_monitoring_run` /
+`request_additional_evidence` → a bounded `OperationalFollowUpRecord` that never
+triggers background work. Only the first two change active-pack state.
+
+**Atomic, single, verified.** A write performs exactly one primitive call. The
+commit point is explicit: only after the v7.0 primitive has atomically replaced
+the active state and appended its own lifecycle audit does the executor verify the
+result, consume the approval, and mark the action request executed (which itself
+requires both an execution record id and the lifecycle audit reference).
+`verify_post_action` confirms the resulting state hash matches the plan, the
+affected packs reached the expected status, unrelated active packs are untouched,
+pack files and manifests are unchanged, and the audit record is present.
+Execution is idempotent: a re-run is refused because the action request is already
+marked executed (and, in-process, replay protection returns `already_executed`).
+A failed primitive leaves the state unchanged, the approval unconsumed, and the
+action request not executed — **a failed execution never appears successful**.
+
+**Immutable audit.** Every attempt — including a refused one under `--write` —
+appends a `LifecycleExecutionAuditRecord` (`lifeaud-` hash) to an append-only
+`reviews/lifecycle_execution_audit.jsonl`, capturing the executor identity and
+role, the plan fingerprint, pre/post state hashes, the primitive called, and the
+validation and verification findings. Results, follow-ups and activation blocks
+each live in their own atomic JSONL file under `reviews/`.
+
+**CLI (execution gated on `--write`).**
+
+```text
+lifecycle-executor inspect  --action-request-id ID
+lifecycle-executor validate --action-request-id ID --execution-approval P
+lifecycle-executor plan     --action-request-id ID --execution-approval P
+lifecycle-executor execute  --action-request-id ID --execution-approval P \
+                            --executor NAME --role lifecycle_operator (--dry-run | --write)
+lifecycle-executor result   --execution-id ID
+lifecycle-executor follow-ups
+lifecycle-executor activation-blocks
+```
+
+Global flags (`--state`, `--audit`, `--actions`, `--review-records`,
+`--results`, `--audit-out`, `--follow-ups`, `--blocks`, `--deterministic`)
+precede the subcommand. `inspect`, `validate`, `plan` and `execute --dry-run`
+write nothing; `execute` requires exactly one of `--write` or `--dry-run`, plus an
+executor identity, an executor role and an execution approval. `execute --write`
+is the only path that mutates state, and it does so only through the v7.0
+primitive.
+
+**Governance invariants.** A recommendation is not an approval. A review approval
+is not an execution approval. An action *requested* is not an action *executed*. A
+dry-run is not an execution. An *executed* action is not *verified* until the
+post-action check passes. A deactivation is not a deletion. A rollback is not a
+deletion. An activation block is not a deactivation. A failed execution must never
+appear successful. Execution never touches the memory ledger, the source
+registry, a proposal, pack contents, retrieval indexes, or any importer, and
+introduces no scheduler or background automation — nothing executes automatically.
+
 ## License
 
 To be decided.

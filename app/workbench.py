@@ -3279,6 +3279,209 @@ def _pdf_pack_cli(argv: list[str]) -> int:
     return 0 if result.validation.valid else 1
 
 
+def _lifecycle_executor_cli(argv: list[str]) -> int:
+    """Governed execution of one approved lifecycle action request (v7.3).
+
+    Sits *after* the v7.2 regression review queue. A review approval emits an
+    action *request*; this layer requires a separate, single-use
+    :class:`LifecycleExecutionApproval` and then independently revalidates all
+    evidence and the live governed state before performing exactly one permitted
+    lifecycle action by reusing the v7.0 primitives (deactivate / rollback) — it
+    never reimplements a transition. ``inspect``/``validate``/``plan`` and any
+    ``execute --dry-run`` write nothing. ``execute --write`` is the only mutating
+    path, and even then it acts only if validation passes, verifies the result,
+    and appends an immutable execution audit event. Review approval alone can
+    never execute. Subcommands::
+
+        lifecycle-executor inspect  --action-request-id ID
+        lifecycle-executor validate --action-request-id ID --execution-approval P
+        lifecycle-executor plan     --action-request-id ID --execution-approval P
+        lifecycle-executor execute  --action-request-id ID --execution-approval P
+                                    --executor NAME --role lifecycle_operator
+                                    (--dry-run | --write)
+        lifecycle-executor result   --execution-id ID
+        lifecycle-executor follow-ups
+        lifecycle-executor activation-blocks
+    """
+    from agent import knowledge_pack_activation as kpa
+    from agent import lifecycle_action_executor as lae
+    from agent import regression_review_queue as rrq
+
+    parser = argparse.ArgumentParser(
+        prog="workbench.py lifecycle-executor",
+        description="Execute one approved lifecycle action with independent "
+                    "revalidation (v7.3). Review approval is not execution "
+                    "approval; nothing mutates without --write.")
+    parser.add_argument("--state", default=kpa.DEFAULT_STATE_PATH,
+                        help="governed activation manifest path")
+    parser.add_argument("--audit", default=kpa.DEFAULT_AUDIT_PATH,
+                        help="activation audit JSONL (for rollback reconstruction)")
+    parser.add_argument("--actions", default=rrq.DEFAULT_ACTION_PATH,
+                        help="action-request JSONL emitted by regression-review")
+    parser.add_argument("--review-records", default="", dest="review_records",
+                        help="regression review record JSONL (review history)")
+    parser.add_argument("--results", default=lae.DEFAULT_RESULTS_PATH,
+                        help="execution result JSONL (append-only)")
+    parser.add_argument("--audit-out", default=lae.DEFAULT_EXECUTION_AUDIT_PATH,
+                        dest="audit_out",
+                        help="execution audit JSONL (append-only)")
+    parser.add_argument("--follow-ups", default=lae.DEFAULT_FOLLOW_UP_PATH,
+                        dest="follow_ups", help="operational follow-up JSONL")
+    parser.add_argument("--blocks", default=lae.DEFAULT_ACTIVATION_BLOCKS_PATH,
+                        help="activation-block JSONL")
+    parser.add_argument("--deterministic", action="store_true",
+                        help="omit wall-clock timestamps (stable ids)")
+    sub = parser.add_subparsers(dest="action", required=True)
+
+    pin = sub.add_parser("inspect", help="show one action request (writes nothing)")
+    pin.add_argument("--action-request-id", required=True, dest="action_request_id")
+
+    pva = sub.add_parser("validate", help="independently revalidate (writes nothing)")
+    pva.add_argument("--action-request-id", required=True, dest="action_request_id")
+    pva.add_argument("--execution-approval", required=True, dest="execution_approval")
+
+    ppl = sub.add_parser("plan", help="show the deterministic plan (writes nothing)")
+    ppl.add_argument("--action-request-id", required=True, dest="action_request_id")
+    ppl.add_argument("--execution-approval", required=True, dest="execution_approval")
+
+    pex = sub.add_parser("execute", help="execute one action (--write to mutate)")
+    pex.add_argument("--action-request-id", required=True, dest="action_request_id")
+    pex.add_argument("--execution-approval", required=True, dest="execution_approval")
+    pex.add_argument("--executor", required=True, help="executor identity (required)")
+    pex.add_argument("--role", default=rrq.ReviewerRole.LIFECYCLE_OPERATOR,
+                     choices=[rrq.ReviewerRole.LIFECYCLE_OPERATOR],
+                     help="declared executor role")
+    mode = pex.add_mutually_exclusive_group(required=True)
+    mode.add_argument("--dry-run", action="store_true", dest="dry_run",
+                      help="validate + plan only; write nothing")
+    mode.add_argument("--write", action="store_true",
+                      help="perform exactly one atomic lifecycle action")
+
+    pre = sub.add_parser("result", help="show one execution result")
+    pre.add_argument("--execution-id", required=True, dest="execution_id")
+
+    sub.add_parser("follow-ups", help="list operational follow-up records")
+    sub.add_parser("activation-blocks", help="list activation-block records")
+
+    args = parser.parse_args(argv)
+    now = None if not args.deterministic else lae._parse_dt(
+        "2024-01-01T00:00:00+00:00")
+
+    def _load_action():
+        ar = rrq.get_action_request(
+            rrq.load_action_requests(args.actions), args.action_request_id)
+        if ar is None:
+            parser.error(f"unknown action request {args.action_request_id!r}")
+        return ar
+
+    def _review_history():
+        if not args.review_records or not Path(args.review_records).exists():
+            return []
+        out = []
+        for line in Path(args.review_records).read_text(
+                encoding="utf-8").splitlines():
+            line = line.strip()
+            if line:
+                out.append(rrq.RegressionReviewRecord.from_dict(json.loads(line)))
+        return out
+
+    if args.action == "inspect":
+        print(rrq.render_action_request_markdown(_load_action()))
+        return 0
+
+    if args.action in ("validate", "plan"):
+        ar = _load_action()
+        approval = lae.load_execution_approval(args.execution_approval)
+        state = kpa.ActivationStateManager(
+            state_path=args.state, audit_path=args.audit).load_state()
+        if args.action == "validate":
+            history = kpa.ActivationStateManager(
+                state_path=args.state, audit_path=args.audit).load_audit()
+            validation = lae.validate_lifecycle_execution(
+                ar, approval, state, history, _review_history(), now=now)
+            label = "VALID" if validation.ok else "INVALID — execution refused"
+            print(f"[lifecycle-executor] {ar.action_request_id}: {label}")
+            for finding in validation.findings:
+                print(f"  - {finding.code}: {finding.message}")
+            return 0 if validation.ok else 1
+        history = kpa.ActivationStateManager(
+            state_path=args.state, audit_path=args.audit).load_audit()
+        plan = lae.build_execution_plan(ar, approval, state, history)
+        print(lae.render_plan_markdown(plan))
+        return 0
+
+    if args.action == "execute":
+        ar = _load_action()
+        approval = lae.load_execution_approval(args.execution_approval)
+        manager = kpa.ActivationStateManager(
+            state_path=args.state, audit_path=args.audit)
+        prior_blocks = lae.load_activation_blocks(args.blocks)
+        # Persistent replay protection comes from the action request itself: a
+        # successful execution marks it EXECUTED on disk, so a re-run fails
+        # validation closed (ACTION_REQUEST_ALREADY_EXECUTED).
+        result = lae.execute_lifecycle_action(
+            ar, approval, executor_identity=args.executor,
+            executor_role=args.role, state_manager=manager,
+            review_history=_review_history(), prior_blocks=prior_blocks,
+            write=args.write, now=now)
+        print(lae.render_result_markdown(result))
+        if args.write and result.written:
+            lae.append_execution_result(result, args.results)
+            if result.audit is not None:
+                lae.append_execution_audit([result.audit], args.audit_out)
+            if result.operational_follow_up is not None:
+                merged = lae.add_follow_up(
+                    lae.load_follow_ups(args.follow_ups),
+                    result.operational_follow_up)
+                lae.save_follow_ups(merged, args.follow_ups)
+            if result.activation_block is not None:
+                merged = lae.add_activation_block(
+                    lae.load_activation_blocks(args.blocks),
+                    result.activation_block)
+                lae.save_activation_blocks(merged, args.blocks)
+            if result.updated_action_request is not None:
+                actions = rrq.load_action_requests(args.actions)
+                actions = rrq.add_action_request(
+                    [a for a in actions
+                     if a.action_request_id != ar.action_request_id],
+                    result.updated_action_request)
+                rrq.save_action_requests(actions, args.actions)
+            print(f"[lifecycle-executor] persisted execution {result.execution_id}")
+        elif not args.write:
+            print("[lifecycle-executor] dry-run: re-run with --write to execute")
+        return 0 if result.succeeded or not args.write else 1
+
+    if args.action == "result":
+        for row in lae.load_execution_results(args.results):
+            if row.get("execution_id") == args.execution_id:
+                print(json.dumps(row, indent=2, sort_keys=True))
+                return 0
+        parser.error(f"unknown execution result {args.execution_id!r}")
+
+    if args.action == "follow-ups":
+        records = lae.load_follow_ups(args.follow_ups)
+        if not records:
+            print("[lifecycle-executor] no operational follow-up records")
+            return 0
+        for r in records:
+            print(f"[lifecycle-executor] {r.follow_up_id} {r.follow_up_type} "
+                  f"status={r.status} packs={','.join(r.affected_packs)}")
+        return 0
+
+    if args.action == "activation-blocks":
+        records = lae.load_activation_blocks(args.blocks)
+        if not records:
+            print("[lifecycle-executor] no activation-block records")
+            return 0
+        for r in records:
+            print(f"[lifecycle-executor] {r.block_id} pack={r.pack_id} "
+                  f"fingerprint={r.pack_fingerprint} status={r.status}")
+        return 0
+
+    parser.error(f"unknown lifecycle-executor action {args.action!r}")
+    return 2
+
+
 def main(argv: list[str] | None = None) -> int:
     argv = sys.argv[1:] if argv is None else argv
     if argv and argv[0] == "value-sprint":
@@ -3303,6 +3506,8 @@ def main(argv: list[str] | None = None) -> int:
         return _active_pack_monitor_cli(argv[1:])
     if argv and argv[0] == "regression-review":
         return _regression_review_cli(argv[1:])
+    if argv and argv[0] == "lifecycle-executor":
+        return _lifecycle_executor_cli(argv[1:])
     if argv and argv[0] == "pdf-intake":
         return _pdf_intake_cli(argv[1:])
     if argv and argv[0] == "pdf-preview":
