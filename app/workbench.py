@@ -241,6 +241,7 @@ Commands:
   source-registry inspect <id> [--registry path]  show one source's metadata (read-only)
   source-registry audit [--registry path]  report source lifecycle/metadata risk (read-only)
   source-registry propose-updates [--registry path] [--out path]  generate source-maintenance proposals (read-only; not applied)
+  source-registry propose-from-pack --pack dir|manifest [--registry path] [--out path]  propose a registry entry from an imported PDF pack (proposal-only; not applied)
   source-registry proposal-review import-proposals <proposals.jsonl> [--queue path]  queue proposals for review (review-state only; not applied)
   source-registry proposal-review list [--queue path]  list proposal review state (read-only)
   source-registry proposal-review review <id> --status approved|rejected|deferred [--note t] [--reviewer r] [--queue path]  record a review decision (approved != applied)
@@ -1339,6 +1340,9 @@ def _source_registry_cli(argv: list[str]) -> int:
     if argv and argv[0] == "proposal-review":
         return _proposal_review_cli(argv[1:])
 
+    if argv and argv[0] == "propose-from-pack":
+        return _pdf_pack_registry_proposal_cli(argv[1:])
+
     parser = argparse.ArgumentParser(
         prog="workbench.py source-registry",
         description="Inspect source metadata (read-only). The registry annotates "
@@ -1388,6 +1392,51 @@ def _source_registry_cli(argv: list[str]) -> int:
               file=sys.stderr)
         return 1
     print(sr.render_entry_markdown(entry, entries))
+    return 0
+
+
+def _pdf_pack_registry_proposal_cli(argv: list[str]) -> int:
+    """Propose a source-registry entry from an imported PDF pack (v6.8).
+
+    Reads an imported pack's ``manifest.json`` (from a pack directory or a
+    manifest file) and proposes a :class:`SourceRegistryEntry` for human review.
+    With ``--registry`` the existing registry is read **only** to flag a
+    duplicate source_id; the registry is never modified. By default the proposal
+    is printed; ``--out`` writes it to a JSON file (the only file this command
+    may write). It applies nothing, writes no registry/memory/pack/queue, and
+    changes no retrieval/ranking/grounding behaviour.
+    """
+    from agent import pdf_pack_registry_proposal as ppr
+
+    parser = argparse.ArgumentParser(
+        prog="workbench.py source-registry propose-from-pack",
+        description="Propose a source-registry entry from an imported PDF pack "
+                    "(proposal-only; the registry is never written).")
+    parser.add_argument("--pack", required=True,
+                        help="path to the imported pack directory or its "
+                             "manifest.json")
+    parser.add_argument("--registry", default=None,
+                        help="optional existing registry JSONL, read-only, used "
+                             "only to flag a duplicate source_id")
+    parser.add_argument("--out", default=None,
+                        help="write the proposal to this JSON file instead of "
+                             "printing it (the only file this command may write)")
+    args = parser.parse_args(argv)
+
+    try:
+        proposal = ppr.propose_registry_entry_from_pack(
+            args.pack, registry_path=args.registry)
+    except (OSError, ValueError) as exc:
+        print(f"[source-registry] propose-from-pack failed: {exc}",
+              file=sys.stderr)
+        return 1
+
+    if args.out:
+        ppr.write_registry_proposal(proposal, args.out)
+        print(f"[source-registry] wrote proposal {proposal.proposal_id} to "
+              f"{args.out} (registry unchanged; not applied)")
+    else:
+        print(ppr.render_registry_proposal_markdown(proposal))
     return 0
 
 

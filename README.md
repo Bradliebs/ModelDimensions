@@ -3149,6 +3149,79 @@ so. If an honest run shows a pack does not help, that is a recorded finding, not
 a trigger to tune retrieval: any retrieval change must first reproduce a failing
 case under a separately scoped slice.
 
+## v6.8 Imported PDF pack to source registry proposal (proposal-only; never applied)
+
+A v6.6 import writes a knowledge pack, and v6.7 measures whether that pack helps.
+But the imported pack is still *untracked* by the source registry (v4.x) — the
+place that records a source's authority, owner, freshness, supersession, and
+review lineage. v6.8 closes that gap with a **proposal only**: it reads an
+imported pack's `manifest.json` and proposes a `SourceRegistryEntry` a human can
+review and, if they choose, paste into the registry. It applies nothing.
+
+### Proposal, not application
+
+The output is a proposal whose `requires_human_approval` is always `True` and
+whose `status` is always `"proposed"`. Nothing is written to the registry —
+`save_registry` remains the registry's only writer and is never imported or
+called here. The adapter reads the pack manifest only: it does not re-parse the
+PDF, re-import chunks, touch the knowledge library, run OCR, or call any model,
+and it mutates no memory ledger, registry, review queue, or retrieval behaviour.
+
+### Active or draft — provenance stays operator-declared
+
+The manifest's declared authority, provenance, and permission are surfaced as
+*proposed* metadata, never silently trusted. The proposed entry is `active` only
+when the declared lineage is complete and there is no id conflict; otherwise it
+is proposed as a `draft` for a human to ratify. Missing provenance, a missing
+permission/licence, an evaluation-only intended use, or unresolved import
+findings each force a draft. An unrecognised authority is mapped to `unknown` and
+flagged. If the proposed `source_id` already exists in a supplied registry, the
+proposal is marked a **conflict** — recommending the human decide whether the
+pack updates, supersedes, or renames the existing source rather than adding a
+duplicate.
+
+### Ready-to-paste record and lineage
+
+Every proposal carries the proposed `SourceRegistryEntry` as a ready-to-paste
+JSONL record, the pack's content lineage (manifest hash, source file hash,
+preview fingerprint, approval id), and deterministic review findings — so a
+reviewer has everything needed to decide in one record. The entry's `notes` field
+records the audit trail (approval id, approver, hashes, intended use, chunk
+counts) and states that provenance and permission are operator-declared.
+
+### CLI
+
+```bash
+# Propose a registry entry from an imported pack (printed; nothing written).
+python app/workbench.py source-registry propose-from-pack \
+  --pack packs/built/my_pdf_pack
+
+# Read an existing registry only to flag a duplicate source_id, and write the
+# proposal to a file (the only file this command may write; registry untouched).
+python app/workbench.py source-registry propose-from-pack \
+  --pack demos/pdf_pack_manifest_example.json \
+  --registry demos/source_registry.jsonl \
+  --out reports/pdf_pack_registry_proposal.json
+```
+
+`--pack` accepts a pack directory or a manifest file directly.
+
+### Components
+
+| File | Role |
+| --- | --- |
+| `src/agent/pdf_pack_registry_proposal.py` | the v6.8 layer: `load_pack_manifest`, `propose_registry_entry_from_manifest`, `propose_registry_entry_from_pack`, the `PdfPackRegistryProposal` record, the Markdown renderer, and `write_registry_proposal` (the only writer); imports only read-only registry types and opens no socket |
+| `demos/pdf_pack_manifest_example.json` | a representative v6.6 manifest (a clean, complete pack) that proposes an active source |
+| `app/workbench.py` | the `source-registry propose-from-pack` CLI (`--pack`, `--registry`, `--out`); reads the registry only to flag a duplicate id and runs read-only |
+| `evals/test_pdf_pack_registry_proposal.py` | crafted-manifest active/draft/conflict/unknown-authority/excluded-chunk paths, a real v6.6-import schema-drift guard, determinism, the ready-to-paste round-trip, the only writer, CLI behaviour, and import-purity + no-network + no-registry-write checks |
+
+**Limitations and non-goals.** v6.8 proposes only. It does **not** write the
+source registry, apply a proposal, modify the imported pack, write the memory
+ledger, or change any retrieval, ranking, source-selection, grounding, composer,
+or chat-routing behaviour. It trusts no embedded PDF metadata for provenance —
+authority, provenance, and permission remain operator-declared and are flagged
+for review when absent. Activating a proposed source is a separate, human act.
+
 ## License
 
 To be decided.
