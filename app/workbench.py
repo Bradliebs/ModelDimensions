@@ -256,6 +256,8 @@ Commands:
   (v6.9 governed HF lifecycle — top-level subcommands, run as `python app/workbench.py <cmd>`):
   hf-lifecycle validate|sample|import-eval|import-knowledge|revision-check|plan-retire  governed, bounded, fail-closed HF import
   retrieval-eval hf-import --pack-dir <dir> [--out path]  bridge an imported HF eval pack to inert retrieval cases (read-only)
+  (v7.0 governed knowledge-pack activation — top-level subcommands):
+  knowledge-packs state|history|validate-activation|activate|deactivate|rollback|supersede  generic governed pack activation/rollback (dry-run by default)
   demo                  run the Friday -> Monday near-miss example
   export [path]         write the ledger JSONL (defaults to the active ledger)
   help                  show this help
@@ -2183,6 +2185,185 @@ def _hf_lifecycle_cli(argv: list[str]) -> int:
     return 2
 
 
+def _knowledge_packs_cli(argv: list[str]) -> int:
+    """Drive the v7.0 governed knowledge-pack activation lifecycle (read-only default).
+
+    Generic across pack sources (Hugging Face, PDF, future DOCX/MD/TXT/CSV and
+    native packs): it reads a pack directory's ``manifest.json`` +
+    ``knowledge.jsonl`` and never re-chunks, never rewrites pack content, never
+    writes a memory ledger / source registry / proposal, and never calls an LLM.
+    Inspect/validate/dry-run write nothing; ``--write`` is required to mutate the
+    governed state (``config/active_knowledge_packs.jsonl``) and append to the
+    audit log (``reports/knowledge_pack_activation_audit.jsonl``). An imported,
+    even evaluated, pack is never active until explicitly activated against a
+    structured approval bound to the exact pack and evaluation. Subcommands::
+
+        knowledge-packs state              [--state P] [--audit P]
+        knowledge-packs history            [--state P] [--audit P]
+        knowledge-packs validate-activation --pack D --approval P [--evaluation P]
+        knowledge-packs activate            --pack D --approval P --evaluation P [--write]
+        knowledge-packs deactivate          --pack-id ID (--approval P | --emergency
+                                              --actor A --reason R) [--write]
+        knowledge-packs rollback            --target-state HASH --approval P [--write]
+        knowledge-packs supersede           --old-pack-id ID --pack D --approval P
+                                              --evaluation P [--write]
+    """
+    from agent import knowledge_pack_activation as kpa
+
+    parser = argparse.ArgumentParser(
+        prog="workbench.py knowledge-packs",
+        description="Governed knowledge-pack activation, deactivation, rollback "
+                    "and supersession (v7.0). Read-only by default; fail-closed.")
+    parser.add_argument("--state", default=kpa.DEFAULT_STATE_PATH,
+                        help="path to the active-state manifest JSONL")
+    parser.add_argument("--audit", default=kpa.DEFAULT_AUDIT_PATH,
+                        help="path to the append-only activation audit JSONL")
+    parser.add_argument("--environment", default="default",
+                        help="environment scope for the operation")
+    parser.add_argument("--actor", default="operator",
+                        help="who is performing the operation (recorded in audit)")
+    sub = parser.add_subparsers(dest="action", required=True)
+
+    sub.add_parser("state", help="print the current active-pack state")
+    sub.add_parser("history", help="print the activation audit history")
+
+    pv = sub.add_parser("validate-activation",
+                        help="validate an activation request (writes nothing)")
+    pv.add_argument("--pack", required=True, help="imported pack directory")
+    pv.add_argument("--approval", required=True, help="activation approval JSON")
+    pv.add_argument("--evaluation", default=None,
+                    help="evaluation evidence JSON (required to pass)")
+
+    pa = sub.add_parser("activate", help="activate a pack (dry-run unless --write)")
+    pa.add_argument("--pack", required=True, help="imported pack directory")
+    pa.add_argument("--approval", required=True, help="activation approval JSON")
+    pa.add_argument("--evaluation", required=True,
+                    help="evaluation evidence JSON")
+    pa.add_argument("--write", action="store_true",
+                    help="persist the activation (default off: dry-run)")
+
+    pd = sub.add_parser("deactivate",
+                        help="deactivate an active pack (dry-run unless --write)")
+    pd.add_argument("--pack-id", required=True, dest="pack_id")
+    pd.add_argument("--approval", default=None,
+                    help="approval scoped to emergency_deactivate")
+    pd.add_argument("--emergency", action="store_true",
+                    help="emergency deactivation (requires --actor and --reason)")
+    pd.add_argument("--reason", default="", help="reason recorded in the audit")
+    pd.add_argument("--write", action="store_true",
+                    help="persist the deactivation (default off: dry-run)")
+
+    prb = sub.add_parser("rollback",
+                         help="restore a prior recorded state (dry-run unless --write)")
+    prb.add_argument("--target-state", required=True, dest="target_state",
+                     help="the target active-state hash to restore")
+    prb.add_argument("--approval", required=True,
+                     help="approval scoped to rollback")
+    prb.add_argument("--packs-root", default=None, dest="packs_root",
+                     help="root holding pack dirs (used to verify target packs)")
+    prb.add_argument("--reason", default="", help="reason recorded in the audit")
+    prb.add_argument("--write", action="store_true",
+                     help="persist the rollback (default off: dry-run)")
+
+    psp = sub.add_parser("supersede",
+                         help="replace an active revision (dry-run unless --write)")
+    psp.add_argument("--old-pack-id", required=True, dest="old_pack_id")
+    psp.add_argument("--pack", required=True, help="the new pack directory")
+    psp.add_argument("--approval", required=True,
+                     help="approval scoped to supersede")
+    psp.add_argument("--evaluation", required=True,
+                     help="evaluation evidence JSON for the new pack")
+    psp.add_argument("--write", action="store_true",
+                     help="persist the supersession (default off: dry-run)")
+
+    args = parser.parse_args(argv)
+    manager = kpa.ActivationStateManager(state_path=args.state,
+                                         audit_path=args.audit)
+
+    def _load_identity(pack_dir: str):
+        try:
+            return kpa.load_pack_identity(pack_dir)
+        except (FileNotFoundError, ValueError) as exc:
+            raise SystemExit(f"[knowledge-packs] {exc}")
+
+    def _build_request(identity, approval_path, evaluation_path):
+        approval = kpa.load_activation_approval(approval_path)
+        evidence = (kpa.load_evaluation_evidence(evaluation_path)
+                    if evaluation_path else None)
+        return kpa.KnowledgePackActivationRequest(
+            identity=identity, approval=approval, evidence=evidence,
+            environment=args.environment)
+
+    if args.action == "state":
+        print(kpa.render_state_markdown(manager.load_state()))
+        return 0
+
+    if args.action == "history":
+        print(kpa.render_history_markdown(manager.load_audit()))
+        return 0
+
+    if args.action == "validate-activation":
+        identity = _load_identity(args.pack)
+        request = _build_request(identity, args.approval, args.evaluation)
+        validation = kpa.validate_activation(
+            request, state=manager.load_state())
+        print(kpa.render_validation_markdown(validation))
+        return 0 if validation.ok else 1
+
+    if args.action == "activate":
+        identity = _load_identity(args.pack)
+        request = _build_request(identity, args.approval, args.evaluation)
+        result = manager.activate(request, actor=args.actor, write=args.write)
+        print(kpa.render_validation_markdown(result.validation))
+        print(f"[knowledge-packs] {result.message}")
+        if result.success and not args.write:
+            print("[knowledge-packs] dry-run: re-run with --write to persist; "
+                  "imported/evaluated never means active.")
+        return 0 if result.success else 1
+
+    if args.action == "deactivate":
+        approval = (kpa.load_activation_approval(args.approval)
+                    if args.approval else None)
+        result = manager.deactivate(
+            args.pack_id, approval=approval, actor=args.actor,
+            emergency=args.emergency, reason=args.reason, write=args.write)
+        for finding in result.findings:
+            print(f"  - {finding.code.value}: {finding.message}")
+        print(f"[knowledge-packs] {result.message}")
+        return 0 if result.success else 1
+
+    if args.action == "rollback":
+        approval = kpa.load_activation_approval(args.approval)
+        available = None
+        if args.packs_root:
+            root = Path(args.packs_root)
+            available = {p.name: str(p) for p in root.iterdir()
+                         if (p / kpa.MANIFEST_FILE).exists()}
+        request = kpa.KnowledgePackRollbackRequest(
+            target_state_hash=args.target_state,
+            current_state_hash=manager.load_state().state_hash,
+            approval=approval, reason=args.reason)
+        result = manager.rollback(request, available_pack_dirs=available,
+                                  actor=args.actor, write=args.write)
+        for finding in result.findings:
+            print(f"  - {finding.code.value}: {finding.message}")
+        print(f"[knowledge-packs] {result.message}")
+        return 0 if result.success else 1
+
+    if args.action == "supersede":
+        identity = _load_identity(args.pack)
+        request = _build_request(identity, args.approval, args.evaluation)
+        result = manager.supersede(
+            old_pack_id=args.old_pack_id, request=request, actor=args.actor,
+            write=args.write)
+        print(kpa.render_validation_markdown(result.validation))
+        print(f"[knowledge-packs] {result.message}")
+        return 0 if result.success else 1
+
+    parser.error(f"unknown knowledge-packs action {args.action!r}")
+    return 2
+
+
 def _retrieval_eval_hf_import_cli(argv: list[str]) -> int:
     """Bridge an imported HF eval pack to retrieval-eval cases (read-only; v6.9).
 
@@ -2543,6 +2724,8 @@ def main(argv: list[str] | None = None) -> int:
         return _hf_data_cli(argv[1:])
     if argv and argv[0] == "hf-lifecycle":
         return _hf_lifecycle_cli(argv[1:])
+    if argv and argv[0] == "knowledge-packs":
+        return _knowledge_packs_cli(argv[1:])
     if argv and argv[0] == "pdf-intake":
         return _pdf_intake_cli(argv[1:])
     if argv and argv[0] == "pdf-preview":

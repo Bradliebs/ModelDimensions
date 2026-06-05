@@ -3320,6 +3320,112 @@ pack is inert until a human wires it in. The model/composer still does not own
 truth, facts must be cited, and every gate is fail-closed — when in doubt it
 blocks or demands re-approval rather than proceeding.
 
+## v7.0 Governed Knowledge-Pack Activation + Rollback (generic, fail-closed)
+
+v6.9 imports a knowledge pack and v6.7 evaluates retrieval against it, but
+neither makes a pack *live*. v7.0 adds the missing governed lifecycle between
+import/evaluation and retrieval eligibility — for **any** pack source (Hugging
+Face, PDF, and future DOCX/Markdown/TXT/CSV or native packs), not a
+Hugging-Face-only layer.
+
+The cardinal distinctions it enforces:
+
+- **imported ≠ active** — an imported pack is an inert directory until activated.
+- **evaluated ≠ approved** — a passing evaluation is *evidence*, never approval.
+- **approved ≠ automatically activated** — activation is an explicit operation.
+- **inactive ≠ deleted**, **superseded ≠ deleted**, **rollback ≠ deletion** —
+  state changes never touch pack files on disk.
+
+### Lifecycle
+
+```
+source assessment → import approval → pack import → retrieval evaluation
+   → activation approval → ACTIVE → (monitoring)
+      → deactivate / supersede / rollback / retire
+```
+
+### State machine
+
+States: `imported`, `evaluation_failed`, `evaluated`, `activation_pending`,
+`active`, `inactive`, `superseded`, `retired`, `blocked`. Permitted edges include
+`evaluated → active` (an explicit approval collapses the transient
+`activation_pending` step), `active → inactive`, `inactive → active`
+(reactivation/rollback), `active → superseded`, and `active → retired`. Rejected:
+`imported → active`, `evaluation_failed → active`, `blocked → active`,
+`retired → active`, `superseded → active`, and any second conflicting active
+revision of one source lineage.
+
+### Pack fingerprint
+
+`content_fingerprint` is `packfp-<sha256(...)[:20]>` over the activation-layer
+version, pack id/version, source id/revision, manifest hash, and the **ordered**
+chunk ids and content hashes read from `knowledge.jsonl`. It changes on any chunk
+content, chunk id, chunk order, source revision, manifest identity, or pack
+version change — so an approval bound to a fingerprint cannot survive a silent
+content edit. The generic reader tolerates both the Hugging Face manifest schema
+(`authority`, `pack_hash`, `dataset_revision`) and the PDF schema
+(`authority_level`, `manifest_hash`, `source_file_hash`, `preview_fingerprint`).
+
+### Approval and evaluation binding (fail-closed)
+
+`KnowledgePackActivationApproval` binds to an exact `pack_id`, `pack_version`,
+`pack_fingerprint`, and `manifest_hash`, plus an `approval_scope`
+(`activate` / `reactivate` / `supersede` / `rollback` / `emergency_deactivate`),
+an `approved_environment`, an optional `expires_at`, and the evaluation report it
+was granted against. Activation fails closed when the pack fingerprint or
+manifest hash drifts, the approval is expired, the environment or scope does not
+match, the licence or provenance changed since approval, the authority is below
+policy, the pack is not a knowledge pack (an eval pack can never activate as
+knowledge), or the evaluation evidence is missing, bound to a different pack, or
+below the `EvaluationThresholdPolicy` (failed cases, forbidden-source hits,
+unsupported citations, uncited claims, unrelated regressions, recall floors, and
+optional max age). Approval is **never** inferred from import, passing tests, a
+passing evaluation, preview readiness, or pack presence.
+
+### State, audit, and atomicity
+
+The current active set lives in `config/active_knowledge_packs.jsonl` (a small
+overwrite-on-change manifest, written atomically via a temp file + `os.replace`).
+Every transition appends an immutable, hash-chained record to
+`reports/knowledge_pack_activation_audit.jsonl`, including the resulting state
+manifest so a prior state is fully reconstructable for rollback. All operations
+are **dry-run by default**; `--write` is required to persist, a blocked operation
+leaves the prior state byte-identical, and pack files are never modified.
+
+### CLI
+
+```
+knowledge-packs state                 # current active-pack state
+knowledge-packs history               # activation audit history
+knowledge-packs validate-activation --pack D --approval P [--evaluation P]
+knowledge-packs activate    --pack D --approval P --evaluation P [--write]
+knowledge-packs deactivate  --pack-id ID (--approval P | --emergency --reason R) [--write]
+knowledge-packs rollback    --target-state HASH --approval P [--packs-root R] [--write]
+knowledge-packs supersede   --old-pack-id ID --pack D --approval P --evaluation P [--write]
+```
+
+### Components
+
+| File | Role |
+| --- | --- |
+| `src/agent/knowledge_pack_activation.py` | The whole generic layer: `KnowledgePackIdentity` + deterministic `compute_content_fingerprint`, `KnowledgePackActivationApproval`, `KnowledgePackEvaluationEvidence` + `EvaluationThresholdPolicy`, fail-closed `validate_activation`, the `transition_allowed` state machine, `detect_conflicts` / coexistence policies, the append-only audit record, and `ActivationStateManager` (activate / deactivate / supersede / rollback, dry-run by default, atomic writes) plus the `select_active_pack_ids` / `select_active_pack_dirs` retrieval-selection adapter |
+| `app/workbench.py` | the `knowledge-packs` command family (`state`, `history`, `validate-activation`, `activate`, `deactivate`, `rollback`, `supersede`) |
+| `evals/test_knowledge_pack_activation_*`, `evals/test_knowledge_pack_deactivation.py`, `evals/test_knowledge_pack_rollback.py`, `evals/test_knowledge_pack_supersession.py`, `evals/test_active_pack_retrieval_selection.py` | fingerprint determinism + mutation sensitivity, approval/evaluation binding, the state machine and conflict rules, dry-run vs write atomicity, reversible deactivation, rollback reconstruction, atomic supersession, the retrieval-selection boundary, and AST import-purity (the module imports only the standard library) |
+
+**Retrieval integration.** v7.0 changes **no** retrieval algorithm. The only
+integration point is the pure `select_active_pack_dirs(state, packs_root)`
+adapter, which exposes exactly the active, environment-matched packs and ignores
+imported, inactive, superseded, retired, and blocked ones. Existing explicit
+pack-loading commands are unchanged; wiring the adapter into a running service is
+left as a deliberate, separate human step.
+
+**Limitations and non-goals.** No automatic activation, no autonomous
+recommendations, no monitoring beyond post-activation verification, no automatic
+rollback, no web UI, no permanent deletion, and no memory or source-registry
+cleanup. The module writes only the activation-state manifest and the audit log,
+and only with an explicit `--write`. It is generic by construction: there is no
+`hf_pack_activation` or `pdf_pack_activation` and no source-specific registry.
+
 ## License
 
 To be decided.
