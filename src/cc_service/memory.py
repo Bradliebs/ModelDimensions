@@ -187,9 +187,16 @@ class MemoryBank:
     def __init__(self, db_path: str | Path,
                  encoder_model: str = "all-MiniLM-L6-v2",
                  device: Optional[str] = None,
-                 reranker_model: Optional[str] = None):
+                 reranker_model: Optional[str] = None,
+                 encoder: Optional[object] = None):
+        # `encoder=` lets tests (and future alternate runtimes) inject an
+        # encoder instance directly, skipping the default EncoderSingleton.
+        # The injected object only needs .model_name, .dim, .encode(),
+        # .encode_one() — the same duck-typed surface MemoryBank already uses.
         self.store = BankStore(db_path)
-        self.encoder = EncoderSingleton(model_name=encoder_model, device=device)
+        self.encoder = encoder if encoder is not None else EncoderSingleton(
+            model_name=encoder_model, device=device,
+        )
         self.reranker = (
             RerankerSingleton(model_name=reranker_model, device=device)
             if reranker_model else None

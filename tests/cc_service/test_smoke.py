@@ -22,8 +22,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
 from cc_service.memory import MemoryBank, apply_whitening, fit_whitening  # noqa: E402
 
-pytestmark = pytest.mark.heavy
-
 
 class FakeEncoder:
     """Deterministic, network-free encoder for testing.
@@ -62,10 +60,11 @@ class FakeEncoder:
         # Normalize to unit length — matches MiniLM output scale
         return v / np.linalg.norm(v)
 
-    def encode(self, texts: List[str], batch_size: int = 32) -> np.ndarray:
+    def encode(self, texts: List[str], batch_size: int = 32,
+               is_query: bool = False) -> np.ndarray:
         return np.stack([self._hash_to_vec(t) for t in texts])
 
-    def encode_one(self, text: str) -> np.ndarray:
+    def encode_one(self, text: str, is_query: bool = False) -> np.ndarray:
         return self._hash_to_vec(text)
 
 
@@ -74,9 +73,7 @@ def bank():
     """A MemoryBank using a temporary SQLite db and the fake encoder."""
     with tempfile.TemporaryDirectory() as tmp:
         db_path = Path(tmp) / "test_bank.db"
-        b = MemoryBank(db_path=str(db_path))
-        # Swap the real encoder for our fake
-        b.encoder = FakeEncoder()
+        b = MemoryBank(db_path=str(db_path), encoder=FakeEncoder())
         yield b
         b.store.close()
 
@@ -162,9 +159,8 @@ def test_persistence_across_reopen(bank: MemoryBank):
     db_path = bank.store.db_path
     bank.store.close()
 
-    # Reopen
-    b2 = MemoryBank(db_path=str(db_path))
-    b2.encoder = FakeEncoder()
+    # Reopen with the same fake encoder so identity verification passes.
+    b2 = MemoryBank(db_path=str(db_path), encoder=FakeEncoder())
     assert b2.is_initialized
     assert b2.count() == 1
     row = b2.get_cell(cid)

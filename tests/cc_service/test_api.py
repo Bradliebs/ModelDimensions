@@ -19,8 +19,6 @@ from fastapi.testclient import TestClient  # noqa: E402
 
 from .test_smoke import FakeEncoder  # noqa: E402
 
-pytestmark = pytest.mark.heavy
-
 
 @pytest.fixture
 def client(monkeypatch):
