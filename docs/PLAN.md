@@ -35,11 +35,15 @@ question
   ↓
 MiniLM encode (encoder identity verified against bank meta)
   ↓
-SqliteBank top-k retrieval (k=8)
+StreamingBank top-k retrieval by activation (k=10)
   ↓
-Reranker (drop anything below rerank_min_score = 0.10)
+Silence gate: top1 activation - top2 activation >= 0.05
+  (chosen from exp16 sweep: cuts noise 70% -> 10%, unknown 25% -> 0%,
+   keeps known at 85%. self-ref cosine looked stronger but is biased
+   by the substring-leak test design; defer to a future gate upgrade
+   once real-question validation exists.)
   ↓
-IF zero cells survive  →  "[silence: no matching memory in library]"
+IF gate fails         →  "[silence: no matching memory in library]"
   ↓
 Format prompt: "Answer only from these cells. Cite as [cell_id]."
   ↓
@@ -64,7 +68,10 @@ it, V1 would be vanilla RAG with a fancy library.
   eval against both checkpoints; writes
   `results/paper_headline_reproduce.json`.
 - `experiments/exp15_bank_selectivity_at_scale.py` — selectivity / rejection
-  probe against the bank; writes `results/bank_selectivity_at_1p8m.json`.
+  probe against the bank; writes `results/bank_selectivity_at_5p7m.json`
+  (measured cell count is 5.7M, not the 1.8M the paper documents).
+- `experiments/exp16_gate_signals.py` — gate-signal analysis that motivated
+  the V1 silence gate; writes `results/gate_signals_at_5p7m.json`.
 - `src/agent/answer_pipeline.py` — V1 pipeline: retrieve → rerank →
   silence-gate → generate → verify. Reuses
   `src/agent/sqlite_bank.py`, `src/agent/candidate_retrieval.py`,
