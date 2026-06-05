@@ -57,6 +57,8 @@ class _FakeChatResult:
     proposed_memory_count: int = 0
     proposed_source_update_count: int = 0
     state_mutation_attempted: bool = False
+    evidence_detail: tuple = ()
+    route_reason: str = ""
 
 
 def _empty_config(tmp_path: Path) -> cm.ConsoleConfig:
@@ -153,6 +155,119 @@ def test_ask_evidence_answer_without_citations_is_partial():
         citations=(), answer_has_citations=False))
     assert view.grounded is False
     assert "Partially grounded" in view.status_label
+
+
+# ---------------------------------------------------------------------------
+# Ask — evidence inspector, citations, scope, export
+# ---------------------------------------------------------------------------
+
+
+def _detail(citation_id, *, cited, score, rank, source_name="Admin Patterns",
+            authority="official", chunk_id="c1", source_id="s1", section="Roles",
+            version="2", text="Use PIM for just-in-time activation.",
+            backend_name="hybrid", domain="security"):
+    return {
+        "citation_id": citation_id, "source_id": source_id, "chunk_id": chunk_id,
+        "source_name": source_name, "domain": domain, "authority": authority,
+        "version": version, "section": section, "score": score, "rank": rank,
+        "backend_name": backend_name, "text": text, "cited": cited,
+    }
+
+
+def _grounded_result():
+    return _FakeChatResult(
+        mode="evidence_answer", answer_text="Use PIM [src:c1].",
+        citations=("src:c1",), answer_has_citations=True, evidence_used_count=1,
+        evidence_detail=(
+            _detail("src:c1", cited=True, score=0.91, rank=1),
+            _detail("src:c2", cited=False, score=0.42, rank=2,
+                    source_name="Blog Post", authority="community", chunk_id="c2",
+                    source_id="s2", text="Community tip on roles."),
+        ))
+
+
+def test_ask_evidence_inspector_separates_retrieved_and_cited():
+    inspector = cm.build_evidence_inspector(_grounded_result())
+    assert inspector.available is True
+    assert inspector.retrieved_count == 2
+    assert inspector.cited_count == 1
+    assert [e.citation_id for e in inspector.cited] == ["src:c1"]
+    # Retrieved-but-not-cited evidence is preserved and visibly distinct.
+    retrieved_only = [e for e in inspector.retrieved if not e.cited]
+    assert [e.citation_id for e in retrieved_only] == ["src:c2"]
+
+
+def test_ask_inspector_score_is_relevance_not_confidence():
+    inspector = cm.build_evidence_inspector(_grounded_result())
+    top = inspector.cited[0]
+    # Score is the backend relevance activation; authority is a separate axis.
+    assert top.score == 0.91
+    assert top.authority_label == "Official"
+    # The stage gloss explicitly states a score is not confidence/truth.
+    joined = " ".join(inspector.stage_gloss).lower()
+    assert "not a confidence" in joined or "not confidence" in joined
+
+
+def test_ask_citation_details_preserve_ids_and_provenance():
+    cards = cm.build_citation_details(_grounded_result())
+    assert [c.citation_id for c in cards] == ["src:c1"]
+    card = cards[0]
+    assert card.kind == "knowledge"
+    assert card.source_name == "Admin Patterns"
+    assert card.authority_label == "Official"
+    assert card.chunk_id == "c1"
+
+
+def test_ask_memory_citation_has_no_invented_provenance():
+    # A memory citation with no matching evidence detail must not gain fields.
+    result = _FakeChatResult(
+        mode="evidence_answer", answer_text="Recalled [mem:7].",
+        citations=("mem:7",), answer_has_citations=True, evidence_detail=())
+    cards = cm.build_citation_details(result)
+    assert len(cards) == 1
+    card = cards[0]
+    assert card.kind == "memory"
+    assert card.source_name == ""  # nothing invented
+    assert card.authority == ""
+    assert card.chunk_id == "7"
+
+
+def test_ask_scope_reports_active_packs_only(tmp_path):
+    scope = cm.build_ask_scope(_empty_config(tmp_path))
+    assert scope.active_pack_count == 0
+    assert scope.approved_source_count == 0
+    assert scope.memory_context_enabled is False
+    assert scope.warnings  # empty scope is flagged, not hidden
+    assert any("empty" in w.lower() for w in scope.warnings)
+
+
+def test_ask_export_markdown_preserves_evidence_and_labels():
+    result = _grounded_result()
+    view = cm.build_ask(result)
+    inspector = cm.build_evidence_inspector(result)
+    cards = cm.build_citation_details(result)
+    md = cm.render_ask_markdown(view, citations=cards, inspector=inspector,
+                                generated_at="2026-06-04T00:00:00+00:00")
+    assert "src:c1" in md  # citation id preserved verbatim
+    assert "Official" in md
+    assert "not confidence" in md.lower()
+    assert "Retrieval is not truth" in md
+    assert "never writes memory" in md.lower()
+
+
+def test_ask_export_json_bundle_round_trips():
+    result = _grounded_result()
+    view = cm.build_ask(result)
+    inspector = cm.build_evidence_inspector(result)
+    cards = cm.build_citation_details(result)
+    payload = json.loads(cm.render_ask_json(
+        view, citations=cards, inspector=inspector,
+        generated_at="2026-06-04T00:00:00+00:00"))
+    assert payload["_record"] == "ask_evidence_bundle"
+    assert payload["answer"]["query"] == view.query
+    assert [c["citation_id"] for c in payload["citations"]] == ["src:c1"]
+    assert payload["evidence_inspector"]["retrieved_count"] == 2
+    assert payload["evidence_inspector"]["cited_count"] == 1
 
 
 # ---------------------------------------------------------------------------

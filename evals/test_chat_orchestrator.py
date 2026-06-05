@@ -238,6 +238,32 @@ def test_citations_preserved_for_evidence_answer(tmp_path, monkeypatch):
     assert result.citations == list(direct.answer.citations)
 
 
+# 11b. evidence_detail is a read-only projection of the audit candidates. -----
+
+def test_evidence_detail_projects_audit_candidates(tmp_path, monkeypatch):
+    orch = _orchestrator(tmp_path, monkeypatch)
+    result = orch.answer(_EVIDENCE_QUERY)
+    assert result.mode == ChatMode.EVIDENCE_ANSWER
+    assert result.evidence_detail, "grounded answer exposes retrieved evidence"
+    # One detail row per retrieved candidate, in the same order/shape.
+    direct = orch._service.answer_query(_EVIDENCE_QUERY)
+    candidates = direct.audit["knowledge"]["candidates"]
+    assert len(result.evidence_detail) == len(candidates)
+    cited = set(result.citations)
+    for detail, cand in zip(result.evidence_detail, candidates):
+        assert detail["citation_id"] == f"src:{cand['chunk_id']}"
+        assert detail["source_name"] == cand["source_name"]
+        assert detail["authority"] == cand["authority"]
+        assert detail["chunk_id"] == cand["chunk_id"]
+        # score is the backend activation (relevance), never a confidence.
+        assert detail["score"] == float(cand["activation"])
+        assert detail["cited"] == (detail["citation_id"] in cited)
+    # At least one retrieved candidate was actually cited in the answer.
+    assert any(d["cited"] for d in result.evidence_detail)
+    # The projection round-trips through to_dict without loss.
+    assert result.to_dict()["evidence_detail"] == result.evidence_detail
+
+
 # 12. no unlabelled judgement appears in any answer. -------------------------
 
 def test_no_unlabelled_judgement(tmp_path, monkeypatch):

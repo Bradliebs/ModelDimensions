@@ -610,18 +610,403 @@ def build_ask(result: Any) -> AskView:
     )
 
 
-def run_ask(service: Any, query: str, *, registry_path: Optional[Path] = None) -> AskView:
-    """Convenience: run the governed orchestrator and shape the result.
+def answer_ask(service: Any, query: str, *,
+               registry_path: Optional[Path] = None) -> Any:
+    """Run the governed orchestrator and return its raw read-only result.
 
-    The orchestrator is read-only by design; this never writes durable state.
+    Centralises orchestrator construction so the Ask page can build several
+    views (answer, evidence inspector, citations) from a single run without
+    invoking retrieval more than once. The orchestrator is read-only by design;
+    this never writes durable state.
     """
 
     from agent.chat_orchestrator import ChatOrchestrator
 
     orchestrator = ChatOrchestrator(
         service, registry_path=str(registry_path) if registry_path else None)
-    result = orchestrator.answer(query)
-    return build_ask(result)
+    return orchestrator.answer(query)
+
+
+def run_ask(service: Any, query: str, *, registry_path: Optional[Path] = None) -> AskView:
+    """Convenience: run the governed orchestrator and shape the result.
+
+    The orchestrator is read-only by design; this never writes durable state.
+    """
+
+    return build_ask(answer_ask(service, query, registry_path=registry_path))
+
+
+# ---------------------------------------------------------------------------
+# Ask — evidence inspector and citations (read-only projections)
+# ---------------------------------------------------------------------------
+
+# Plain-language gloss for the three evidence stages, surfaced verbatim in the
+# UI so a reader never mistakes a relevance score for proof.
+EVIDENCE_STAGE_GLOSS: Tuple[str, ...] = (
+    "Retrieved means the pipeline considered it as potentially relevant.",
+    "Cited means it was referenced in the final factual answer.",
+    "A relevance score measures match strength — it is not a confidence or a "
+    "measure of truth.",
+)
+
+AUTHORITY_LABELS: Dict[str, str] = {
+    "official": "Official",
+    "reputable": "Reputable",
+    "trusted": "Trusted",
+    "community": "Community",
+    "unknown": "Unknown authority",
+    "": "Unknown authority",
+}
+
+
+@dataclass(frozen=True)
+class EvidenceItemView:
+    """One retrieved knowledge candidate, shaped for the evidence inspector.
+
+    ``score`` is the backend's relevance activation, never a confidence. ``cited``
+    marks whether this candidate was referenced in the final factual answer.
+    """
+
+    citation_id: str
+    source_id: str
+    chunk_id: str
+    source_name: str
+    domain: str
+    authority: str
+    authority_label: str
+    version: str
+    section: str
+    score: float
+    rank: int
+    backend_name: str
+    cited: bool
+    supporting_text: str
+
+    def to_dict(self) -> dict:
+        return {
+            "citation_id": self.citation_id,
+            "source_id": self.source_id,
+            "chunk_id": self.chunk_id,
+            "source_name": self.source_name,
+            "domain": self.domain,
+            "authority": self.authority,
+            "authority_label": self.authority_label,
+            "version": self.version,
+            "section": self.section,
+            "score": self.score,
+            "rank": self.rank,
+            "backend_name": self.backend_name,
+            "cited": self.cited,
+            "supporting_text": self.supporting_text,
+        }
+
+
+@dataclass(frozen=True)
+class EvidenceInspectorView:
+    """Retrieved-vs-cited evidence stages for one answer (read-only).
+
+    The current pipeline surfaces two genuine, distinct stages — every retrieved
+    candidate and the subset cited in the final answer. A separate post-gate
+    "selected" stage is not exposed by the backend, so it is not simulated.
+    """
+
+    retrieved: Tuple[EvidenceItemView, ...]
+    cited: Tuple[EvidenceItemView, ...]
+    retrieved_count: int
+    cited_count: int
+    stage_gloss: Tuple[str, ...]
+    available: bool
+
+    def to_dict(self) -> dict:
+        return {
+            "retrieved": [e.to_dict() for e in self.retrieved],
+            "cited": [e.to_dict() for e in self.cited],
+            "retrieved_count": self.retrieved_count,
+            "cited_count": self.cited_count,
+            "stage_gloss": list(self.stage_gloss),
+            "available": self.available,
+        }
+
+
+_MAX_SUPPORTING_CHARS = 320
+
+
+def _bounded_extract(text: str, *, limit: int = _MAX_SUPPORTING_CHARS) -> str:
+    """Return a bounded supporting extract; never the full document body."""
+
+    text = (text or "").strip()
+    if len(text) <= limit:
+        return text
+    return text[:limit].rstrip() + "…"
+
+
+def _evidence_item_from_detail(detail: dict) -> EvidenceItemView:
+    authority = str(detail.get("authority") or "")
+    return EvidenceItemView(
+        citation_id=str(detail.get("citation_id") or ""),
+        source_id=str(detail.get("source_id") or ""),
+        chunk_id=str(detail.get("chunk_id") or ""),
+        source_name=str(detail.get("source_name") or ""),
+        domain=str(detail.get("domain") or ""),
+        authority=authority,
+        authority_label=AUTHORITY_LABELS.get(authority, authority or "Unknown authority"),
+        version=str(detail.get("version") or ""),
+        section=str(detail.get("section") or ""),
+        score=float(detail.get("score") or 0.0),
+        rank=int(detail.get("rank") or 0),
+        backend_name=str(detail.get("backend_name") or ""),
+        cited=bool(detail.get("cited")),
+        supporting_text=_bounded_extract(str(detail.get("text") or "")),
+    )
+
+
+def build_evidence_inspector(result: Any) -> EvidenceInspectorView:
+    """Shape an orchestrator result's ``evidence_detail`` into the inspector.
+
+    Pure: it reads the read-only projection the orchestrator already produced
+    (one dict per retrieved candidate) and never triggers retrieval or a write.
+    """
+
+    detail = list(getattr(result, "evidence_detail", ()) or ())
+    items = [_evidence_item_from_detail(d) for d in detail]
+    retrieved = tuple(items)
+    cited = tuple(i for i in items if i.cited)
+    return EvidenceInspectorView(
+        retrieved=retrieved,
+        cited=cited,
+        retrieved_count=len(retrieved),
+        cited_count=len(cited),
+        stage_gloss=EVIDENCE_STAGE_GLOSS,
+        available=bool(retrieved),
+    )
+
+
+@dataclass(frozen=True)
+class CitationView:
+    """A single citation with the provenance the backend actually exposes.
+
+    Fields the governed pipeline does not surface (page/row, pack id/version)
+    are intentionally absent rather than inferred — citations are never invented.
+    """
+
+    citation_id: str
+    kind: str  # knowledge | memory
+    source_name: str
+    source_id: str
+    chunk_id: str
+    authority: str
+    authority_label: str
+    version: str
+    section: str
+    supporting_text: str
+
+    def to_dict(self) -> dict:
+        return {
+            "citation_id": self.citation_id,
+            "kind": self.kind,
+            "source_name": self.source_name,
+            "source_id": self.source_id,
+            "chunk_id": self.chunk_id,
+            "authority": self.authority,
+            "authority_label": self.authority_label,
+            "version": self.version,
+            "section": self.section,
+            "supporting_text": self.supporting_text,
+        }
+
+
+def build_citation_details(result: Any) -> Tuple[CitationView, ...]:
+    """Build per-citation cards from the orchestrator result (read-only).
+
+    Knowledge citations (``src:<chunk_id>``) are enriched from the evidence
+    detail projection; memory citations (``mem:<id>``) are preserved as-is with
+    no fabricated provenance. Citation ids are kept exactly as the composer
+    emitted them.
+    """
+
+    by_citation: Dict[str, dict] = {}
+    for d in getattr(result, "evidence_detail", ()) or ():
+        cid = str(d.get("citation_id") or "")
+        if cid:
+            by_citation.setdefault(cid, d)
+
+    cards: List[CitationView] = []
+    for cid in getattr(result, "citations", ()) or ():
+        cid = str(cid)
+        detail = by_citation.get(cid)
+        if detail is not None:
+            authority = str(detail.get("authority") or "")
+            cards.append(CitationView(
+                citation_id=cid,
+                kind="knowledge",
+                source_name=str(detail.get("source_name") or ""),
+                source_id=str(detail.get("source_id") or ""),
+                chunk_id=str(detail.get("chunk_id") or ""),
+                authority=authority,
+                authority_label=AUTHORITY_LABELS.get(
+                    authority, authority or "Unknown authority"),
+                version=str(detail.get("version") or ""),
+                section=str(detail.get("section") or ""),
+                supporting_text=_bounded_extract(str(detail.get("text") or "")),
+            ))
+        else:
+            kind = "memory" if cid.startswith("mem:") else "knowledge"
+            cards.append(CitationView(
+                citation_id=cid, kind=kind, source_name="", source_id="",
+                chunk_id=cid.split(":", 1)[1] if ":" in cid else cid,
+                authority="", authority_label="Unknown authority",
+                version="", section="", supporting_text=""))
+    return tuple(cards)
+
+
+# ---------------------------------------------------------------------------
+# Ask — evidence scope (read-only)
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class AskScopeView:
+    """The governed evidence scope a query will run against, shown pre-submit.
+
+    Read-only: it reports how many active knowledge packs and approved sources
+    are in scope so the asker can see what is (and is not) being searched.
+    Memory context is off by default and never silently enabled.
+    """
+
+    active_pack_count: int
+    approved_source_count: int
+    memory_context_enabled: bool
+    plain_summary: Tuple[str, ...]
+    warnings: Tuple[str, ...]
+
+    def to_dict(self) -> dict:
+        return {
+            "active_pack_count": self.active_pack_count,
+            "approved_source_count": self.approved_source_count,
+            "memory_context_enabled": self.memory_context_enabled,
+            "plain_summary": list(self.plain_summary),
+            "warnings": list(self.warnings),
+        }
+
+
+def build_ask_scope(config: ConsoleConfig, *,
+                    memory_context_enabled: bool = False) -> AskScopeView:
+    """Summarise the governed active-knowledge scope for the Ask page.
+
+    Counts only governed *active* packs and *active* approved sources, reusing
+    the existing read-only pack and source view models. Never searches inactive,
+    blocked, retired, or superseded knowledge.
+    """
+
+    warnings: List[str] = []
+    try:
+        active_packs = build_packs(config).active_count
+    except Exception:  # pragma: no cover - defensive aggregation guard
+        active_packs = 0
+    try:
+        sources = build_sources(config)
+        approved_sources = sum(1 for r in sources.rows if r.status == "active")
+    except Exception:  # pragma: no cover - defensive aggregation guard
+        approved_sources = 0
+
+    if active_packs == 0:
+        warnings.append(
+            "No active knowledge packs — answers will rely on approved sources "
+            "only, and may be insufficient.")
+    if active_packs == 0 and approved_sources == 0:
+        warnings.append(
+            "Evidence scope is empty. Add data or activate a pack before asking.")
+
+    plain = (
+        f"{active_packs} active knowledge pack(s)",
+        f"{approved_sources} approved source(s)",
+        "Memory context enabled" if memory_context_enabled
+        else "Memory context disabled",
+    )
+    return AskScopeView(
+        active_pack_count=active_packs,
+        approved_source_count=approved_sources,
+        memory_context_enabled=memory_context_enabled,
+        plain_summary=plain,
+        warnings=tuple(warnings),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Ask — export (pure serialisers; the only writer is the caller's file write)
+# ---------------------------------------------------------------------------
+
+
+def render_ask_markdown(view: AskView, *,
+                        citations: Tuple[CitationView, ...] = (),
+                        inspector: Optional[EvidenceInspectorView] = None,
+                        generated_at: str = "") -> str:
+    """Serialise an answer to Markdown, preserving evidence and labels.
+
+    Pure string builder — it writes nothing. Citation ids, judgement labels,
+    evidence gaps, and the selected status are all preserved so an exported
+    answer stays auditable. Full source bodies are never embedded; only the
+    bounded supporting extracts already present in the views are included.
+    """
+
+    lines: List[str] = [f"# Ask answer — {view.status_label}", ""]
+    if generated_at:
+        lines.append(f"_Generated: {generated_at}_")
+        lines.append("")
+    lines.append(f"**Question:** {view.query}")
+    lines.append(f"**Answer mode:** {view.mode}")
+    lines.append(f"**Grounded:** {'yes' if view.grounded else 'no'}")
+    lines.append("")
+    for section in view.sections:
+        lines.append(f"## {section.title}")
+        if section.body:
+            lines.append(section.body)
+        for item in section.items:
+            lines.append(f"- {item}")
+        lines.append("")
+    if citations:
+        lines.append("## Citations")
+        for c in citations:
+            prov = " · ".join(p for p in (
+                c.source_name, c.authority_label,
+                f"v{c.version}" if c.version else "") if p)
+            lines.append(f"- `{c.citation_id}`" + (f" — {prov}" if prov else ""))
+        lines.append("")
+    if inspector is not None and inspector.available:
+        lines.append("## Evidence inspector")
+        lines.append(
+            f"Retrieved {inspector.retrieved_count}; cited {inspector.cited_count}. "
+            "Relevance score is match strength, not confidence.")
+        for e in inspector.retrieved:
+            tag = "cited" if e.cited else "retrieved only"
+            lines.append(
+                f"- `{e.citation_id}` ({tag}) — {e.source_name} · "
+                f"{e.authority_label} · score {e.score:.3f} · rank {e.rank}")
+        lines.append("")
+    lines.append(f"**Next safe action:** {view.safe_next_action}")
+    lines.append("")
+    lines.append(
+        "_Retrieval is not truth. Citations show the evidence used; authority "
+        "and relevance are different. Judgement is labelled separately. "
+        "Insufficient evidence is a valid outcome. Ask never writes memory._")
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def render_ask_json(view: AskView, *,
+                    citations: Tuple[CitationView, ...] = (),
+                    inspector: Optional[EvidenceInspectorView] = None,
+                    generated_at: str = "") -> str:
+    """Serialise an answer to a JSON evidence bundle (pure; writes nothing)."""
+
+    bundle = {
+        "_record": "ask_evidence_bundle",
+        "generated_at": generated_at,
+        "answer": view.to_dict(),
+        "citations": [c.to_dict() for c in citations],
+        "evidence_inspector": inspector.to_dict() if inspector is not None else None,
+        "disclaimers": list(EVIDENCE_STAGE_GLOSS),
+    }
+    return json.dumps(bundle, indent=2, sort_keys=True)
 
 
 # ---------------------------------------------------------------------------

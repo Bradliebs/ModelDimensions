@@ -1,0 +1,12 @@
+# Wikipedia / wiki-derived dataset candidates for the v6.2A Clean Data Intake Lane.
+# These are *declared metadata only* — assessment never downloads dataset content.
+# Lines beginning with '#' are comments and are ignored by the loader.
+#
+# Adding wiki data to the bank is governed: these candidates enter the intake
+# lane for assessment and human approval. Nothing here writes to the MemoryBank,
+# the MemoryLedger, or the source registry. Assess, review, then approve before
+# any wiki content becomes citable knowledge.
+#
+# Run: python app/workbench.py data-intake assess --candidate demos/wiki_intake_candidates.jsonl
+{"dataset_id": "wikitext/wikitext-103-raw-v1", "source_url": "https://huggingface.co/datasets/Salesforce/wikitext", "source_type": "corpus", "title": "WikiText-103 (raw)", "description": "Verified Good and Featured Wikipedia article text, raw character-level subset used as a clean English knowledge corpus.", "licence": "cc-by-sa-3.0", "provenance": "huggingface:Salesforce/wikitext (wikitext-103-raw-v1; curated from Wikipedia)", "publisher": "Wikimedia Foundation", "language": "en", "task_categories": ["text-generation", "language-modeling"], "size_hint": "515MB", "last_updated": "2025-09-01", "intended_use": "knowledge_base", "contains_personal_data": false, "is_synthetic": false, "sample_available": true, "notes": "encyclopaedic Wikipedia text; CC BY-SA attribution required"}
+{"dataset_id": "wikimedia/wikipedia-simple-en", "source_url": "https://huggingface.co/datasets/wikimedia/wikipedia", "source_type": "corpus", "title": "Wikipedia (Simple English)", "description": "Cleaned full-article Simple English Wikipedia dump, one record per article, suitable as a bounded knowledge corpus.", "licence": "cc-by-sa-4.0", "provenance": "huggingface:wikimedia/wikipedia (20231101.simple)", "publisher": "Wikimedia Foundation", "language": "en", "task_categories": ["text-generation", "question-answering"], "size_hint": "310MB", "last_updated": "2025-11-01", "intended_use": "knowledge_base", "contains_personal_data": false, "is_synthetic": false, "sample_available": true, "notes": "Simple English subset keeps the import bounded; CC BY-SA attribution required"}

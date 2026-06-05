@@ -37,7 +37,10 @@ from agent import hf_dataset_importer  # noqa: E402
 _DEFAULT_LEDGER = ROOT / "demos" / "workbench_ledger.jsonl"
 _DEFAULT_QUEUE = ROOT / "demos" / "workbench_proposals.jsonl"
 _SEED_FILE = ROOT / "demos" / "seed_concept_cells_project.jsonl"
+_SEED_STRATEGY = ROOT / "demos" / "seed_slm_training_strategy.jsonl"
 _INGEST_NOTE = ROOT / "demos" / "seed_ingestion_note.md"
+_SEED_KNOWLEDGE = ROOT / "demos" / "seed_coding_knowledge.md"
+_SEED_STRATEGY_KNOWLEDGE = ROOT / "demos" / "seed_slm_dataset_strategy.md"
 _DEFAULT_PACK_ROOT = ROOT / "demos" / "packs"
 
 # The canonical Friday -> Monday example: a stored fact and a one-word near-miss.
@@ -3578,12 +3581,33 @@ def _under_streamlit() -> bool:
 # because it requires a running Streamlit session.
 
 def _cm_service():  # pragma: no cover - requires streamlit
-    """Lazily build a read-only WorkbenchService for the Ask/Reports pages."""
+    """Lazily build a read-only WorkbenchService for the Ask/Reports pages.
+
+    Seeds project memory from the concept-cell seed and the SLM training-strategy
+    notes, and imports the bundled engineering-notes and SLM dataset-strategy
+    references through the governed ``import_knowledge`` path so Ask has citable
+    knowledge on launch instead of an empty library. All are in-repo demo
+    content loaded through the designed front doors (``seed_from`` for memory,
+    ``import_knowledge`` for knowledge, reversible via
+    ``delete_knowledge_source``); none bypass governance.
+    """
     import streamlit as st
     if "cm_service" not in st.session_state:
         svc = WorkbenchService(ledger_path=str(_DEFAULT_LEDGER), fresh=True)
         if _SEED_FILE.exists():
             svc.seed_from(_SEED_FILE)
+        if _SEED_STRATEGY.exists():
+            svc.seed_from(_SEED_STRATEGY)
+        if _SEED_KNOWLEDGE.exists() and not svc.list_knowledge_sources():
+            svc.import_knowledge(
+                str(_SEED_KNOWLEDGE), domain="coding", authority="reputable",
+                source_name="Concept Cells Engineering Notes", version="1")
+            if _SEED_STRATEGY_KNOWLEDGE.exists():
+                svc.import_knowledge(
+                    str(_SEED_STRATEGY_KNOWLEDGE), domain="general",
+                    authority="reputable",
+                    source_name="SLM Dataset and Training Strategy Notes",
+                    version="1")
         st.session_state.cm_service = svc
     return st.session_state.cm_service
 
@@ -3604,18 +3628,65 @@ def _page_home(st, cm, config) -> None:  # pragma: no cover - requires streamlit
 
 
 def _page_ask(st, cm, config) -> None:  # pragma: no cover - requires streamlit
-    st.caption("Ask a question. Answers are grounded in evidence; gaps are shown honestly.")
+    """The primary consultant workspace: ask, inspect evidence, export.
+
+    Every step is read-only. The orchestrator never writes memory, registers a
+    source, imports or activates a pack, or runs a lifecycle action. Export is
+    the only write, is user-initiated, and writes a single download file via the
+    browser — it mutates no backend state.
+    """
+    from datetime import datetime, timezone
+
+    st.caption("Ask a question. Answers are grounded in evidence; gaps are shown "
+               "honestly. Retrieval is not truth — citations show the evidence used.")
+
+    # --- Evidence scope (shown before submission) ------------------------
+    scope = cm.build_ask_scope(config)
+    with st.sidebar:
+        st.markdown("**Searching**")
+        for line in scope.plain_summary:
+            st.caption("• " + line)
+        for warn in scope.warnings:
+            st.warning(warn)
+
+    # --- Query controls --------------------------------------------------
     labels = [label for _, label in cm.ANSWER_MODES]
     st.selectbox("Answer style", labels, key="ask_mode",
-                 help="Auto uses the governed router; other styles are advisory hints.")
-    query = st.text_input("Your question", key="ask_query")
-    if st.button("Ask") and query.strip():
-        view = cm.run_ask(_cm_service(), query.strip(),
-                          registry_path=config.registry_path)
+                 help="Auto uses the governed router. Other styles are advisory "
+                      "hints; the governed pipeline still decides grounding.")
+    query = st.text_area("Your question", key="ask_query", height=90)
+    col_submit, col_clear = st.columns(2)
+    submit = col_submit.button("Ask", use_container_width=True)
+    if col_clear.button("Clear", use_container_width=True):
+        for k in ("ask_query", "ask_result"):
+            st.session_state.pop(k, None)
+        return
+
+    if submit and query.strip():
+        result = cm.answer_ask(_cm_service(), query.strip(),
+                               registry_path=config.registry_path)
+        st.session_state["ask_result"] = result
+
+    result = st.session_state.get("ask_result")
+    if result is None:
+        st.info("Ask a question to see a grounded answer with its evidence.")
+        return
+
+    view = cm.build_ask(result)
+    inspector = cm.build_evidence_inspector(result)
+    citations = cm.build_citation_details(result)
+
+    # --- Centre: answer --------------------------------------------------
+    centre, right = st.columns([3, 2])
+    with centre:
         st.info(f"Status: {view.status_label}")
+        route_reason = getattr(result, "route_reason", "")
+        if route_reason:
+            st.caption(f"Routed because: {route_reason}")
         for section in view.sections:
             if section.kind == "judgement":
-                st.warning(f"**{section.title}** (advisory judgement)")
+                st.warning(f"**{section.title}** (advisory judgement — not "
+                           "grounded in retrieved evidence)")
             elif section.kind == "gap":
                 st.error(f"**{section.title}**")
             else:
@@ -3625,6 +3696,54 @@ def _page_ask(st, cm, config) -> None:  # pragma: no cover - requires streamlit
             for item in section.items:
                 st.write("- " + item)
         st.caption("Next safe action: " + view.safe_next_action)
+
+    # --- Right: evidence -------------------------------------------------
+    with right:
+        st.markdown("**Evidence inspector**")
+        for gloss in inspector.stage_gloss:
+            st.caption(gloss)
+        if not inspector.available:
+            st.caption("No retrieved evidence to inspect for this answer.")
+        else:
+            st.caption(f"Retrieved {inspector.retrieved_count} · "
+                       f"cited {inspector.cited_count}")
+            show_cited_only = st.checkbox("Cited only", key="ask_cited_only")
+            rows = inspector.cited if show_cited_only else inspector.retrieved
+            for e in rows:
+                tag = "✅ cited" if e.cited else "• retrieved"
+                with st.expander(f"{tag} · {e.source_name or e.source_id} "
+                                 f"(rank {e.rank})"):
+                    st.caption(f"Citation: {e.citation_id}")
+                    st.caption(f"Authority: {e.authority_label} · "
+                               f"relevance score {e.score:.3f} (not confidence)")
+                    if e.version:
+                        st.caption(f"Version: {e.version}")
+                    if e.section:
+                        st.caption(f"Section: {e.section}")
+                    if e.supporting_text:
+                        st.write(e.supporting_text)
+        if citations:
+            st.markdown("**Citations**")
+            for c in citations:
+                prov = " · ".join(p for p in (
+                    c.source_name, c.authority_label,
+                    f"v{c.version}" if c.version else "") if p)
+                st.caption(f"`{c.citation_id}`" + (f" — {prov}" if prov else ""))
+
+    # --- Export ----------------------------------------------------------
+    st.divider()
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    md = cm.render_ask_markdown(view, citations=citations,
+                                inspector=inspector, generated_at=now)
+    bundle = cm.render_ask_json(view, citations=citations,
+                                inspector=inspector, generated_at=now)
+    ex_md, ex_json = st.columns(2)
+    ex_md.download_button("Export Markdown", md, file_name="ask_answer.md",
+                          mime="text/markdown", use_container_width=True)
+    ex_json.download_button("Export JSON evidence bundle", bundle,
+                            file_name="ask_evidence_bundle.json",
+                            mime="application/json", use_container_width=True)
+
 
 
 def _page_reports(st, cm, config) -> None:  # pragma: no cover - requires streamlit

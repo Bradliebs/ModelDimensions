@@ -114,6 +114,14 @@ class ChatOrchestratorResult:
     answer_has_citations: bool = False
     judgement_present: bool = False
     unsupported_claim_count: int = 0
+    # v7.1 evidence inspector projection: one read-only dict per retrieved
+    # knowledge candidate (source/chunk provenance, the backend's relevance
+    # score, and whether it was cited in the final answer). Built solely from
+    # the audit the frozen pipeline already produced — it triggers no retrieval,
+    # changes no ranking, and writes nothing. ``cited`` reflects whether the
+    # candidate's citation id appears in the composer's own citation list; the
+    # ``score`` is the backend's relevance activation and is never a confidence.
+    evidence_detail: List[dict] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         return {
@@ -137,6 +145,7 @@ class ChatOrchestratorResult:
             "answer_has_citations": self.answer_has_citations,
             "judgement_present": self.judgement_present,
             "unsupported_claim_count": self.unsupported_claim_count,
+            "evidence_detail": [dict(d) for d in self.evidence_detail],
         }
 
 
@@ -320,6 +329,44 @@ def _related_sources_from_audit(audit: dict, *, limit: int = 3) -> List[str]:
         if len(names) >= limit:
             break
     return names
+
+
+def _evidence_detail_from_audit(audit: dict,
+                                citations: List[str]) -> List[dict]:
+    """Project the retrieved knowledge candidates for the evidence inspector.
+
+    Reads only ``audit["knowledge"]["candidates"]`` — the candidate dicts the
+    frozen retrieval pipeline already produced — and returns one inert dict per
+    candidate with its provenance (source, chunk, section, version), authority,
+    domain, the backend's relevance ``score`` (its ``activation``; never a
+    confidence), its ``rank``, and a ``cited`` flag set when the candidate's
+    ``src:<chunk_id>`` citation appears in the composer's own citation list.
+
+    It never retrieves, re-ranks, or writes anything; it only reshapes data the
+    pipeline already computed so the UI can show retrieved-vs-cited stages.
+    """
+    cited_ids = set(citations or ())
+    know = (audit or {}).get("knowledge") or {}
+    detail: List[dict] = []
+    for cand in know.get("candidates") or []:
+        chunk_id = str(cand.get("chunk_id") or "")
+        citation_id = f"src:{chunk_id}" if chunk_id else ""
+        detail.append({
+            "citation_id": citation_id,
+            "source_id": str(cand.get("source_id") or ""),
+            "chunk_id": chunk_id,
+            "source_name": str(cand.get("source_name") or ""),
+            "domain": str(cand.get("domain") or ""),
+            "authority": str(cand.get("authority") or ""),
+            "version": str(cand.get("version") or ""),
+            "section": str(cand.get("section") or ""),
+            "score": float(cand.get("activation") or 0.0),
+            "rank": int(cand.get("rank") or 0),
+            "backend_name": str(cand.get("backend_name") or ""),
+            "text": str(cand.get("text") or ""),
+            "cited": bool(citation_id) and citation_id in cited_ids,
+        })
+    return detail
 
 
 def _insufficient_reason(audit: dict) -> str:
@@ -587,6 +634,8 @@ class ChatOrchestrator:
         answer_text = format_evidence_bound_answer(
             result.answer.text, citations, [])
         judgement_present = JUDGEMENT_LABEL in answer_text
+        evidence_detail = _evidence_detail_from_audit(
+            getattr(result, "audit", None) or {}, citations)
         return ChatOrchestratorResult(
             query=intent.query, mode=mode, answer_text=answer_text,
             citations=citations,
@@ -597,6 +646,7 @@ class ChatOrchestrator:
             answer_has_citations=bool(citations),
             judgement_present=judgement_present,
             unsupported_claim_count=0,
+            evidence_detail=evidence_detail,
             intent_mode=intent.mode, route_reason=intent.reason)
 
     def _insufficient_result(self, intent: ChatIntent,
@@ -633,6 +683,8 @@ class ChatOrchestrator:
         if grounded:
             answer_text = format_labelled_judgement(
                 result.answer.text, citations, grounded=True)
+            evidence_detail = _evidence_detail_from_audit(
+                getattr(result, "audit", None) or {}, citations)
             return ChatOrchestratorResult(
                 query=intent.query, mode=ChatMode.JUDGEMENT_ONLY,
                 answer_text=answer_text, citations=citations,
@@ -643,6 +695,7 @@ class ChatOrchestrator:
                 answer_has_citations=bool(citations),
                 judgement_present=True,
                 unsupported_claim_count=0,
+                evidence_detail=evidence_detail,
                 intent_mode=intent.mode, route_reason=intent.reason)
         answer_text = format_labelled_judgement("", [], grounded=False)
         return ChatOrchestratorResult(
