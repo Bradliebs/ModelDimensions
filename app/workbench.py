@@ -253,6 +253,9 @@ Commands:
   memory-proposals check-conflicts <proposals_or_queue.jsonl> --existing-memory path [--out path] [--now ISO]  detect duplicate/conflict/staleness risk (read-only; nothing written)
   hf-inspect <dataset_id>  preview a Hugging Face dataset's licence/decision
   hf-import <dataset_id> --pack <pack>  import a small governed HF sample
+  (v6.9 governed HF lifecycle — top-level subcommands, run as `python app/workbench.py <cmd>`):
+  hf-lifecycle validate|sample|import-eval|import-knowledge|revision-check|plan-retire  governed, bounded, fail-closed HF import
+  retrieval-eval hf-import --pack-dir <dir> [--out path]  bridge an imported HF eval pack to inert retrieval cases (read-only)
   demo                  run the Friday -> Monday near-miss example
   export [path]         write the ledger JSONL (defaults to the active ledger)
   help                  show this help
@@ -1219,6 +1222,8 @@ def _retrieval_eval_cli(argv: list[str]) -> int:
     """
     if argv and argv[0] == "pdf-import":
         return _retrieval_eval_pdf_import_cli(argv[1:])
+    if argv and argv[0] == "hf-import":
+        return _retrieval_eval_hf_import_cli(argv[1:])
 
     from agent import retrieval_eval_harness as reh
 
@@ -1896,6 +1901,340 @@ def _hf_data_cli(argv: list[str]) -> int:
     return 0
 
 
+# ---------- v6.9 governed Hugging Face import lifecycle CLI ----------
+
+_HF_APPROVAL_DEFAULT = ROOT / "demos" / "hf_dataset_approval_example.json"
+_HF_METADATA_DEFAULT = ROOT / "demos" / "hf_dataset_metadata_example.json"
+_HF_METADATA_NEXT = ROOT / "demos" / "hf_dataset_metadata_next_revision.json"
+_HF_FIXTURE_QA = ROOT / "demos" / "hf_fixtures" / "governed_qa_sample.jsonl"
+
+_HF_PROFILE_CHOICES = {
+    "question_answer": "QUESTION_ANSWER",
+    "instruction_response": "INSTRUCTION_RESPONSE",
+    "document_text": "DOCUMENT_TEXT",
+    "classification": "CLASSIFICATION",
+    "retrieval_pair": "RETRIEVAL_PAIR",
+    "benchmark_case": "BENCHMARK_CASE",
+    "generic_record": "GENERIC_RECORD",
+}
+
+
+def _hf_parse_now(value, label):
+    if not value:
+        return None
+    from datetime import datetime
+    try:
+        return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except ValueError:
+        raise SystemExit(f"[{label}] invalid --now timestamp {value!r}")
+
+
+def _hf_lifecycle_cli(argv: list[str]) -> int:
+    """Drive the v6.9 governed Hugging Face import lifecycle (read-only by default).
+
+    Every subcommand is fail-closed and bounded. Nothing is downloaded (rows come
+    from a local fixture), no memory ledger / source registry / proposal is ever
+    written, and an import writes a pack **only** with an explicit
+    ``--write --pack-dir`` and only after the request validates against the
+    approval. Approval for eval is not approval for knowledge, approval for one
+    revision is not approval for another, and an imported pack is never
+    automatically activated in retrieval. Subcommands::
+
+        hf-lifecycle validate          [--approval P] [--split S] [--intent eval|knowledge]
+        hf-lifecycle sample            [--approval P] [--fixture P] [--row-limit N]
+        hf-lifecycle import-eval       [--approval P] [--fixture P] [--profile ...] [--write --pack-dir D]
+        hf-lifecycle import-knowledge  [--approval P] [--fixture P] [--profile ...] [--write --pack-dir D]
+        hf-lifecycle revision-check    [--approval P] [--observed-metadata P] [--revision REV]
+        hf-lifecycle plan-retire       --pack-id ID [--reason ...]
+    """
+    from agent.hf_import_lifecycle import (
+        HFImportIntent,
+        HFImportRequest,
+        load_approval,
+        render_sample_result_markdown,
+        sample_rows,
+    )
+
+    parser = argparse.ArgumentParser(
+        prog="workbench.py hf-lifecycle",
+        description="Governed Hugging Face import lifecycle (v6.9): validate, "
+                    "sample, import (eval/knowledge), revision-check, plan-retire. "
+                    "Read-only by default; bounded and fail-closed.")
+    sub = parser.add_subparsers(dest="action", required=True)
+
+    def _add_common(p):
+        p.add_argument("--approval", default=str(_HF_APPROVAL_DEFAULT),
+                       help="path to the HF dataset approval JSON")
+        p.add_argument("--split", default="train",
+                       help="dataset split to request (must be approved)")
+        p.add_argument("--row-limit", type=int, default=None, dest="row_limit",
+                       help="requested row cap (defaults to the approval cap; "
+                            "may never exceed it)")
+        p.add_argument("--now", default=None,
+                       help="optional ISO timestamp for freshness/expiry checks")
+
+    pv = sub.add_parser("validate",
+                        help="check an import request against the approval")
+    _add_common(pv)
+    pv.add_argument("--intent", default="eval", choices=["eval", "knowledge"],
+                    help="import intent to validate (eval/knowledge are "
+                         "separately governed)")
+
+    ps = sub.add_parser("sample", help="bounded row sample from a local fixture")
+    _add_common(ps)
+    ps.add_argument("--intent", default="eval", choices=["eval", "knowledge"])
+    ps.add_argument("--fixture", default=str(_HF_FIXTURE_QA),
+                    help="local JSONL fixture standing in for the dataset rows")
+
+    def _add_import(p):
+        _add_common(p)
+        p.add_argument("--fixture", default=str(_HF_FIXTURE_QA),
+                       help="local JSONL fixture standing in for the dataset rows")
+        p.add_argument("--profile", default="question_answer",
+                       choices=sorted(_HF_PROFILE_CHOICES),
+                       help="row normalization profile (default question_answer)")
+        p.add_argument("--pack-id", default="hf_governed_demo", dest="pack_id",
+                       help="lowercase pack id to build")
+        p.add_argument("--write", action="store_true",
+                       help="actually write the pack (default off: dry-run, "
+                            "reports IMPORT_READY without writing)")
+        p.add_argument("--pack-dir", default=None, dest="pack_dir",
+                       help="destination pack directory (required with --write; "
+                            "must not already exist)")
+
+    pe = sub.add_parser("import-eval", help="build/import an eval pack (dry-run)")
+    _add_import(pe)
+
+    pk = sub.add_parser("import-knowledge",
+                        help="build/import a knowledge pack (dry-run)")
+    _add_import(pk)
+    pk.add_argument("--domain", default="external",
+                    help="knowledge domain label for imported chunks")
+    pk.add_argument("--authority", default="reference",
+                    help="knowledge authority label for imported chunks")
+
+    pr = sub.add_parser("revision-check",
+                        help="decide whether an approval still covers a revision")
+    pr.add_argument("--approval", default=str(_HF_APPROVAL_DEFAULT),
+                    help="path to the HF dataset approval JSON")
+    pr.add_argument("--observed-metadata", default=str(_HF_METADATA_NEXT),
+                    dest="observed_metadata",
+                    help="path to the freshly observed dataset card metadata "
+                         "(default: the demo next-revision card)")
+    pr.add_argument("--revision", default=None,
+                    help="the revision the metadata was observed at (defaults to "
+                         "the approval's revision = drift-only re-check)")
+    pr.add_argument("--out", default=None,
+                    help="optional path to write the revision assessment JSON")
+    pr.add_argument("--now", default=None,
+                    help="optional ISO timestamp for the assessment")
+
+    pt = sub.add_parser("plan-retire",
+                        help="produce an inert retirement plan (executes nothing)")
+    pt.add_argument("--approval", default=str(_HF_APPROVAL_DEFAULT),
+                    help="approval supplying dataset id/revision context")
+    pt.add_argument("--pack-id", required=True, dest="pack_id",
+                    help="the imported pack to plan retirement for")
+    pt.add_argument("--reason", default="approval_expired",
+                    choices=["superseded_by_revision", "approval_expired",
+                             "approval_revoked", "source_removed_upstream",
+                             "policy_change"],
+                    help="why the pack is being retired")
+    pt.add_argument("--rationale", default="",
+                    help="optional human rationale recorded on the plan")
+    pt.add_argument("--out", default=None,
+                    help="optional path to write the retirement plan JSON")
+    pt.add_argument("--now", default=None,
+                    help="optional ISO timestamp for the plan")
+
+    args = parser.parse_args(argv)
+
+    if args.action in {"validate", "sample", "import-eval", "import-knowledge"}:
+        now = _hf_parse_now(args.now, "hf-lifecycle")
+        approval = load_approval(args.approval)
+        intent = (HFImportIntent.KNOWLEDGE
+                  if getattr(args, "intent", "eval") == "knowledge"
+                  else HFImportIntent.EVAL)
+        if args.action in {"import-eval"}:
+            intent = HFImportIntent.EVAL
+        elif args.action in {"import-knowledge"}:
+            intent = HFImportIntent.KNOWLEDGE
+        row_limit = args.row_limit if args.row_limit is not None else approval.row_limit
+        request = HFImportRequest(
+            dataset_id=approval.dataset_id,
+            dataset_revision=approval.dataset_revision,
+            split=args.split, intent=intent,
+            requested_row_limit=row_limit, streaming=True)
+
+    if args.action == "validate":
+        from agent.hf_import_lifecycle import validate_import_request
+        validation = validate_import_request(approval, request, now=now)
+        print(f"[hf-lifecycle] validate intent={intent.value} "
+              f"valid={str(validation.valid).lower()}")
+        for code, message in zip(validation.codes, validation.messages):
+            print(f"  - {code.value}: {message}")
+        print(f"  effective_row_limit = {validation.effective_row_limit}")
+        return 0 if validation.valid else 1
+
+    if args.action == "sample":
+        result = sample_rows(
+            request, fixture_path=args.fixture, approval=approval, now=now)
+        print(render_sample_result_markdown(result))
+        return 0
+
+    if args.action in {"import-eval", "import-knowledge"}:
+        from agent.hf_content_inspector import inspect_normalized_rows
+        from agent.hf_row_normalizer import HFNormalizationProfile, normalize_sample
+
+        if args.write and not args.pack_dir:
+            raise SystemExit("[hf-lifecycle] --write requires --pack-dir")
+
+        sample = sample_rows(
+            request, fixture_path=args.fixture, approval=approval, now=now)
+        if not sample.rows:
+            print(render_sample_result_markdown(sample))
+            print("[hf-lifecycle] no rows sampled; import aborted (fail-closed)")
+            return 1
+        profile = HFNormalizationProfile[_HF_PROFILE_CHOICES[args.profile]]
+        norm = normalize_sample(sample, profile=profile, now=now)
+        insp = inspect_normalized_rows(norm.normalized_rows, now=now)
+
+        if args.action == "import-eval":
+            from agent.hf_eval_pack_importer import (
+                HFEvalPackImportRequest,
+                import_eval_pack,
+                render_eval_import_markdown,
+            )
+            req = HFEvalPackImportRequest(
+                pack_id=args.pack_id, approval=approval, request=request,
+                normalized_rows=norm.normalized_rows,
+                inspections=insp.inspections, pack_dir=args.pack_dir,
+                write=args.write,
+                pack_name="Governed HF eval demo",
+                pack_description="Eval pack imported via the v6.9 governed HF "
+                                 "import lifecycle.")
+            result = import_eval_pack(req, now=now)
+            print(render_eval_import_markdown(result))
+        else:
+            from agent.hf_knowledge_pack_importer import (
+                HFKnowledgePackImportRequest,
+                import_knowledge_pack,
+                render_knowledge_import_markdown,
+            )
+            req = HFKnowledgePackImportRequest(
+                pack_id=args.pack_id, approval=approval, request=request,
+                normalized_rows=norm.normalized_rows,
+                inspections=insp.inspections, pack_dir=args.pack_dir,
+                write=args.write, domain=args.domain, authority=args.authority,
+                pack_name="Governed HF knowledge demo",
+                pack_description="Knowledge pack imported via the v6.9 governed "
+                                 "HF import lifecycle.")
+            result = import_knowledge_pack(req, now=now)
+            print(render_knowledge_import_markdown(result))
+        print("[hf-lifecycle] imported != activated; the pack is inert until a "
+              "human wires it into retrieval.")
+        return 0
+
+    if args.action == "revision-check":
+        import json as _json
+
+        from agent.hf_data_adapter import HuggingFaceDatasetMetadata
+        from agent.hf_revision_manager import (
+            assess_revision,
+            render_revision_markdown,
+            write_revision_assessment,
+        )
+        now = _hf_parse_now(args.now, "hf-lifecycle")
+        approval = load_approval(args.approval)
+        observed = HuggingFaceDatasetMetadata.from_dict(
+            _json.loads(Path(args.observed_metadata).read_text(encoding="utf-8")))
+        assessment = assess_revision(
+            approval, observed_metadata=observed,
+            observed_revision=args.revision, now=now)
+        print(render_revision_markdown(assessment))
+        if args.out:
+            path = write_revision_assessment(assessment, args.out)
+            print(f"[hf-lifecycle] wrote revision assessment to {path}")
+        return 0 if assessment.covered_by_existing_approval else 1
+
+    if args.action == "plan-retire":
+        from agent.hf_import_lifecycle import load_approval as _load_approval
+        from agent.hf_revision_manager import (
+            HFRetirementReason,
+            plan_retirement,
+            render_retirement_markdown,
+            write_retirement_plan,
+        )
+        now = _hf_parse_now(args.now, "hf-lifecycle")
+        approval = _load_approval(args.approval)
+        plan = plan_retirement(
+            args.pack_id, dataset_id=approval.dataset_id,
+            dataset_revision=approval.dataset_revision,
+            reason=HFRetirementReason(args.reason),
+            rationale=args.rationale,
+            requires_approval_id=approval.approval_id, now=now)
+        print(render_retirement_markdown(plan))
+        if args.out:
+            path = write_retirement_plan(plan, args.out)
+            print(f"[hf-lifecycle] wrote retirement plan to {path}")
+        return 0
+
+    parser.error(f"unknown hf-lifecycle action {args.action!r}")
+    return 2
+
+
+def _retrieval_eval_hf_import_cli(argv: list[str]) -> int:
+    """Bridge an imported HF eval pack to retrieval-eval cases (read-only; v6.9).
+
+    Reads an approved imported eval pack directory (``manifest.json`` +
+    ``eval_questions.jsonl``), converts its questions to inert retrieval-eval
+    probes (gap probes with ``minimum_hit_k=0``), and either prints them or
+    writes them as JSONL with ``--out``. It activates nothing: the emitted file
+    is fed to the unchanged retrieval-eval harness by a human only when they
+    choose to score a service. It writes no memory ledger, source registry, or
+    proposal, and never prints expected answers.
+    """
+    from agent.hf_retrieval_eval_bridge import (
+        eval_pack_to_retrieval_cases,
+        load_eval_pack,
+        render_bridge_markdown,
+        write_retrieval_cases,
+    )
+
+    parser = argparse.ArgumentParser(
+        prog="workbench.py retrieval-eval hf-import",
+        description="Convert an imported HF eval pack into inert retrieval-eval "
+                    "cases (read-only; activates nothing).")
+    parser.add_argument("--pack-dir", required=True, dest="pack_dir",
+                        help="path to an imported HF eval pack directory "
+                             "(manifest.json + eval_questions.jsonl)")
+    parser.add_argument("--out", default=None,
+                        help="write the retrieval cases to this JSONL path "
+                             "(otherwise print a summary)")
+    args = parser.parse_args(argv)
+
+    pack_dir = Path(args.pack_dir)
+    if not (pack_dir / "manifest.json").exists():
+        raise SystemExit(f"no pack manifest at {pack_dir / 'manifest.json'}")
+
+    try:
+        manifest, _questions = load_eval_pack(pack_dir)
+    except (FileNotFoundError, ValueError) as exc:
+        raise SystemExit(f"[retrieval-eval hf-import] {exc}")
+    cases = eval_pack_to_retrieval_cases(pack_dir)
+    label = manifest.get("pack_id", pack_dir.name)
+
+    if args.out:
+        path = write_retrieval_cases(
+            cases, args.out,
+            header=f"Governed HF eval pack {label!r} -> retrieval cases (v6.9)")
+        print(f"[retrieval-eval hf-import] wrote {len(cases)} case(s) to {path} "
+              "(inert; activates nothing in retrieval)")
+    else:
+        print(render_bridge_markdown(cases, pack_label=label))
+    return 0
+
+
 def _pdf_intake_cli(argv: list[str]) -> int:
     """Assess a local PDF for governed intake before any use (v6.4).
 
@@ -2202,6 +2541,8 @@ def main(argv: list[str] | None = None) -> int:
         return _data_intake_cli(argv[1:])
     if argv and argv[0] == "hf-data":
         return _hf_data_cli(argv[1:])
+    if argv and argv[0] == "hf-lifecycle":
+        return _hf_lifecycle_cli(argv[1:])
     if argv and argv[0] == "pdf-intake":
         return _pdf_intake_cli(argv[1:])
     if argv and argv[0] == "pdf-preview":

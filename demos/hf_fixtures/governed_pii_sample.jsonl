@@ -1,0 +1,9 @@
+# Offline rows fixture for the v6.9 content-inspection demo.
+# These rows intentionally contain synthetic PII-shaped and unsafe-marker text so
+# the deterministic screen can demonstrate fail-closed blocking and redaction.
+# Nothing here is real personal data; every value is fabricated for the demo.
+{"id": "c1", "question": "Who should I contact about billing?", "answer": "Email support at billing@example.com or call 555-123-4567."}
+{"id": "c2", "question": "What is the record id?", "answer": "Reference number 123-45-6789 was logged for the account."}
+{"id": "c3", "question": "What is a JSONL file?", "answer": "A text file that stores one JSON object per line."}
+{"id": "c4", "question": "What did the moderator flag?", "answer": "The post explained how to build a bomb, which is disallowed."}
+{"id": "c5", "question": "What server responded?", "answer": "The host at 192.168.1.42 returned the cached page."}

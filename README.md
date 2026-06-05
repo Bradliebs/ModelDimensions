@@ -3222,6 +3222,104 @@ or chat-routing behaviour. It trusts no embedded PDF metadata for provenance —
 authority, provenance, and permission remain operator-declared and are flagged
 for review when absent. Activating a proposed source is a separate, human act.
 
+## v6.9 Governed Hugging Face Import Lifecycle (governed, bounded, fail-closed)
+
+v6.9 completes the Hugging Face story: a single **governed lifecycle** that takes
+a declared dataset from an explicit approval record all the way to an imported —
+but still inert — eval or knowledge pack, with bounded sampling, deterministic
+normalization, PII/content inspection, retrieval-eval bridging, and revision /
+retirement handling at every gate. It is **governed, deterministic, bounded,
+auditable, and fail-closed.** Nothing is downloaded (rows come from a local
+fixture standing in for the dataset), no memory ledger / source registry /
+proposal is ever written by this lifecycle, and an import writes a pack only with
+an explicit `--write --pack-dir` after the request validates against the
+approval.
+
+The cardinal rules it enforces and tests:
+
+- **Approval for eval use is not approval for knowledge use** — the two intents
+  are separately scoped on the approval and validated independently.
+- **Approval for one dataset revision is not approval for another** — a new
+  revision is never covered; metadata drift on the same revision still forces
+  re-approval.
+- **Approved does not mean imported; imported does not mean activated** — an
+  import is opt-in and writes an inert pack; wiring it into retrieval is a
+  separate, human act.
+- **External data never becomes trusted knowledge automatically** — PII blocks
+  knowledge import, unsafe content blocks both, and the model never owns truth.
+
+```mermaid
+flowchart TD
+    A["HF dataset card metadata<br/>(declared; nothing downloaded)"] --> B["v6.2A intake assessment<br/>+ v6.3 adapter"]
+    B --> C["HFDatasetApproval<br/>(explicit, fingerprint-bound,<br/>eval/knowledge-scoped)"]
+    C --> D["validate_import_request<br/>(fail-closed: revision, split,<br/>columns, row cap, intent)"]
+    D --> E["sample_rows<br/>(bounded, streamed, capped)"]
+    E --> F["normalize_sample<br/>(deterministic profiles)"]
+    F --> G["inspect_normalized_rows<br/>(PII / unsafe content)"]
+    G --> H1["import_eval_pack<br/>(unsafe excluded; PII allowed)"]
+    G --> H2["import_knowledge_pack<br/>(unsafe AND PII excluded)"]
+    H1 --> I["retrieval-eval bridge<br/>(inert gap probes)"]
+    C --> J["assess_revision<br/>(refresh: up-to-date / drift /<br/>new revision / mismatch)"]
+    J --> K["plan_retirement / plan_supersession<br/>(inert; executes nothing)"]
+```
+
+### Try it
+
+```pwsh
+# Check an approval covers an eval (or knowledge) import request — fail-closed.
+python app/workbench.py hf-lifecycle validate --intent eval
+python app/workbench.py hf-lifecycle validate --intent knowledge
+
+# Bounded sample from the local fixture (never materialises the whole file).
+python app/workbench.py hf-lifecycle sample --row-limit 5
+
+# Dry-run an eval-pack import (reports IMPORT_READY; writes nothing).
+python app/workbench.py hf-lifecycle import-eval
+
+# Actually write the pack (the only durable write; pack-dir must not exist).
+python app/workbench.py hf-lifecycle import-eval --write --pack-dir packs/hf_demo_eval
+
+# Dry-run a knowledge-pack import (PII and unsafe rows are excluded).
+python app/workbench.py hf-lifecycle import-knowledge
+
+# Bridge an imported eval pack to inert retrieval-eval cases (activates nothing).
+python app/workbench.py retrieval-eval hf-import --pack-dir packs/hf_demo_eval
+
+# Re-check an approval against a freshly observed (drifted) revision.
+python app/workbench.py hf-lifecycle revision-check
+
+# Produce an inert retirement plan (executes nothing).
+python app/workbench.py hf-lifecycle plan-retire --pack-id hf_demo_eval --reason approval_expired
+```
+
+`hf-lifecycle` is read-only by default; only `import-eval`/`import-knowledge`
+with `--write --pack-dir`, and the optional `--out` on `revision-check` /
+`plan-retire`, write to disk. `validate` and `revision-check` exit non-zero when
+the request is not covered, so they compose in scripts.
+
+### Components
+
+| File | Role |
+| --- | --- |
+| `src/agent/hf_import_lifecycle.py` | Phases A+B: the `HFDatasetApproval` record (fingerprint-bound, eval/knowledge-scoped), `HFImportRequest`, deterministic `compute_metadata_fingerprint` / `compute_assessment_fingerprint`, fail-closed `validate_import_request`, and bounded streamed `sample_rows` |
+| `src/agent/hf_row_normalizer.py` | Phase C: deterministic row normalization across seven profiles (question/answer, instruction/response, document text, classification, retrieval pair, benchmark case, generic) into `HFNormalizedRow` with content + schema fingerprints |
+| `src/agent/hf_content_inspector.py` | Phase C: read-only PII (email/SSN/card/phone) and unsafe-content inspection; PII blocks knowledge, unsafe blocks both; never prints raw matches |
+| `src/agent/hf_eval_pack_importer.py` | Phase D: builds an eval pack of query/expected probes (unsafe rows excluded, PII allowed for eval); dry-run by default; atomic pack write; `to_retrieval_case` gap probes |
+| `src/agent/hf_knowledge_pack_importer.py` | Phase E: builds retrieval-compatible knowledge chunks (unsafe **and** PII excluded); dry-run by default; atomic pack write; chunks carry full approval lineage and are inert until activated |
+| `src/agent/hf_retrieval_eval_bridge.py` | Phase F: converts an imported eval pack to inert retrieval-eval cases for the unchanged v3.0 harness; never leaks expected answers; atomic JSONL writer with a self-documenting banner |
+| `src/agent/hf_revision_manager.py` | Phases G/H/I: `assess_revision` (up-to-date / metadata drift / new revision / dataset mismatch → no-action / require-reapproval / block) and inert `plan_retirement` / `plan_supersession` (never self-executing) |
+| `demos/hf_dataset_approval_example.json`, `demos/hf_dataset_metadata_example.json`, `demos/hf_dataset_metadata_next_revision.json`, `demos/hf_fixtures/*.jsonl` | the demo approval, the approved-revision card, a drifted next-revision card, and bounded clean / PII fixtures |
+| `app/workbench.py` | the `hf-lifecycle` command family (`validate`, `sample`, `import-eval`, `import-knowledge`, `revision-check`, `plan-retire`) and the `retrieval-eval hf-import` bridge subcommand |
+| `evals/test_hf_*` | per-phase tests including bounded-sampling, profile, PII/unsafe, eval/knowledge import, retrieval-bridge round-trip through the real harness, revision/retirement, plus AST import-purity and no-network guards on every module |
+
+**Limitations and non-goals.** v6.9 downloads nothing — rows come from a local
+fixture that stands in for the dataset, so the network adapter is out of scope.
+It introduces **no** memory write, **no** source-registry mutation, **no**
+proposal-application path, and **no** automatic retrieval activation: an imported
+pack is inert until a human wires it in. The model/composer still does not own
+truth, facts must be cited, and every gate is fail-closed — when in doubt it
+blocks or demands re-approval rather than proceeding.
+
 ## License
 
 To be decided.

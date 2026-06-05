@@ -1,0 +1,9 @@
+# Offline rows fixture for the v6.9 governed Hugging Face import lifecycle demo.
+# One JSON object per line. Blank lines and lines starting with '#' are skipped.
+# These are declared sample rows only; nothing here is downloaded. The lifecycle
+# reads at most the approved number of rows, streaming line by line.
+{"id": "q1", "question": "What does a reliability error budget cap?", "answer": "It caps the total tolerated error-minutes for a service over a defined window.", "context": "Reliability engineering glossary, public edition."}
+{"id": "q2", "question": "What is a JSONL file?", "answer": "A text file that stores one JSON object per line, which streams line by line.", "context": "Data formats primer, public edition."}
+{"id": "q3", "question": "What does an extractive answer mean?", "answer": "An answer taken verbatim from a source rather than paraphrased or invented.", "context": "Grounding glossary, public edition."}
+{"id": "q4", "question": "What is a metadata fingerprint?", "answer": "A deterministic hash over a dataset card's declared governance fields.", "context": "Governed import glossary, public edition."}
+{"id": "q5", "question": "What does approval scope control?", "answer": "Whether a dataset is approved for eval use, knowledge use, or both.", "context": "Governed import glossary, public edition."}

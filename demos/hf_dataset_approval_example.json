@@ -1,0 +1,22 @@
+{
+  "_record": "hf_dataset_approval",
+  "approval_id": "hfappr-governed-qa-main",
+  "dataset_id": "demo/governed-qa",
+  "dataset_revision": "main",
+  "metadata_fingerprint": "hfmeta-04051d615f873f16",
+  "intake_assessment_fingerprint": "hfintake-a8685a737f8d6d64",
+  "approved_by": "reviewer@local",
+  "approved_at": "2026-05-02T09:00:00+00:00",
+  "approval_scope": "eval_and_knowledge",
+  "approved_split_names": ["train"],
+  "approved_columns": ["id", "question", "answer", "context"],
+  "row_limit": 100,
+  "streaming_allowed": true,
+  "approved_intended_use": "eval and knowledge",
+  "licence_snapshot": "apache-2.0",
+  "provenance_snapshot": "huggingface:demo/governed-qa (cited, homepage)",
+  "pii_policy": "block_knowledge",
+  "content_policy": "block_on_unsafe",
+  "approval_notes": "Demo approval for the v6.9 governed Hugging Face import lifecycle. Bound to the exact metadata fingerprint and revision of demos/hf_dataset_metadata_example.json; a new revision or any governance drift invalidates it.",
+  "expires_at": null
+}
