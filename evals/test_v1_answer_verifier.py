@@ -281,3 +281,268 @@ def test_stage_d_off_by_default():
     answer = "Mozart composed The Magic Flute in 1791."
     v = verify(answer, cells, question="asdf qwerty zxcv hjkl")
     assert v.grounded is True
+
+
+# ----------------------------------------------------------------------
+# Stage E v2 — answer-entity / question-anchor co-occurrence
+# (opt-in via strict_nonsense=True)
+# ----------------------------------------------------------------------
+
+def test_stage_e_rejects_confabulated_proper_noun():
+    """The exp24-Q2 pattern in its simplest form: the answer's entity
+    (Jean-Philippe Rameau) is absent from every cited cell. Stage A
+    passes on lexical overlap; Stage E rejects on absent entity."""
+    cells = [
+        "Philip D'Antoni was the producer of the 1971 film The French "
+        "Connection.",
+        "Jean and Philippe were both common given names among 18th "
+        "century French composers.",
+        "Music for The French Connection was scored by an American "
+        "composer in 1971.",
+    ]
+    answer = (
+        "The music for The French Connection was composed by "
+        "Jean-Philippe Rameau."
+    )
+    v = verify(
+        answer, cells,
+        question="Who composed the music for The French Connection?",
+        strict_nonsense=True,
+    )
+    assert v.grounded is False
+    assert any("Rameau" in e for e in v.unanchored_proper_nouns), \
+        v.unanchored_proper_nouns
+    assert "colocat" in v.reason.lower()
+    # Audit log records the failure with entity_found_in_some_cell=False.
+    rec = next((r for r in v.stage_e_log
+                if "Rameau" in r["answer_entity"]), None)
+    assert rec is not None
+    assert rec["decision"] == "reject"
+    assert rec["entity_found_in_some_cell"] is False
+    assert rec["anchor_found_in_same_cell_as_entity"] is False
+    assert rec["reason"] == "answer_entity_absent_from_cells"
+
+
+def test_stage_e_passes_when_proper_noun_is_in_cells():
+    """A real grounded answer always has its proper noun in the cells
+    AND that cell mentions the question's subject."""
+    cells = [
+        "Alfred Nobel was a Swedish chemist and engineer who invented "
+        "dynamite. He was born in Stockholm, Sweden in 1833."
+    ]
+    answer = "Alfred Nobel, the inventor of dynamite, was born in Sweden."
+    v = verify(
+        answer, cells,
+        question="In which country was the inventor of dynamite born?",
+        strict_nonsense=True,
+    )
+    assert v.grounded is True
+    assert v.unanchored_proper_nouns == []
+
+
+def test_stage_e_skips_question_tokens():
+    """Capitalised runs that appear in the question are not novel claims
+    by the answer. Stage E does not flag them. Stage D will still
+    reject query-evidence mismatch separately."""
+    cells = ["Some unrelated text about geology and rocks."]
+    answer = "Napoleon was exiled to Saint Helena."
+    v = verify(
+        answer, cells,
+        question="Where was Napoleon exiled? Saint Helena?",
+        strict_nonsense=True,
+    )
+    assert "colocat" not in v.reason.lower()
+
+
+def test_stage_e_skips_prompt_template_words():
+    """Template artefacts (Answer/Question/Context/Fact) at the start of
+    the generated answer must not be flagged as novel entities."""
+    cells = ["Ottawa is the capital of Canada in North America."]
+    answer = "Answer: Ottawa is the capital of Canada in North America."
+    v = verify(
+        answer, cells,
+        question="What is the capital of Canada?",
+        strict_nonsense=True,
+    )
+    assert v.grounded is True
+    assert v.unanchored_proper_nouns == []
+
+
+def test_stage_e_off_by_default():
+    """With strict_nonsense=False (legacy contract), Stage E does not
+    fire. This pins the backward-compat behaviour for hand-crafted
+    callers."""
+    cells = [
+        "The film The French Connection had music; the composer "
+        "delivered an original score for the picture in 1971.",
+        "Philip D'Antoni produced the 1971 film The French Connection.",
+    ]
+    answer = (
+        "The music for The French Connection was composed by "
+        "Jean-Philippe Rameau, the original composer."
+    )
+    v = verify(
+        answer, cells,
+        question=(
+            "Who composed the music for the film that won the Academy "
+            "Award for Best Picture in 1972?"
+        ),
+    )
+    assert v.grounded is True
+    assert v.unanchored_proper_nouns == []
+    assert v.stage_e_log == []
+
+
+def test_stage_e_short_capitalised_tokens_skipped():
+    """Length-2 capitalised tokens like "St" or "Mr" must not trip
+    Stage E even when absent from cells (the normalised entity must
+    have length >= 3)."""
+    cells = ["Helena is an island where English is the official language."]
+    answer = "St. Helena's official language is English."
+    v = verify(
+        answer, cells,
+        question="What language is spoken on St Helena?",
+        strict_nonsense=True,
+    )
+    assert v.grounded is True
+
+
+def test_stage_e_v2_rejects_uncolocated_entity():
+    """The exp24-Q2 corpus pattern: cell A contains the answer entity
+    but in an unrelated context (France-music history cell that lists
+    Jean-Philippe Rameau among historical composers); cell B is about
+    The French Connection but never mentions Rameau. v2 must reject
+    because no single cell has both the entity and a question anchor."""
+    cells = [
+        "Philip D'Antoni was the producer of the 1971 film The French "
+        "Connection.",
+        "France has a long musical history. The music of Jean-Philippe "
+        "Rameau reached prestige in the 18th century; he is one of the "
+        "most renowned French composers.",
+    ]
+    answer = (
+        "The music for The French Connection was composed by "
+        "Jean-Philippe Rameau."
+    )
+    v = verify(
+        answer, cells,
+        question="Who composed the music for The French Connection?",
+        strict_nonsense=True,
+    )
+    assert v.grounded is False
+    assert any("Rameau" in e for e in v.unanchored_proper_nouns)
+    rec = next((r for r in v.stage_e_log
+                if "Rameau" in r["answer_entity"]), None)
+    assert rec is not None
+    assert rec["decision"] == "reject"
+    assert rec["entity_found_in_some_cell"] is True
+    assert rec["anchor_found_in_same_cell_as_entity"] is False
+    assert rec["reason"] == "answer_entity_not_colocated_with_question_anchor"
+    # Question anchor must be the multi-token tier, not random tokens.
+    assert "french connection" in rec["question_anchors"]
+
+
+def test_stage_e_v2_normalises_hyphenated_entity():
+    """Hyphenated and unhyphenated spellings of a multi-word name
+    normalise to the same form so the entity matches the cell."""
+    cells = [
+        "Jean Philippe Rameau, the French Baroque composer, also "
+        "composed the original score for the 1971 film The French "
+        "Connection."  # alternate spelling without the hyphen
+    ]
+    answer = "Jean-Philippe Rameau composed the music for The French Connection."
+    v = verify(
+        answer, cells,
+        question="Who composed the music for The French Connection?",
+        strict_nonsense=True,
+    )
+    assert v.grounded is True
+    assert v.unanchored_proper_nouns == []
+
+
+def test_stage_e_v2_honorific_stripping():
+    """Honorifics on the answer entity ("King Charles III") must
+    normalise away so the cell ("Charles III") matches. Honorifics
+    on the question anchor ("Queen Elizabeth II") similarly normalise."""
+    cells = [
+        "Charles III ascended the British throne in 2022 following the "
+        "death of Queen Elizabeth II."
+    ]
+    answer = "King Charles III succeeded Queen Elizabeth II."
+    v = verify(
+        answer, cells,
+        question="Who succeeded Queen Elizabeth II?",
+        strict_nonsense=True,
+    )
+    assert v.grounded is True
+    assert v.unanchored_proper_nouns == []
+
+
+def test_stage_e_v2_prefers_specific_multi_token_anchor():
+    """A multi-token question anchor ("Queen Elizabeth II") must take
+    priority over a broad single-token tail ("British"). A cell that
+    contains the answer entity and only the broad word must not
+    satisfy co-occurrence."""
+    cells = [
+        # Answer entity is here but anchored only on "British".
+        "Cromwell is a British surname of Welsh origin.",
+        # Question anchor is here but the answer entity is not.
+        "Queen Elizabeth II reigned for 70 years.",
+    ]
+    answer = "Cromwell succeeded Queen Elizabeth II."
+    v = verify(
+        answer, cells,
+        question="Who succeeded Queen Elizabeth II as British monarch?",
+        strict_nonsense=True,
+    )
+    assert v.grounded is False
+    assert any("Cromwell" in e for e in v.unanchored_proper_nouns)
+    rec = next((r for r in v.stage_e_log
+                if "Cromwell" in r["answer_entity"]), None)
+    assert rec is not None
+    # Only the multi-token anchor must be present (honorific stripped
+    # so "Queen Elizabeth II" -> "elizabeth ii"); the broad single-
+    # token "British" must not be in the anchor list.
+    assert "elizabeth ii" in rec["question_anchors"]
+    assert "british" not in rec["question_anchors"]
+
+
+def test_stage_e_v2_fallback_logs_when_question_has_no_proper_noun():
+    """A question with no capitalised content runs falls back to
+    content-token anchors. The audit log records fallback_used=True so
+    callers can downweight or surface this in evaluation."""
+    cells = [
+        "Hydrogen is used in weather balloons because it is lighter "
+        "than air and provides good lift."
+    ]
+    answer = "Hydrogen is the gas used in weather balloons."
+    v = verify(
+        answer, cells,
+        question="What gas is used in these balloons?",
+        strict_nonsense=True,
+    )
+    assert v.grounded is True
+    rec = next((r for r in v.stage_e_log
+                if "Hydrogen" in r["answer_entity"]), None)
+    assert rec is not None
+    assert rec["fallback_used"] is True
+    assert rec["decision"] == "accept"
+
+
+def test_stage_e_v2_audit_log_records_every_novel_entity():
+    """Every novel answer entity gets its own audit log record
+    regardless of decision, so post-hoc analysis can count
+    accept/reject per entity."""
+    cells = ["Ottawa is the capital of Canada in North America."]
+    answer = "Answer: Ottawa is the capital of Canada in North America."
+    v = verify(
+        answer, cells,
+        question="What is the capital of Canada?",
+        strict_nonsense=True,
+    )
+    # "Ottawa" and "North America" are both novel; both should be in
+    # the audit log with decision=accept.
+    entities = {r["answer_entity"] for r in v.stage_e_log}
+    assert "Ottawa" in entities
+    assert "North America" in entities
+    assert all(r["decision"] == "accept" for r in v.stage_e_log)

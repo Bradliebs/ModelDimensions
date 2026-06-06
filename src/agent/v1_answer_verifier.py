@@ -28,7 +28,7 @@ Two-stage check (always on):
        answer-vs-cells scope: a one-token factual flip is the failure
        mode this layer exists to catch.
 
-Two extra stages (opt-in via ``strict_nonsense=True``; the production
+Three extra stages (opt-in via ``strict_nonsense=True``; the production
 pipeline turns them on):
 
   STAGE C — query coherence (catches token-salad / repetitive queries
@@ -46,9 +46,49 @@ pipeline turns them on):
     because the answer paraphrases the random cells but the cells were
     never about the question.
 
-Stages run A -> B -> C -> D; any failure short-circuits to grounded=False.
-Stages C and D are off by default for backward compatibility with callers
-that drive the verifier on hand-crafted test inputs.
+  STAGE E — answer-entity / question-anchor co-occurrence (catches
+  Stage-A false positives where the answer's substantive proper noun
+  is confabulated but happens to appear *somewhere* in the cited
+  cells, just not in connection with the question's subject):
+    1. Extract the question's proper-noun runs (consecutive
+       capitalised tokens, hyphenated names kept whole). Rank by
+       specificity: multi-token runs (e.g. "French Connection",
+       "Queen Elizabeth II") first; single-token runs (e.g. "Canada")
+       second. Use the most-specific tier available — if any
+       multi-token anchors exist, single-token anchors are not
+       consulted. If the question has no proper-noun runs at all
+       (e.g. "What gas is used in these balloons?"), fall back to the
+       question's content tokens (stopwords removed) and tag the
+       check as having used a weaker fallback.
+    2. Extract the answer's proper-noun runs the same way and drop
+       any that are subspans of any question run (same-name questions
+       don't have to be re-grounded by the answer) or that
+       lower-case-match the prompt-template whitelist (Fact, Answer,
+       Question, ...). Each remaining run is a NOVEL ANSWER ENTITY.
+    3. Normalise both sides: lowercase, strip honorifics from the
+       front (King, Queen, Saint/St, Mount/Mt, Dr, Sir, ...), replace
+       hyphens and apostrophes with spaces, collapse whitespace. So
+       "King Charles III" matches "Charles III" in the cell, and
+       "Jean-Philippe Rameau" matches "Jean-Philippe Rameau" or
+       "Jean Philippe Rameau" but is preserved as one entity, not
+       three independently-checkable tokens.
+    4. For each novel answer entity, the requirement is: at least one
+       cited cell whose normalised text contains BOTH the entity AND
+       at least one normalised question anchor (substring match).
+       Same-cell co-occurrence is the load-bearing constraint;
+       any-cell anchoring lets through confabulations whose name
+       happens to appear in an unrelated bank cell, which is the
+       exp24-Q2 failure: "Jean-Philippe Rameau" exists in a generic
+       France-music cell that never mentions "French Connection".
+    5. A single novel answer entity that fails the co-occurrence
+       check is a hard reject. The reject reason names the entity
+       and the anchors it was checked against; the per-entity audit
+       trail is exposed via ``stage_e_log`` on the decision.
+
+Stages run A -> B -> C -> D -> E; any failure short-circuits to
+grounded=False. Stages C, D, and E are off by default for backward
+compatibility with callers that drive the verifier on hand-crafted
+test inputs.
 
 Edge cases:
   - If the answer has zero content tokens after filtering, coverage is
@@ -205,6 +245,221 @@ def _check_query_evidence_overlap(
     return True, ""
 
 
+# Stage E whitelist: prompt-template artefacts and very common
+# capitalized words that appear in answer text without carrying factual
+# claim weight. Lowercased.
+_STAGE_E_WHITELIST: frozenset[str] = frozenset({
+    "fact", "facts", "answer", "question", "context",
+    "yes", "no",
+})
+
+# Honorifics, titles, and geographic prefixes stripped from the START of
+# an entity when normalising. The underlying entity is what we want to
+# match against the cell, not the surface marker. Lowercased.
+_STAGE_E_HONORIFICS: frozenset[str] = frozenset({
+    "king", "queen", "prince", "princess", "lord", "lady",
+    "sir", "dame", "dr", "mr", "mrs", "ms", "ms.",
+    "saint", "st", "st.",
+    "mount", "mt", "mt.", "lake", "river", "cape",
+    "the", "a", "an",
+})
+
+# Maximal run of consecutive capitalised tokens. A capitalised token is
+# a word starting with [A-Z]; internal hyphens and apostrophes keep the
+# token together (so "Jean-Philippe" and "D'Antoni" are single tokens).
+# Roman-numeral-like all-caps tokens (II, III, IV) match because [A-Z]
+# followed by [A-Za-z]* permits zero or more letters of any case.
+_STAGE_E_RUN_RE = re.compile(
+    r"\b[A-Z][A-Za-z]*(?:[-'][A-Za-z]+)*"
+    r"(?:\s+[A-Z][A-Za-z]*(?:[-'][A-Za-z]+)*)*"
+    r"\b"
+)
+
+# Internal punctuation we replace with whitespace before substring match,
+# so "Jean-Philippe Rameau" and "Jean Philippe Rameau" both normalise to
+# "jean philippe rameau".
+_STAGE_E_PUNCT_RE = re.compile(r"[^\w\s]")
+_STAGE_E_WS_RE = re.compile(r"\s+")
+# English possessive 's (straight or curly apostrophe) stripped before
+# normalisation so "Helena's" -> "Helena" and matches "Helena" in cells.
+_STAGE_E_POSSESSIVE_RE = re.compile(r"['\u2019]s\b", re.IGNORECASE)
+
+
+def _normalise_for_anchor(s: str) -> str:
+    """Lowercase ``s``, drop the English possessive ``'s``, replace
+    internal punctuation with whitespace, and collapse runs of
+    whitespace. Used both for cell text and for entity spans before
+    substring matching."""
+    s = _STAGE_E_POSSESSIVE_RE.sub("", s)
+    return _STAGE_E_WS_RE.sub(" ", _STAGE_E_PUNCT_RE.sub(" ", s.lower())).strip()
+
+
+def _normalise_entity(span: str) -> str:
+    """Normalise an entity span and strip leading honorifics/titles. So
+    "King Charles III" -> "charles iii" and "Mt. Logan" -> "logan"."""
+    parts = _normalise_for_anchor(span).split()
+    while parts and parts[0] in _STAGE_E_HONORIFICS:
+        parts = parts[1:]
+    return " ".join(parts)
+
+
+def _extract_capitalised_runs(text: str) -> list[str]:
+    """Return original-case capitalised runs found in ``text``,
+    deduplicated by normalised form, insertion order preserved."""
+    seen_norm: set[str] = set()
+    out: list[str] = []
+    for m in _STAGE_E_RUN_RE.finditer(text):
+        span = m.group(0)
+        norm = _normalise_entity(span)
+        # Skip runs that normalise to something too short to be a useful
+        # anchor (a single 1- or 2-character token; e.g. a stray "Mr"
+        # or "St" with no following name). Stage E requires at least
+        # length-3 to avoid noise; the normalised whole-run length
+        # check is the cleanest place to enforce it.
+        if len(norm) < 3:
+            continue
+        # Drop runs that are entirely template/whitelist words (e.g.
+        # an answer that starts with the literal token "Answer:").
+        if all(p in _STAGE_E_WHITELIST or p in _STOPWORDS or p in _MONTHS
+               for p in norm.split()):
+            continue
+        if norm in seen_norm:
+            continue
+        seen_norm.add(norm)
+        out.append(span)
+    return out
+
+
+def _classify_question_anchors(
+    question: str,
+) -> tuple[list[str], bool]:
+    """Return ``(anchors, used_fallback)``. ``anchors`` is the list of
+    NORMALISED question anchor strings to require co-occurrence against.
+    Specificity tiering:
+
+      tier 1: multi-token proper-noun runs (e.g. "Queen Elizabeth II",
+              "French Connection") — most specific
+      tier 2: single-token proper-noun runs (e.g. "Canada", "Helena")
+      tier 3: question content tokens (stopwords removed) — fallback
+              when the question has no proper-noun anchors at all
+
+    The most-specific NON-EMPTY tier is used. ``used_fallback`` is True
+    only when tier 3 is the source — that signals to callers that the
+    Stage E check for this query is weaker than name-anchored matching."""
+    runs = _extract_capitalised_runs(question)
+    multi: list[str] = []
+    single: list[str] = []
+    for r in runs:
+        norm = _normalise_entity(r)
+        if not norm:
+            continue
+        if " " in norm:
+            multi.append(norm)
+        else:
+            single.append(norm)
+    if multi:
+        # Deduplicate while preserving order.
+        return list(dict.fromkeys(multi)), False
+    if single:
+        return list(dict.fromkeys(single)), False
+    # Fallback: question has no proper-noun anchors. Use content tokens.
+    content = [t for t in _content_tokens(question) if len(t) >= 3]
+    return list(dict.fromkeys(content)), True
+
+
+def _check_answer_anchor(
+    answer_clean: str,
+    question: str,
+    cell_texts_normalised: list[str],
+) -> tuple[bool, list[str], list[dict]]:
+    """Stage E v2 — every novel answer entity must co-occur in some
+    cited cell with at least one question anchor.
+
+    Returns ``(ok, missing_entities, audit_log)`` where ``missing_entities``
+    is the list of original-case answer entity spans that failed
+    co-occurrence, and ``audit_log`` is a list of per-entity records
+    suitable for serialisation alongside the verification decision."""
+    answer_runs = _extract_capitalised_runs(answer_clean)
+    if not answer_runs:
+        return True, [], []
+
+    # Question anchors — the runs we require co-occurrence against.
+    q_anchors, used_fallback = _classify_question_anchors(question)
+    # The question-as-text — used to drop answer entities that are
+    # subspans of question runs (so "Napoleon" in the answer is not
+    # treated as novel when the question already says "Napoleon").
+    q_norm_full = _normalise_for_anchor(question)
+
+    audit: list[dict] = []
+    missing: list[str] = []
+
+    for span in answer_runs:
+        norm = _normalise_entity(span)
+        if not norm:
+            continue
+        # Subspan check: an answer run that is wholly contained in the
+        # question is not a novel claim.
+        if norm in q_norm_full:
+            continue
+
+        if not q_anchors:
+            # No anchors at all (question had no content tokens either).
+            # Without anchors we cannot enforce co-occurrence; pass.
+            audit.append({
+                "stage": "E",
+                "decision": "skip",
+                "answer_entity": span,
+                "question_anchors": [],
+                "entity_found_in_some_cell": None,
+                "anchor_found_in_same_cell_as_entity": None,
+                "fallback_used": used_fallback,
+                "reason": "no_question_anchors_available",
+            })
+            continue
+
+        entity_found_anywhere = False
+        co_located = False
+        for cell_norm in cell_texts_normalised:
+            if not cell_norm:
+                continue
+            if norm not in cell_norm:
+                continue
+            entity_found_anywhere = True
+            if any(a in cell_norm for a in q_anchors):
+                co_located = True
+                break
+
+        if co_located:
+            audit.append({
+                "stage": "E",
+                "decision": "accept",
+                "answer_entity": span,
+                "question_anchors": list(q_anchors),
+                "entity_found_in_some_cell": True,
+                "anchor_found_in_same_cell_as_entity": True,
+                "fallback_used": used_fallback,
+                "reason": "answer_entity_colocated_with_question_anchor",
+            })
+        else:
+            audit.append({
+                "stage": "E",
+                "decision": "reject",
+                "answer_entity": span,
+                "question_anchors": list(q_anchors),
+                "entity_found_in_some_cell": entity_found_anywhere,
+                "anchor_found_in_same_cell_as_entity": False,
+                "fallback_used": used_fallback,
+                "reason": (
+                    "answer_entity_not_colocated_with_question_anchor"
+                    if entity_found_anywhere
+                    else "answer_entity_absent_from_cells"
+                ),
+            })
+            missing.append(span)
+
+    return (len(missing) == 0), missing, audit
+
+
 @dataclass
 class VerificationDecision:
     """Verdict from the V1 answer verifier."""
@@ -219,6 +474,16 @@ class VerificationDecision:
     # Stage B: numbers/dates in the answer that did not appear in the cells.
     # Empty list when stage B passed (or had nothing to check).
     uncited_numerics: list[str] = field(default_factory=list)
+    # Stage E: original-case answer entity spans (full proper-noun
+    # runs, e.g. "Jean-Philippe Rameau") that failed the v2
+    # co-occurrence check. Empty when Stage E passed, was not run, or
+    # had nothing to check.
+    unanchored_proper_nouns: list[str] = field(default_factory=list)
+    # Stage E audit trail: one record per novel answer entity that was
+    # evaluated, with decision, anchors checked, and whether the entity
+    # was found anywhere in the cells and whether it co-located with a
+    # question anchor. Empty when Stage E was not run.
+    stage_e_log: list[dict] = field(default_factory=list)
 
     def as_dict(self) -> dict:
         return {
@@ -230,6 +495,8 @@ class VerificationDecision:
             "reason": self.reason,
             "uncovered_tokens": self.uncovered_tokens,
             "uncited_numerics": self.uncited_numerics,
+            "unanchored_proper_nouns": self.unanchored_proper_nouns,
+            "stage_e_log": self.stage_e_log,
         }
 
 
@@ -379,16 +646,44 @@ def verify(answer: str, cell_texts: Sequence[str], question: str = "",
     uncited = [n for n in novel_numerics if n.lower() not in cell_blob_lower]
     numerics_ok = len(uncited) == 0
 
-    grounded = coverage_ok and numerics_ok
+    # Stage E v2 (opt-in via strict_nonsense): every novel answer
+    # entity (proper-noun run not in the question) must co-occur in
+    # some cited cell with at least one question anchor. Same-cell
+    # co-occurrence prevents the exp24-Q2 failure where a confabulated
+    # name happens to appear in an unrelated cell.
+    unanchored: list[str] = []
+    stage_e_audit: list[dict] = []
+    anchor_ok = True
+    if strict_nonsense:
+        cell_texts_normalised = [_normalise_for_anchor(t) for t in cell_texts]
+        anchor_ok, unanchored, stage_e_audit = _check_answer_anchor(
+            answer_clean=answer_clean,
+            question=question,
+            cell_texts_normalised=cell_texts_normalised,
+        )
+
+    grounded = coverage_ok and numerics_ok and anchor_ok
     if grounded:
         reason = "coverage above threshold; all numerics cited"
+    elif not anchor_ok and coverage_ok and numerics_ok:
+        reason = (
+            f"answer entity not colocated with question anchor: "
+            f"{unanchored[:3]}"
+        )
     elif not coverage_ok and not numerics_ok:
         reason = (f"coverage below threshold AND uncited numerics "
                   f"({uncited[:3]})")
     elif not coverage_ok:
         reason = "coverage below threshold (answer drifted from cells)"
-    else:
+    elif not numerics_ok:
         reason = f"uncited numeric/date in answer: {uncited[:3]}"
+    else:
+        # coverage and numerics pass but anchor failed alongside one of them
+        # (defensive — currently unreachable given the branches above).
+        reason = (
+            f"answer entity not colocated with question anchor: "
+            f"{unanchored[:3]}"
+        )
 
     return VerificationDecision(
         grounded=grounded,
@@ -399,6 +694,8 @@ def verify(answer: str, cell_texts: Sequence[str], question: str = "",
         reason=reason,
         uncovered_tokens=uncovered[:25],
         uncited_numerics=uncited[:10],
+        unanchored_proper_nouns=unanchored[:10],
+        stage_e_log=stage_e_audit,
     )
 
 

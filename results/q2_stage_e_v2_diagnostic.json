@@ -1,0 +1,197 @@
+{
+  "question": "Who composed the music for The French Connection?",
+  "answer": "I drafted an answer but could not ground it in memory.",
+  "silence": true,
+  "silence_reason": "verify: answer entity not colocated with question anchor: ['Jean-Philippe Rameau', 'Decca', 'Carmen']",
+  "gate": {
+    "fire": true,
+    "top1_activation": 0.33969348669052124,
+    "top2_activation": 0.32559826970100403,
+    "margin": 0.014095216989517212,
+    "threshold": 0.0,
+    "reason": "margin above threshold",
+    "signal_source": "encoder"
+  },
+  "retrieval": {
+    "top_k_cell_ids": [
+      5611907,
+      2947343,
+      2296874,
+      1932999,
+      2296873,
+      127072,
+      266496,
+      246204,
+      3895380,
+      5409881
+    ],
+    "activations": [
+      0.33969348669052124,
+      0.32559826970100403,
+      0.3251951336860657,
+      0.32087910175323486,
+      0.3091121315956116,
+      0.3006933033466339,
+      0.2997082769870758,
+      0.29860401153564453,
+      0.2962808310985565,
+      0.2950124740600586
+    ],
+    "thetas": [
+      0.30000001192092896,
+      0.30000001192092896,
+      0.30000001192092896,
+      0.30000001192092896,
+      0.30000001192092896,
+      0.30000001192092896,
+      0.30000001192092896,
+      0.30000001192092896,
+      0.30000001192092896,
+      0.30000001192092896
+    ]
+  },
+  "verification": {
+    "grounded": false,
+    "coverage": 0.9428571428571428,
+    "covered": 33,
+    "total": 35,
+    "threshold": 0.5,
+    "reason": "answer entity not colocated with question anchor: ['Jean-Philippe Rameau', 'Decca', 'Carmen']",
+    "uncovered_tokens": [
+      "facts",
+      "adam'"
+    ],
+    "uncited_numerics": [],
+    "unanchored_proper_nouns": [
+      "Jean-Philippe Rameau",
+      "Decca",
+      "Carmen",
+      "Bizet's",
+      "Paris Conservatoire Orchestra",
+      "Adam",
+      "Jean",
+      "Peur"
+    ],
+    "stage_e_log": [
+      {
+        "stage": "E",
+        "decision": "reject",
+        "answer_entity": "Jean-Philippe Rameau",
+        "question_anchors": [
+          "french connection"
+        ],
+        "entity_found_in_some_cell": true,
+        "anchor_found_in_same_cell_as_entity": false,
+        "fallback_used": false,
+        "reason": "answer_entity_not_colocated_with_question_anchor"
+      },
+      {
+        "stage": "E",
+        "decision": "reject",
+        "answer_entity": "Decca",
+        "question_anchors": [
+          "french connection"
+        ],
+        "entity_found_in_some_cell": true,
+        "anchor_found_in_same_cell_as_entity": false,
+        "fallback_used": false,
+        "reason": "answer_entity_not_colocated_with_question_anchor"
+      },
+      {
+        "stage": "E",
+        "decision": "reject",
+        "answer_entity": "Carmen",
+        "question_anchors": [
+          "french connection"
+        ],
+        "entity_found_in_some_cell": true,
+        "anchor_found_in_same_cell_as_entity": false,
+        "fallback_used": false,
+        "reason": "answer_entity_not_colocated_with_question_anchor"
+      },
+      {
+        "stage": "E",
+        "decision": "reject",
+        "answer_entity": "Bizet's",
+        "question_anchors": [
+          "french connection"
+        ],
+        "entity_found_in_some_cell": true,
+        "anchor_found_in_same_cell_as_entity": false,
+        "fallback_used": false,
+        "reason": "answer_entity_not_colocated_with_question_anchor"
+      },
+      {
+        "stage": "E",
+        "decision": "reject",
+        "answer_entity": "Paris Conservatoire Orchestra",
+        "question_anchors": [
+          "french connection"
+        ],
+        "entity_found_in_some_cell": true,
+        "anchor_found_in_same_cell_as_entity": false,
+        "fallback_used": false,
+        "reason": "answer_entity_not_colocated_with_question_anchor"
+      },
+      {
+        "stage": "E",
+        "decision": "reject",
+        "answer_entity": "Adam",
+        "question_anchors": [
+          "french connection"
+        ],
+        "entity_found_in_some_cell": true,
+        "anchor_found_in_same_cell_as_entity": false,
+        "fallback_used": false,
+        "reason": "answer_entity_not_colocated_with_question_anchor"
+      },
+      {
+        "stage": "E",
+        "decision": "reject",
+        "answer_entity": "Jean",
+        "question_anchors": [
+          "french connection"
+        ],
+        "entity_found_in_some_cell": true,
+        "anchor_found_in_same_cell_as_entity": false,
+        "fallback_used": false,
+        "reason": "answer_entity_not_colocated_with_question_anchor"
+      },
+      {
+        "stage": "E",
+        "decision": "reject",
+        "answer_entity": "Peur",
+        "question_anchors": [
+          "french connection"
+        ],
+        "entity_found_in_some_cell": true,
+        "anchor_found_in_same_cell_as_entity": false,
+        "fallback_used": false,
+        "reason": "answer_entity_not_colocated_with_question_anchor"
+      }
+    ]
+  },
+  "closest_topics": [
+    {
+      "topic": "Philip D'Antoni (February 19, 1929 \u2013 April 15, 2018) was an \u2026",
+      "activation": 0.33969348669052124
+    },
+    {
+      "topic": "France has a long and varied musical history. It experienced\u2026",
+      "activation": 0.32559826970100403
+    },
+    {
+      "topic": "The French Connection",
+      "activation": 0.3251951336860657
+    }
+  ],
+  "timings": {
+    "encode": 3.3888309001922607,
+    "retrieve": 0.3205549716949463,
+    "closest_topics": 0.0010004043579101562,
+    "fetch_sources": 0.0,
+    "build_prompt": 0.0029997825622558594,
+    "generate": 9.963257074356079,
+    "verify": 0.0009999275207519531
+  }
+}

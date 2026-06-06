@@ -412,6 +412,11 @@ class AnswerPipeline:
                     f"< {verdict.threshold:.2f}; "
                     f"uncovered={verdict.uncovered_tokens[:5]}"
                 )
+            elif verdict.unanchored_proper_nouns:
+                reason = (
+                    f"verify: answer entity not colocated with question "
+                    f"anchor: {verdict.unanchored_proper_nouns[:3]}"
+                )
             else:
                 reason = (
                     f"verify: uncited numerics in answer "
