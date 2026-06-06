@@ -1,0 +1,706 @@
+{
+  "produced_by": "experiments/exp24_multihop_failure_decomposition.py",
+  "bank_path": "H:\\MiniLM\\cc_service\\bank.db",
+  "top_k": 10,
+  "stretch_k": 50,
+  "operating_threshold": 0.015,
+  "aggressive_threshold": 0.01,
+  "fault_counts": {
+    "OK": 4,
+    "RETRIEVAL": 1,
+    "GATE": 3
+  },
+  "records": [
+    {
+      "query": "What language is spoken on the island where Napoleon was exiled after Waterloo?",
+      "sub_question": "What language is spoken on St. Helena?",
+      "decompose_used_passages": 3,
+      "expected_keywords": [
+        "English"
+      ],
+      "hop_explanation": "(Napoleon, 1815 exile after Waterloo) -> Saint Helena;  (Saint Helena, official language) -> English.",
+      "top_k_used": 10,
+      "keyword_rank_in_top_k": 2,
+      "keyword_rank_in_top_50": 2,
+      "observed_margin": 0.025630831718444824,
+      "gate_would_fire_at_T015": true,
+      "gate_would_fire_at_T010": true,
+      "answer": "The language spoken on St. Helena is English, as indicated by the fact [4810421], which states that the English Department at Helena High offers instruction in English literature and composition, as well as elective studies.",
+      "kw_hit_in_answer": true,
+      "verify_grounded": true,
+      "verify_reason": "coverage above threshold; all numerics cited",
+      "silence_at_margin_zero": false,
+      "silence_reason_at_margin_zero": "",
+      "final_outcome_at_T015": "OK",
+      "top_k_cells": [
+        {
+          "cell_id": 636150,
+          "activation": 0.44883355498313904,
+          "has_keyword": false,
+          "text_snippet": "Romance languages Languages of Italy Abruzzo Apulia Basilicata Calabria Campania Lazio Marche Molise"
+        },
+        {
+          "cell_id": 873298,
+          "activation": 0.4232027232646942,
+          "has_keyword": true,
+          "text_snippet": "Language The main languages spoken at home on Christmas Island, according to respondents, are English (28%), Mandarin (17%), Malay (17%), with smaller numbers of speakers of Cantonese (4%) and Hokkien (2%). 27% did not specify a language. I..."
+        },
+        {
+          "cell_id": 68867,
+          "activation": 0.41988837718963623,
+          "has_keyword": false,
+          "text_snippet": "People in this region speak the Italian, Friulian, Slovene and German languages."
+        },
+        {
+          "cell_id": 1000871,
+          "activation": 0.4179494380950928,
+          "has_keyword": true,
+          "text_snippet": "Curriculum Four foreign languages are taught at Helena High: French, German, Latin, and Spanish. The English Department, with 22 faculty, offers instruction in English literature and composition, as well as elective studies. Students are en..."
+        },
+        {
+          "cell_id": 4810421,
+          "activation": 0.4030761122703552,
+          "has_keyword": false,
+          "text_snippet": "The language is currently spoken only in San Luis de la Paz (Guanajuato), in the settlements of Berl\u00edn, Buenavista (El Cuernito), Cerro Blanco, Colonia Benito Ju\u00e1rez [Plan Benito Ju\u00e1rez], Ejido Santa Ana y Lobos (Fracci\u00f3n de Lourdes), El De..."
+        },
+        {
+          "cell_id": 1468000,
+          "activation": 0.4024066925048828,
+          "has_keyword": false,
+          "text_snippet": "Vanua Lava is home to four indigenous languages: Vur\u00ebs, with about 2000 speakers; Vera'a, with 500; and two dying languages, Mwesen, with 10 speakers, and Lemerig, with only 2 living speakers. Other languages on the island, spoken by migran..."
+        },
+        {
+          "cell_id": 48023,
+          "activation": 0.4013303816318512,
+          "has_keyword": false,
+          "text_snippet": "The country\u2019s official language is Portuguese. Other languages spoken are Forro, a creole spoken by 80% of S. Tom\u00e9 Island`s people; Angolar, spoken mainly on the southeast of S. Tom\u00e9 Island; Lung`i\u00e9, spoken in Pr\u00edncipe Island; and Creole fr..."
+        },
+        {
+          "cell_id": 4734777,
+          "activation": 0.3991476893424988,
+          "has_keyword": false,
+          "text_snippet": "Languages Most of the population () speaks Rhaeto-Romance (52.0%) and the rest speak German (48.0%)."
+        },
+        {
+          "cell_id": 246373,
+          "activation": 0.3989875912666321,
+          "has_keyword": false,
+          "text_snippet": "Anything related to Aragon, an autonomous community of Spain Aragonese language, a language spoken in that community"
+        },
+        {
+          "cell_id": 4735660,
+          "activation": 0.39821648597717285,
+          "has_keyword": false,
+          "text_snippet": "Languages Most of the population () speaks Rhaeto-Romance (50.1%), with German being second most common (38.8%) and Portuguese being third ( 4.9%). The official language of the municipality is the Surmiran dialect of the Romansh language."
+        }
+      ],
+      "fault_category": "OK",
+      "wall_seconds": 13.312965631484985
+    },
+    {
+      "query": "Who composed the music for the film that won the Academy Award for Best Picture in 1972?",
+      "sub_question": "Who composed the music for The French Connection?",
+      "decompose_used_passages": 3,
+      "expected_keywords": [
+        "Nino Rota"
+      ],
+      "hop_explanation": "(Best Picture, 1972) -> The Godfather;  (The Godfather, composer) -> Nino Rota.",
+      "top_k_used": 10,
+      "keyword_rank_in_top_k": null,
+      "keyword_rank_in_top_50": null,
+      "observed_margin": 0.014095216989517212,
+      "gate_would_fire_at_T015": false,
+      "gate_would_fire_at_T010": true,
+      "answer": "The music for The French Connection was composed by Jean-Philippe Rameau. (Facts: [2296874] In the 1950s he set down opera and orchestral music for Decca, first in mono and later a few in stereo. His recordings included Carmen, and Bizet's complete music (in the context of the play) for L'Arl\u00e9sienne. With the Paris Conservatoire Orchestra, his discography included Adam' age 'Jean de la Peur'.)",
+      "kw_hit_in_answer": false,
+      "verify_grounded": true,
+      "verify_reason": "coverage above threshold; all numerics cited",
+      "silence_at_margin_zero": false,
+      "silence_reason_at_margin_zero": "",
+      "final_outcome_at_T015": "silence_gate",
+      "top_k_cells": [
+        {
+          "cell_id": 5611907,
+          "activation": 0.33969348669052124,
+          "has_keyword": false,
+          "text_snippet": "Philip D'Antoni (February 19, 1929 \u2013 April 15, 2018) was an American film and television producer. He was best known for producing the Academy Award-winning 1971 film The French Connection."
+        },
+        {
+          "cell_id": 2947343,
+          "activation": 0.32559826970100403,
+          "has_keyword": false,
+          "text_snippet": "France has a long and varied musical history. It experienced a golden age in the 17th century thanks to Louis XIV, who employed many talented musicians and composers in the royal court. The most renowned composers of this period include Mar..."
+        },
+        {
+          "cell_id": 2296874,
+          "activation": 0.3251951336860657,
+          "has_keyword": false,
+          "text_snippet": "In music French Connection (album), a 2009 album by Kate Ryan French Connection, a 2009 mixtape by Frenchie French Connection Part 2, a 2010 mixtape by Frenchie"
+        },
+        {
+          "cell_id": 1932999,
+          "activation": 0.32087910175323486,
+          "has_keyword": false,
+          "text_snippet": "In the 1950s he set down opera and orchestral music for Decca, first in mono and later a few in stereo. His recordings included Carmen, and Bizet's complete music (in the context of the play) for L'Arl\u00e9sienne. With the Paris Conservatoire O..."
+        },
+        {
+          "cell_id": 2296873,
+          "activation": 0.3091121315956116,
+          "has_keyword": false,
+          "text_snippet": "In literature and film The French Connection (book), a 1969 non-fiction book about the drug trafficking scheme The French Connection (film), a 1971 film based on the book French Connection II, the sequel to the 1971 film The French Connecti..."
+        },
+        {
+          "cell_id": 127072,
+          "activation": 0.3006933033466339,
+          "has_keyword": false,
+          "text_snippet": "His family originally came from Spain. Edouard learned to play the piano and violin at the Lille Conservatory, but his parents did not want him to take music as a profession. So he left home when he was 16 and went to Paris. He took some le..."
+        },
+        {
+          "cell_id": 266496,
+          "activation": 0.2997082769870758,
+          "has_keyword": false,
+          "text_snippet": "19th-century French composers 1851 births 1931 deaths 20th-century French composers"
+        },
+        {
+          "cell_id": 246204,
+          "activation": 0.29860401153564453,
+          "has_keyword": false,
+          "text_snippet": "In 1815 he briefly went again to London. There he was asked to compose a symphony, an overture and a work for chorus and orchestra. This helped to make him more famous outside France."
+        },
+        {
+          "cell_id": 3895380,
+          "activation": 0.2962808310985565,
+          "has_keyword": false,
+          "text_snippet": "A contemporary transcription of the overture by Jean-Henri d'Anglebert remains a possible part of the harpsichord repertoire."
+        },
+        {
+          "cell_id": 5409881,
+          "activation": 0.2950124740600586,
+          "has_keyword": false,
+          "text_snippet": "A French Connection is a cocktail made with equal parts Cognac and Amaretto liqueur. The cocktail is named for the Gene Hackman film of the same name."
+        }
+      ],
+      "fault_category": "RETRIEVAL",
+      "wall_seconds": 15.668603658676147
+    },
+    {
+      "query": "In which country was the inventor of dynamite born?",
+      "sub_question": "In which country was Alfred Nobel, the inventor of dynamite, born?",
+      "decompose_used_passages": 3,
+      "expected_keywords": [
+        "Sweden",
+        "Swedish"
+      ],
+      "hop_explanation": "(dynamite, inventor) -> Alfred Nobel;  (Alfred Nobel, born) -> Stockholm, Sweden.",
+      "top_k_used": 10,
+      "keyword_rank_in_top_k": 1,
+      "keyword_rank_in_top_50": 1,
+      "observed_margin": 0.04238039255142212,
+      "gate_would_fire_at_T015": true,
+      "gate_would_fire_at_T010": true,
+      "answer": "Alfred Nobel, the inventor of dynamite, was born in Sweden. This information is supported by the FACTS [45374] and [782413], which state that Alfred Nobel was a Swedish scientist, engineer, and weapons manufacturer, and that he was born in Stockholm, United Kingdoms of Sweden and Norway on 21 October 1833.",
+      "kw_hit_in_answer": true,
+      "verify_grounded": true,
+      "verify_reason": "coverage above threshold; all numerics cited",
+      "silence_at_margin_zero": false,
+      "silence_reason_at_margin_zero": "",
+      "final_outcome_at_T015": "OK",
+      "top_k_cells": [
+        {
+          "cell_id": 45374,
+          "activation": 0.5169695615768433,
+          "has_keyword": true,
+          "text_snippet": "Alfred Nobel () (October 21, 1833 \u2013 December 10, 1896) was a Swedish scientist, engineer, and weapons manufacturer. He is well known for the invention of dynamite and for creating the Nobel Prize."
+        },
+        {
+          "cell_id": 782413,
+          "activation": 0.47458916902542114,
+          "has_keyword": true,
+          "text_snippet": "Alfred Bernhard Nobel ( , ; 21 October 1833 \u2013 10 December 1896) was a Swedish chemist, engineer, inventor, businessman, and philanthropist. He is known for creating dynamite as well as having bequeathed his fortune to establish the Nobel Pr..."
+        },
+        {
+          "cell_id": 782425,
+          "activation": 0.43899184465408325,
+          "has_keyword": true,
+          "text_snippet": "On 3 September 1864, a shed used for preparation of nitroglycerin exploded at the factory in Heleneborg, Stockholm, Sweden, killing five people, including Nobel's younger brother Emil. Fazed by the accident, Nobel founded the company Nitrog..."
+        },
+        {
+          "cell_id": 46305,
+          "activation": 0.42854630947113037,
+          "has_keyword": false,
+          "text_snippet": "Dynamite is an explosive invented by Alfred Nobel, the creator of the Nobel Prize. Its main explosive component is nitroglycerin. Nitroglycerin is very sensitive to movement. It explodes very easily when it is moved. For this reason, it is ..."
+        },
+        {
+          "cell_id": 782428,
+          "activation": 0.41257035732269287,
+          "has_keyword": false,
+          "text_snippet": "Nobel found that when nitroglycerin was incorporated in an absorbent inert substance like kieselguhr (diatomaceous earth) it became safer and more convenient to handle, and this mixture he patented in 1867 as \"dynamite\". Nobel demonstrated ..."
+        },
+        {
+          "cell_id": 4876481,
+          "activation": 0.3931121230125427,
+          "has_keyword": true,
+          "text_snippet": "History Nobel Industries Limited was founded in 1870 by Swedish chemist and industrialist Alfred Nobel for the production of the new explosive dynamite in the United Kingdom. The factory was overseen and run by George McRoberts. McRoberts a..."
+        },
+        {
+          "cell_id": 1131279,
+          "activation": 0.39244163036346436,
+          "has_keyword": false,
+          "text_snippet": "Beginning in the late 19th century, Judson Powder Works manufactured dynamite at the northwest foot of the hill. The company had been forced to move from San Francisco and then nearby Fleming Point in Berkeley because of continuing accident..."
+        },
+        {
+          "cell_id": 782417,
+          "activation": 0.38491368293762207,
+          "has_keyword": true,
+          "text_snippet": "Alfred Nobel was born in Stockholm, United Kingdoms of Sweden and Norway on 21 October 1833. He was the third son of Immanuel Nobel (1801\u20131872), an inventor and engineer, and Karolina Andriette Nobel (n\u00e9e Ahlsell 1805\u20131889). The couple marr..."
+        },
+        {
+          "cell_id": 3428567,
+          "activation": 0.3732897937297821,
+          "has_keyword": false,
+          "text_snippet": "History A special formulation of dynamite was patented in 1874 by J.W. Willard, superintendent of the California Powder Works in Santa Cruz, California. He called his invention \"Hercules powder\", a competitive jab at rival Giant Powder Comp..."
+        },
+        {
+          "cell_id": 41742,
+          "activation": 0.3590666651725769,
+          "has_keyword": false,
+          "text_snippet": "The Nobel Peace Prize is one of six awards in the memory of Alfred Nobel, the inventor of dynamite. Every year the organization gives out six awards for the people \"who best benefit mankind through their actions\" in one of the six subjects;..."
+        }
+      ],
+      "fault_category": "OK",
+      "wall_seconds": 13.270883321762085
+    },
+    {
+      "query": "What is the capital of the country where the 2010 Winter Olympics were held?",
+      "sub_question": "What is the capital of Canada?",
+      "decompose_used_passages": 3,
+      "expected_keywords": [
+        "Ottawa"
+      ],
+      "hop_explanation": "(2010 Winter Olympics, host city) -> Vancouver, Canada;  (Canada, capital) -> Ottawa.",
+      "top_k_used": 10,
+      "keyword_rank_in_top_k": 3,
+      "keyword_rank_in_top_50": 3,
+      "observed_margin": 0.00784328579902649,
+      "gate_would_fire_at_T015": false,
+      "gate_would_fire_at_T010": false,
+      "answer": "The capital of Canada is Ottawa, as it is located on the Ottawa River and was decided by Queen Victoria to be the national capital in 1867 because it was situated between Toronto and Montreal, the two cities that wanted to be the capital (Facts [5912] and [4011169]).",
+      "kw_hit_in_answer": true,
+      "verify_grounded": true,
+      "verify_reason": "coverage above threshold; all numerics cited",
+      "silence_at_margin_zero": false,
+      "silence_reason_at_margin_zero": "",
+      "final_outcome_at_T015": "silence_gate",
+      "top_k_cells": [
+        {
+          "cell_id": 13377,
+          "activation": 0.41599658131599426,
+          "has_keyword": false,
+          "text_snippet": "Victoria is the capital city of the province of British Columbia, Canada. It is named after Queen Victoria. Over 350,000 people live in the Victoria area. Many people work for the government or in tourism. It is warmer than other Canadian c..."
+        },
+        {
+          "cell_id": 255178,
+          "activation": 0.4081532955169678,
+          "has_keyword": false,
+          "text_snippet": "Cities in Canada Provincial and territorial capitals of Canada Settlements in the Northwest Territories"
+        },
+        {
+          "cell_id": 14446,
+          "activation": 0.4040747880935669,
+          "has_keyword": true,
+          "text_snippet": "Ontario is a province of Canada. It is in the eastern half of Canada, between Manitoba and Quebec. Ontario has the most people of any province, with 13,150,000 in 2009, and is home to the biggest city in Canada, Toronto, which is also the c..."
+        },
+        {
+          "cell_id": 402212,
+          "activation": 0.3944835960865021,
+          "has_keyword": false,
+          "text_snippet": "Cities in Canada Provincial and territorial capitals of Canada Settlements in Yukon"
+        },
+        {
+          "cell_id": 5912,
+          "activation": 0.3913697302341461,
+          "has_keyword": true,
+          "text_snippet": "History Toronto was created in 1793 by John Graves Simcoe as the capital of what was then called \"Upper Canada\". At the time it was called the \"Town of York\" after the Duke of York. The name was changed to Toronto in 1834. With the Canadian..."
+        },
+        {
+          "cell_id": 829380,
+          "activation": 0.38601505756378174,
+          "has_keyword": false,
+          "text_snippet": "British Columbia's capital is Victoria, located at the southeastern tip of Vancouver Island. Only a narrow strip of Vancouver Island, from Campbell River to Victoria, is significantly populated. Much of the western part of Vancouver Island ..."
+        },
+        {
+          "cell_id": 4011169,
+          "activation": 0.37922635674476624,
+          "has_keyword": true,
+          "text_snippet": "Ontario is the most populous province in Canada. Southern Ontario is one of the densest regions in the country. The north is vast and sparse compared to the south. The national capital Ottawa is located in Ontario bordering Quebec and provi..."
+        },
+        {
+          "cell_id": 43652,
+          "activation": 0.3723542094230652,
+          "has_keyword": false,
+          "text_snippet": "Quebec City (Ville de Qu\u00e9bec in French) is the capital of the Canadian province of Quebec. It is the second largest city in Quebec, behind Montreal. It is known for its winter fair, beautiful churches, and an old hotel called Ch\u00e2teau Fronte..."
+        },
+        {
+          "cell_id": 3712,
+          "activation": 0.3720175623893738,
+          "has_keyword": false,
+          "text_snippet": "The government of Quebec has its offices in the capital, Quebec City, which is one of the oldest cities in North America. The city with the most people in the province is Montreal, which is also the second-largest city in Canada."
+        },
+        {
+          "cell_id": 3353429,
+          "activation": 0.3712465763092041,
+          "has_keyword": false,
+          "text_snippet": "Along with being the current provincial capital of Manitoba, Winnipeg has served as the capital for two other Canadian territories: the North-West Territories, from 1870 to 1876, and the District of Keewatin, from 1876 to 1905."
+        }
+      ],
+      "fault_category": "GATE",
+      "wall_seconds": 10.073604822158813
+    },
+    {
+      "query": "Who succeeded the British monarch who reigned throughout the Second World War?",
+      "sub_question": "Who succeeded Queen Elizabeth II as British monarch?",
+      "decompose_used_passages": 3,
+      "expected_keywords": [
+        "Elizabeth II",
+        "Elizabeth"
+      ],
+      "hop_explanation": "(British monarch, WWII) -> George VI;  (George VI, succeeded by) -> Elizabeth II.",
+      "top_k_used": 10,
+      "keyword_rank_in_top_k": 1,
+      "keyword_rank_in_top_50": 1,
+      "observed_margin": 0.010896831750869751,
+      "gate_would_fire_at_T015": false,
+      "gate_would_fire_at_T010": true,
+      "answer": "King Charles III succeeded Queen Elizabeth II as the British monarch [2061619], [2895018].",
+      "kw_hit_in_answer": true,
+      "verify_grounded": true,
+      "verify_reason": "coverage above threshold; all numerics cited",
+      "silence_at_margin_zero": false,
+      "silence_reason_at_margin_zero": "",
+      "final_outcome_at_T015": "silence_gate",
+      "top_k_cells": [
+        {
+          "cell_id": 2103247,
+          "activation": 0.49777862429618835,
+          "has_keyword": true,
+          "text_snippet": "Government Monarch Head of State \u2013 Her Majesty Elizabeth II, Queen of the United Kingdom (1952\u20132022)"
+        },
+        {
+          "cell_id": 1132947,
+          "activation": 0.4868817925453186,
+          "has_keyword": true,
+          "text_snippet": "February 6 February \u2013 George VI dies and is succeeded by Elizabeth II as Queen of New Zealand"
+        },
+        {
+          "cell_id": 1755358,
+          "activation": 0.4684051275253296,
+          "has_keyword": true,
+          "text_snippet": "Elizabeth II died on 8 September 2022. She was the longest serving monarch and was succeeded by her son, Charles III. The coronation of Charles III and Camilla took place on 6 May 2023."
+        },
+        {
+          "cell_id": 8242,
+          "activation": 0.463007390499115,
+          "has_keyword": true,
+          "text_snippet": "Elizabeth II (Elizabeth Alexandra Mary; 21 April 1925 \u2013 8 September 2022) was Head of the Commonwealth and the Queen of the United Kingdom and the other Commonwealth realms from 1952 until her death in 2022."
+        },
+        {
+          "cell_id": 8264,
+          "activation": 0.45783892273902893,
+          "has_keyword": true,
+          "text_snippet": "When Elizabeth became Queen on 6 February 1952, she was officially Queen of the United Kingdom, Canada, Australia, New Zealand, South Africa, Pakistan and Ceylon (now called Sri Lanka). These were the Commonwealth countries. She was also Qu..."
+        },
+        {
+          "cell_id": 107290,
+          "activation": 0.44726550579071045,
+          "has_keyword": true,
+          "text_snippet": "When Elizabeth I was succeeded in 1603 by the Scottish King James VI of Scotland (James I of England) the countries both came under his rule, but each kept its own Parliament."
+        },
+        {
+          "cell_id": 4392186,
+          "activation": 0.44568052887916565,
+          "has_keyword": true,
+          "text_snippet": "Elizabeth II was proclaimed queen throughout the Commonwealth after her father, King George VI, died in the early hours of 6 February 1952, while Elizabeth was in Kenya. Proclamations were made in different Commonwealth realms on 6, 7, 8, a..."
+        },
+        {
+          "cell_id": 2061619,
+          "activation": 0.44396984577178955,
+          "has_keyword": true,
+          "text_snippet": "People Edward II of England (1284\u20131327) Elizabeth II (1926\u20132022), Queen of the United Kingdom and the other Commonwealth realms"
+        },
+        {
+          "cell_id": 2895018,
+          "activation": 0.42335426807403564,
+          "has_keyword": true,
+          "text_snippet": "In the early morning hours of 9 September 2022 Australia Eastern Standard Time, Queen Elizabeth II died. The Queen was succeeded by her eldest son, King Charles III, who now reigns as the King of Australia."
+        },
+        {
+          "cell_id": 5467417,
+          "activation": 0.41451597213745117,
+          "has_keyword": true,
+          "text_snippet": "Both of these versions were written before the death of Elizabeth II in 2022. The current monarch is Charles III, the successor to Elizabeth II."
+        }
+      ],
+      "fault_category": "GATE",
+      "wall_seconds": 5.973020792007446
+    },
+    {
+      "query": "What is the highest mountain in the country whose flag features a red maple leaf?",
+      "sub_question": "What is the highest mountain in Canada?",
+      "decompose_used_passages": 3,
+      "expected_keywords": [
+        "Logan"
+      ],
+      "hop_explanation": "(red maple leaf flag) -> Canada;  (Canada, highest mountain) -> Mount Logan.",
+      "top_k_used": 10,
+      "keyword_rank_in_top_k": 1,
+      "keyword_rank_in_top_50": 1,
+      "observed_margin": 0.0004298090934753418,
+      "gate_would_fire_at_T015": false,
+      "gate_would_fire_at_T010": false,
+      "answer": "The highest mountain in Canada is Mount Logan, which is the highest mountain in the province of Yukon and the second-highest mountain in North America after Denali (Mount McKinley) [357181].",
+      "kw_hit_in_answer": true,
+      "verify_grounded": true,
+      "verify_reason": "coverage above threshold; all numerics cited",
+      "silence_at_margin_zero": false,
+      "silence_reason_at_margin_zero": "",
+      "final_outcome_at_T015": "silence_gate",
+      "top_k_cells": [
+        {
+          "cell_id": 357181,
+          "activation": 0.4617217183113098,
+          "has_keyword": true,
+          "text_snippet": "Mount Logan is the highest mountain in Canada. It is the second-highest mountain in North America, after Denali (Mount McKinley). The mountain was named after Sir William Edmond Logan. He was a Canadian geologist and the founder of the Geol..."
+        },
+        {
+          "cell_id": 1970829,
+          "activation": 0.4612919092178345,
+          "has_keyword": false,
+          "text_snippet": "Howse Peak is the highest mountain in the Waputik Mountains, a subrange of the Canadian Rockies. It is located west of the Icefields Parkway, above Chephren Lake, on the continental divide between Alberta and British Columbia. At , it is th..."
+        },
+        {
+          "cell_id": 468970,
+          "activation": 0.45918208360671997,
+          "has_keyword": false,
+          "text_snippet": "The highest mountain in the province is in the northern part. The mountain is tall."
+        },
+        {
+          "cell_id": 2729403,
+          "activation": 0.4563780725002289,
+          "has_keyword": true,
+          "text_snippet": "Most mountain peaks of Canada lie in the west, specifically in British Columbia, Alberta, and the Yukon. Mountains can be found all over British Columbia while those in Alberta are mainly situated on the eastern side of the Canadian Rockies..."
+        },
+        {
+          "cell_id": 364579,
+          "activation": 0.4489527940750122,
+          "has_keyword": true,
+          "text_snippet": "King Peak (or Mount King) is the fourth highest mountain in Canada. It is also the ninth highest peak in North America. It is located just west of Mount Logan, and is considered a one of the outlying peaks of that massive mountain."
+        },
+        {
+          "cell_id": 565618,
+          "activation": 0.44504690170288086,
+          "has_keyword": false,
+          "text_snippet": "Mount Saint Elias is a high mountain in Canada and the United States. It is also known as Boundary Peak 186. Mount Saint Elias is on the border of Alaska and the Yukon. It is the 2nd highest mountain in Canada and in the United States."
+        },
+        {
+          "cell_id": 4094647,
+          "activation": 0.44268590211868286,
+          "has_keyword": false,
+          "text_snippet": "While not considered mountains, the Cypress Hills, located in the south-eastern corner of Alberta, extending into Saskatchewan, constitute the highest terrain in Canada between the Rocky Mountains and Labrador. They reach a maximum elevatio..."
+        },
+        {
+          "cell_id": 2646377,
+          "activation": 0.44101208448410034,
+          "has_keyword": false,
+          "text_snippet": "Geography Some of the highest mountains of the province are listed below:are listed below:"
+        },
+        {
+          "cell_id": 1384479,
+          "activation": 0.4369223713874817,
+          "has_keyword": false,
+          "text_snippet": "Baldy Mountain is the highest peak in Manitoba, Canada. It is located in the Duck Mountain Provincial Park, North of Grand View. It is tall, making it the highest mountain in the long Manitoba Escarpment."
+        },
+        {
+          "cell_id": 966679,
+          "activation": 0.43687915802001953,
+          "has_keyword": false,
+          "text_snippet": "Rivers and mountains The highest mountains are: Engelsberg (589 m) Rother Stein (583 m) Feld-Berg (556 m) Hohe Rhonard (526 m)"
+        }
+      ],
+      "fault_category": "GATE",
+      "wall_seconds": 7.570619821548462
+    },
+    {
+      "query": "What religion was the founder of psychoanalysis raised in?",
+      "sub_question": "What religion was Sigmund Freud raised in?",
+      "decompose_used_passages": 3,
+      "expected_keywords": [
+        "Jewish",
+        "Judaism"
+      ],
+      "hop_explanation": "(psychoanalysis, founder) -> Sigmund Freud;  (Freud, religious background) -> Jewish.",
+      "top_k_used": 10,
+      "keyword_rank_in_top_k": 1,
+      "keyword_rank_in_top_50": 1,
+      "observed_margin": 0.0914977490901947,
+      "gate_would_fire_at_T015": true,
+      "gate_would_fire_at_T010": true,
+      "answer": "Sigmund Freud was raised in a heavily Roman Catholic town by Jewish parents [404320].",
+      "kw_hit_in_answer": true,
+      "verify_grounded": true,
+      "verify_reason": "coverage above threshold; all numerics cited",
+      "silence_at_margin_zero": false,
+      "silence_reason_at_margin_zero": "",
+      "final_outcome_at_T015": "OK",
+      "top_k_cells": [
+        {
+          "cell_id": 404320,
+          "activation": 0.5023027658462524,
+          "has_keyword": true,
+          "text_snippet": "Sigmund Freud was born to Jewish parents in a heavily Roman Catholic town. Freud desired to understand religion and spirituality and deals with the nature of religious beliefs in many of his books and essays. He regards God as an illusion, ..."
+        },
+        {
+          "cell_id": 47425,
+          "activation": 0.41080501675605774,
+          "has_keyword": false,
+          "text_snippet": "Sigmund Freud (Moravia, 6 May 1856 \u2013 London, 23 September 1939) was an Austrian neurologist (a person who treats the nervous system). He invented the treatment of mental illness and neurosis by means of psychoanalysis."
+        },
+        {
+          "cell_id": 1708707,
+          "activation": 0.39515239000320435,
+          "has_keyword": true,
+          "text_snippet": "Freud He has examined Sigmund Freud, addressing the question of what role, if any, was played by Freud's Jewish origins in his composition of the psychoanalytic corpus. Gilman's thesis concerning this subject is that the prejudices of biolo..."
+        },
+        {
+          "cell_id": 2177155,
+          "activation": 0.3740791380405426,
+          "has_keyword": true,
+          "text_snippet": "Freud's maternal grandparents were practising Irish Catholics but her mother was non-observant, while her father's Jewish family were atheists. She identifies herself as Jewish."
+        },
+        {
+          "cell_id": 47428,
+          "activation": 0.3721024990081787,
+          "has_keyword": true,
+          "text_snippet": "Freud lived in Austria in the 1930s. After the Anschluss, Germany and Austria were combined. Because he was Jewish, he received a visit from the Gestapo. Freud and his family did not feel safe anymore. Freud left Vienna and went to England ..."
+        },
+        {
+          "cell_id": 294145,
+          "activation": 0.36276423931121826,
+          "has_keyword": false,
+          "text_snippet": "Anna Freud (3 December 1895 \u2013 9 October 1982) was the sixth and last child of Sigmund Freud and his wife Martha Bernays Freud."
+        },
+        {
+          "cell_id": 70892,
+          "activation": 0.3592439293861389,
+          "has_keyword": false,
+          "text_snippet": "Sigmund Freud The best known psychiatrist is Sigmund Freud, a medical doctor who was trained in neurology. He became certain that hidden thoughts in the brain (which he called the unconscious) could cause physical symptoms and strange behav..."
+        },
+        {
+          "cell_id": 131011,
+          "activation": 0.35678884387016296,
+          "has_keyword": false,
+          "text_snippet": "Sigmund Freud had an important Russian person (Sergei Pankejeff) with him in the past, who would have been classified as having the disorder in modern times. Freud named him \"The Wolf Man\", to protect Pankejeff's identity. Pankejeff was so ..."
+        },
+        {
+          "cell_id": 3232216,
+          "activation": 0.3544136583805084,
+          "has_keyword": false,
+          "text_snippet": "Medicine Sigmund Freud (1856\u20131939), neurologist, founder of psychoanalysis; born in P\u0159\u00edbor (Freiberg), Moravia Carl Koller (1857\u20131944), ophthalmologist Pavol Steiner (1908\u20131969), Olympic water polo player, swimmer, and cardiac surgeon Rudol..."
+        },
+        {
+          "cell_id": 1869831,
+          "activation": 0.351370632648468,
+          "has_keyword": false,
+          "text_snippet": "Sigmund Freud, the father of psychoanalysis, believed that the psyche\u2014he used the word Seele ('soul', but also 'psyche') throughout his writings\u2014was composed of three components:"
+        }
+      ],
+      "fault_category": "OK",
+      "wall_seconds": 5.60831880569458
+    },
+    {
+      "query": "In what city was the author of 'The Old Man and the Sea' born?",
+      "sub_question": "In what city was Ernest Hemingway born?",
+      "decompose_used_passages": 3,
+      "expected_keywords": [
+        "Oak Park"
+      ],
+      "hop_explanation": "(The Old Man and the Sea, author) -> Ernest Hemingway;  (Hemingway, birthplace) -> Oak Park, Illinois.",
+      "top_k_used": 10,
+      "keyword_rank_in_top_k": 1,
+      "keyword_rank_in_top_50": 1,
+      "observed_margin": 0.06830388307571411,
+      "gate_would_fire_at_T015": true,
+      "gate_would_fire_at_T010": true,
+      "answer": "Ernest Hemingway was born in Oak Park, Illinois. [35716]",
+      "kw_hit_in_answer": true,
+      "verify_grounded": true,
+      "verify_reason": "coverage above threshold; all numerics cited",
+      "silence_at_margin_zero": false,
+      "silence_reason_at_margin_zero": "",
+      "final_outcome_at_T015": "OK",
+      "top_k_cells": [
+        {
+          "cell_id": 35716,
+          "activation": 0.43274927139282227,
+          "has_keyword": true,
+          "text_snippet": "Ernest Hemingway was born in 1899. He grew up in Oak Park, Illinois, near the midwestern city of Chicago. He was the second child in a family of six. His father was a doctor. His mother was a painter and a pianist."
+        },
+        {
+          "cell_id": 4139887,
+          "activation": 0.36444538831710815,
+          "has_keyword": false,
+          "text_snippet": "See also Birthplace of Ernest Hemingway Ernest and Mary Hemingway House Ernest Hemingway Cottage"
+        },
+        {
+          "cell_id": 1390456,
+          "activation": 0.3616945743560791,
+          "has_keyword": false,
+          "text_snippet": "Hemingway's earliest memories are of his mother and grandmother dressing him up as Elvis, a Beatle or Tarzan and being paraded up and down Morecambe pier. His grandfather worked at Grimethorpe colliery as a civil engineer. He lived on Thirl..."
+        },
+        {
+          "cell_id": 4139888,
+          "activation": 0.3385443389415741,
+          "has_keyword": false,
+          "text_snippet": "\"Writings of Ernest Hemingway\", broadcast from the Ernest Hemingway House from C-SPAN's American Writers"
+        },
+        {
+          "cell_id": 35720,
+          "activation": 0.33262866735458374,
+          "has_keyword": false,
+          "text_snippet": "Ernest found a job with the Kansas City Star newspaper in Kansas City, Missouri. He reported news that happened at the hospital, police headquarters, and the railroad station. One reporter said: \"Hemingway liked to be where the action was.\""
+        },
+        {
+          "cell_id": 2556288,
+          "activation": 0.3325704336166382,
+          "has_keyword": false,
+          "text_snippet": "In order, he thought, to gain inspiration for his writing career, he went again to Europe followed the pathway of Ernest Hemingway through France, and Spain, spending time in Paris, partaking in the Pamplona bull run (on 7 July 1964), etc.;..."
+        },
+        {
+          "cell_id": 319018,
+          "activation": 0.32875776290893555,
+          "has_keyword": false,
+          "text_snippet": "Mariel Hemingway (b. November 22, 1961) is an American actress and writer. She starred in many television programs and in movies. She is the granddaughter of writer Ernest Hemingway."
+        },
+        {
+          "cell_id": 2571858,
+          "activation": 0.3276180028915405,
+          "has_keyword": true,
+          "text_snippet": "Early life and family Hemingway was born in Oak Park, Illinois, to Clarence Edmonds Hemingway, a physician, and Grace Hall Hemingway, a musician. He was the youngest of six siblings, the others being Marcelline (1898 - 1963), Ernest (1899 -..."
+        },
+        {
+          "cell_id": 3000710,
+          "activation": 0.31704169511795044,
+          "has_keyword": false,
+          "text_snippet": "Studies and works After receiving a bachelor's degree in literary studies at the Universit\u00e9 du Qu\u00e9bec \u00e0 Montr\u00e9al and beginning a master's degree in the same subject, he decided to be a novelist. When he was young, his favourite writers were..."
+        },
+        {
+          "cell_id": 35730,
+          "activation": 0.3156503438949585,
+          "has_keyword": false,
+          "text_snippet": "Paris was cold and grey when Hemingway and his new wife arrived in 1921. They lived in one of the poorer parts of the city. Their rooms were small and they did not have water from pipes. But the Toronto Star employed him as its European rep..."
+        }
+      ],
+      "fault_category": "OK",
+      "wall_seconds": 4.841395378112793
+    }
+  ]
+}
