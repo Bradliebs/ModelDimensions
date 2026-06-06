@@ -37,6 +37,14 @@ from src.cc_service.encoder import EncoderSingleton
 SILENCE_NO_MATCH = "I have no matching memory for that."
 SILENCE_DRIFT = "I drafted an answer but could not ground it in memory."
 
+# Direct-evidence rescue policy. Rescue may override a sub-threshold gate
+# only when the verifier already accepts and a top-N retrieved cell
+# directly contains both the primary answer entity and a question anchor
+# AND that cell's cosine activation clears an absolute floor. Calibrated
+# from results/v1_rescue_floor_sweep.json.
+RESCUE_RANK_WINDOW: int = 3
+RESCUE_ACTIVATION_FLOOR: float = 0.40
+
 # Number of "closest topics" to surface alongside a silence response. Three
 # is enough to signal "the bank knows about X, Y, Z but not your question"
 # without turning the silence path into a covert retrieval channel.
@@ -154,6 +162,10 @@ class PipelineResult:
     # on grounded answers). Each entry: {"topic": str, "activation": float}.
     # Topic is `cells.label` when set, else a truncated source-text snippet.
     closest_topics: list[dict] = field(default_factory=list)
+    # Direct-evidence rescue audit. None when no rescue path was reached
+    # (gate fired, or pre-filter rejected). Populated when the rescue gate
+    # was evaluated (whether it granted or denied).
+    rescue: Optional[dict] = None
 
     def as_dict(self) -> dict:
         return {
@@ -167,7 +179,129 @@ class PipelineResult:
             "verification": self.verification,
             "timings": self.timings,
             "closest_topics": list(self.closest_topics),
+            "rescue": self.rescue,
         }
+
+
+def _decide_rescue(
+    *,
+    retrieval: dict,
+    cells: list[dict],
+    verdict: "v1_answer_verifier.VerificationDecision",
+    gate_passed: bool,
+    margin_observed: float,
+    margin_threshold: float,
+    rank_window: int = RESCUE_RANK_WINDOW,
+    activation_floor: float = RESCUE_ACTIVATION_FLOOR,
+) -> tuple[str, dict]:
+    """Direct-evidence rescue gate.
+
+    Only callable when the verifier already accepted (``verdict.grounded``).
+    Returns ``(outcome, audit)`` where outcome is one of:
+
+      ``"rescue"``                       — grant rescue
+      ``"reject_no_primary"``            — verifier accepted but log has
+                                            no novel non-skip entity
+      ``"reject_no_supporting_cell"``    — no retrieved cell colocates the
+                                            primary entity with any anchor
+      ``"reject_outside_window"``        — supporting cell exists but is
+                                            ranked at or beyond rank_window
+      ``"reject_below_floor"``           — supporting cell is in window but
+                                            its activation < floor
+    """
+    log = list(verdict.stage_e_log or [])
+    novel = [
+        rec for rec in log
+        if rec.get("decision") != "skip" and rec.get("answer_entity")
+    ]
+    base_audit = {
+        "rescue_attempted": True,
+        "rescue_type": "direct_evidence",
+        "normal_gate_passed": bool(gate_passed),
+        "margin": float(margin_observed),
+        "margin_threshold": float(margin_threshold),
+        "activation_floor": float(activation_floor),
+        "rank_window": int(rank_window),
+        "stage_e_v2_passed": bool(verdict.grounded),
+    }
+    if not novel:
+        audit = dict(base_audit)
+        audit["decision"] = "silence"
+        audit["rescue_rejection_reason"] = "no_primary_entity"
+        return ("reject_no_primary", audit)
+
+    primary_entity = novel[0]["answer_entity"]
+    anchors = list(novel[0].get("question_anchors") or [])
+    primary_norm = v1_answer_verifier._normalise_for_anchor(primary_entity)
+    # Normalise anchors so the helper is robust to callers that pass raw
+    # casings; in the production path the verifier emits anchors already
+    # lowercased, so this is a no-op there.
+    anchors_norm = [
+        v1_answer_verifier._normalise_for_anchor(a) for a in anchors
+    ]
+    anchors_norm = [a for a in anchors_norm if a]
+
+    text_by_id: dict[int, str] = {}
+    for c in cells:
+        cid = c.get("cell_id")
+        text = c.get("text")
+        if cid is None or not text:
+            continue
+        text_by_id[int(cid)] = text
+
+    cell_ids = list(retrieval.get("top_k_cell_ids", []))
+    activations = list(retrieval.get("activations", []))
+
+    supporting: dict | None = None
+    for rank, (cid, act) in enumerate(zip(cell_ids, activations)):
+        text = text_by_id.get(int(cid))
+        if not text:
+            continue
+        norm_text = v1_answer_verifier._normalise_for_anchor(text)
+        if not primary_norm or primary_norm not in norm_text:
+            continue
+        anchors_present = [
+            anchors[i] for i, a in enumerate(anchors_norm) if a in norm_text
+        ]
+        if not anchors_present:
+            continue
+        supporting = {
+            "rank": rank,
+            "cell_id": int(cid),
+            "activation": float(act),
+            "anchors_in_supporting_cell": anchors_present,
+        }
+        break
+
+    if supporting is None:
+        audit = dict(base_audit)
+        audit["decision"] = "silence"
+        audit["rescue_rejection_reason"] = "no_supporting_cell"
+        audit["answer_entity"] = primary_entity
+        audit["question_anchors"] = anchors
+        return ("reject_no_supporting_cell", audit)
+
+    audit = dict(base_audit)
+    audit["answer_entity"] = primary_entity
+    audit["question_anchors"] = anchors
+    audit["supporting_cell_rank"] = supporting["rank"]
+    audit["supporting_cell_id"] = supporting["cell_id"]
+    audit["supporting_cell_activation"] = supporting["activation"]
+    audit["anchors_in_supporting_cell"] = supporting["anchors_in_supporting_cell"]
+    audit["entity_anchor_colocated"] = True
+    audit["support_cell_cited"] = True
+
+    if supporting["rank"] >= rank_window:
+        audit["decision"] = "silence"
+        audit["rescue_rejection_reason"] = "supporting_cell_outside_rank_window"
+        return ("reject_outside_window", audit)
+    if supporting["activation"] < activation_floor:
+        audit["decision"] = "silence"
+        audit["rescue_rejection_reason"] = "supporting_cell_below_floor"
+        return ("reject_below_floor", audit)
+
+    audit["decision"] = "answer_rescued"
+    return ("rescue", audit)
 
 
 class AnswerPipeline:
@@ -336,22 +470,34 @@ class AnswerPipeline:
         closest_topics = self._build_closest_topics(retrieval)
         timings["closest_topics"] = time.time() - t0
 
-        if not gate.fire:
-            return PipelineResult(
-                question=question,
-                answer=SILENCE_NO_MATCH,
-                silence=True,
-                silence_reason=f"gate: {gate.reason}",
-                citations=[],
-                retrieval=retrieval,
-                gate=gate_dict,
-                verification=None,
-                timings=timings,
-                closest_topics=closest_topics,
-            )
+        gate_passed = bool(gate.fire)
 
-        # Gate fired: fetch source texts only for the cells we'll cite
-        # (reranker path already has them in hand and in the right order).
+        # Below-gate pre-filter: skip the generator entirely when no cell
+        # in the rescue rank window clears the activation floor. This
+        # preserves the original silence behaviour for queries with no
+        # plausible support, and avoids paying the generation cost on
+        # them. Rescue is only possible when at least one such cell
+        # exists.
+        if not gate_passed:
+            top_window_acts = retrieval["activations"][:RESCUE_RANK_WINDOW]
+            if not any(a >= RESCUE_ACTIVATION_FLOOR for a in top_window_acts):
+                return PipelineResult(
+                    question=question,
+                    answer=SILENCE_NO_MATCH,
+                    silence=True,
+                    silence_reason=f"gate: {gate.reason}",
+                    citations=[],
+                    retrieval=retrieval,
+                    gate=gate_dict,
+                    verification=None,
+                    timings=timings,
+                    closest_topics=closest_topics,
+                    rescue=None,
+                )
+
+        # Fetch source texts. The reranker path already has them in hand
+        # and in the right order; otherwise pull from disk for the top_k
+        # we will cite.
         if reranked_cell_texts is not None:
             texts = reranked_cell_texts
         else:
@@ -365,17 +511,23 @@ class AnswerPipeline:
         ]
 
         if not cells:
+            reason = (
+                "gate fired but no source text on disk for top cells"
+                if gate_passed
+                else f"gate: {gate.reason}; no source text available"
+            )
             return PipelineResult(
                 question=question,
                 answer=SILENCE_NO_MATCH,
                 silence=True,
-                silence_reason="gate fired but no source text on disk for top cells",
+                silence_reason=reason,
                 citations=[],
                 retrieval=retrieval,
                 gate=gate_dict,
                 verification=None,
                 timings=timings,
                 closest_topics=closest_topics,
+                rescue=None,
             )
 
         t0 = time.time()
@@ -396,56 +548,120 @@ class AnswerPipeline:
         )
         timings["verify"] = time.time() - t0
 
-        if not verdict.grounded:
-            if verdict.reason.startswith("query incoherent") or \
-               verdict.reason.startswith("query-evidence mismatch"):
-                reason = f"verify: {verdict.reason}"
-            elif verdict.coverage < verdict.threshold and verdict.uncited_numerics:
-                reason = (
-                    f"verify: coverage={verdict.coverage:.2f} "
-                    f"< {verdict.threshold:.2f} AND "
-                    f"uncited numerics={verdict.uncited_numerics[:3]}"
+        # Gate-passed branch: existing two-outcome contract.
+        if gate_passed:
+            if not verdict.grounded:
+                if verdict.reason.startswith("query incoherent") or \
+                   verdict.reason.startswith("query-evidence mismatch"):
+                    reason = f"verify: {verdict.reason}"
+                elif verdict.coverage < verdict.threshold and verdict.uncited_numerics:
+                    reason = (
+                        f"verify: coverage={verdict.coverage:.2f} "
+                        f"< {verdict.threshold:.2f} AND "
+                        f"uncited numerics={verdict.uncited_numerics[:3]}"
+                    )
+                elif verdict.coverage < verdict.threshold:
+                    reason = (
+                        f"verify: coverage={verdict.coverage:.2f} "
+                        f"< {verdict.threshold:.2f}; "
+                        f"uncovered={verdict.uncovered_tokens[:5]}"
+                    )
+                elif verdict.unanchored_proper_nouns:
+                    reason = (
+                        f"verify: answer entity not colocated with question "
+                        f"anchor: {verdict.unanchored_proper_nouns[:3]}"
+                    )
+                else:
+                    reason = (
+                        f"verify: uncited numerics in answer "
+                        f"{verdict.uncited_numerics[:3]}"
+                    )
+                return PipelineResult(
+                    question=question,
+                    answer=SILENCE_DRIFT,
+                    silence=True,
+                    silence_reason=reason,
+                    citations=[c["cell_id"] for c in cells],
+                    retrieval=retrieval,
+                    gate=gate_dict,
+                    verification=verdict.as_dict(),
+                    timings=timings,
+                    closest_topics=closest_topics,
+                    rescue=None,
                 )
-            elif verdict.coverage < verdict.threshold:
-                reason = (
-                    f"verify: coverage={verdict.coverage:.2f} "
-                    f"< {verdict.threshold:.2f}; "
-                    f"uncovered={verdict.uncovered_tokens[:5]}"
-                )
-            elif verdict.unanchored_proper_nouns:
-                reason = (
-                    f"verify: answer entity not colocated with question "
-                    f"anchor: {verdict.unanchored_proper_nouns[:3]}"
-                )
-            else:
-                reason = (
-                    f"verify: uncited numerics in answer "
-                    f"{verdict.uncited_numerics[:3]}"
-                )
+
             return PipelineResult(
                 question=question,
-                answer=SILENCE_DRIFT,
-                silence=True,
-                silence_reason=reason,
+                answer=raw_answer,
+                silence=False,
+                silence_reason="",
                 citations=[c["cell_id"] for c in cells],
                 retrieval=retrieval,
                 gate=gate_dict,
                 verification=verdict.as_dict(),
                 timings=timings,
                 closest_topics=closest_topics,
+                rescue=None,
+            )
+
+        # Below-gate branch: rescue may grant when the verifier accepts and
+        # a top-RESCUE_RANK_WINDOW cell directly supports the answer.
+        if not verdict.grounded:
+            return PipelineResult(
+                question=question,
+                answer=SILENCE_NO_MATCH,
+                silence=True,
+                silence_reason=f"gate: {gate.reason}; verify: {verdict.reason}",
+                citations=[c["cell_id"] for c in cells],
+                retrieval=retrieval,
+                gate=gate_dict,
+                verification=verdict.as_dict(),
+                timings=timings,
+                closest_topics=closest_topics,
+                rescue=None,
+            )
+
+        t0 = time.time()
+        rescue_outcome, rescue_audit = _decide_rescue(
+            retrieval=retrieval,
+            cells=cells,
+            verdict=verdict,
+            gate_passed=gate_passed,
+            margin_observed=float(gate.margin),
+            margin_threshold=float(gate_threshold),
+        )
+        timings["rescue"] = time.time() - t0
+
+        if rescue_outcome == "rescue":
+            return PipelineResult(
+                question=question,
+                answer=raw_answer,
+                silence=False,
+                silence_reason="",
+                citations=[c["cell_id"] for c in cells],
+                retrieval=retrieval,
+                gate=gate_dict,
+                verification=verdict.as_dict(),
+                timings=timings,
+                closest_topics=closest_topics,
+                rescue=rescue_audit,
             )
 
         return PipelineResult(
             question=question,
-            answer=raw_answer,
-            silence=False,
-            silence_reason="",
+            answer=SILENCE_NO_MATCH,
+            silence=True,
+            silence_reason=(
+                f"gate: {gate.reason}; "
+                f"rescue: {rescue_audit['rescue_rejection_reason']}"
+            ),
             citations=[c["cell_id"] for c in cells],
             retrieval=retrieval,
             gate=gate_dict,
             verification=verdict.as_dict(),
             timings=timings,
             closest_topics=closest_topics,
+            rescue=rescue_audit,
         )
 
     def close(self) -> None:

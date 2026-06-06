@@ -337,3 +337,373 @@ def test_encoder_mismatch_rejected(tiny_bank: Path):
             encoder=WrongEncoder(),     # type: ignore[arg-type]
             generator=lambda p: "",
         )
+
+
+# ---------- direct-evidence rescue ----------
+
+
+@pytest.fixture
+def rescue_bank(tmp_path: Path) -> Path:
+    """Bank whose cell 1 carries a clean (entity, anchor) pair so rescue
+    can be exercised end-to-end."""
+    db = tmp_path / "rescue_bank.db"
+    dim = 8
+    eye = np.eye(dim, dtype=np.float32)
+    cells = [
+        # cell_id 1, axis 0: the would-be rescue cell.
+        ("cell_canada", eye[0], 0.3,
+         "The capital of Canada is Ottawa."),
+        # cell_id 2, axis 1: high-activation decoy with no overlap.
+        ("cell_tigers", eye[1], 0.3,
+         "Tigers are large striped cats from Asia."),
+        # cell_id 3, axis 2: low-activation decoy.
+        ("cell_chess", eye[2], 0.3,
+         "Chess is a two-player strategy game played on a 64-square board."),
+    ]
+    _make_bank(db, dim, cells)
+    return db
+
+
+def _sub_threshold_query_vec(dim: int = 8) -> np.ndarray:
+    """Vector that yields activations [~0.42, ~0.41, ~0.05, ~0, ...].
+
+    Top1 ≈ 0.42 (above rescue floor 0.40), top2 ≈ 0.41, margin ≈ 0.01
+    (below the gate's 0.015 threshold), so the gate fails but the rescue
+    pre-filter passes.
+    """
+    q = np.zeros(dim, dtype=np.float32)
+    q[0] = 0.42
+    q[1] = 0.41
+    q[2] = 0.05
+    # Pad remaining axes so |q| is approximately 1 (does not affect the
+    # cosines against axes 0..2 since those weights are unit basis
+    # vectors).
+    rest = float(np.sqrt(max(0.0, 1.0 - (0.42**2 + 0.41**2 + 0.05**2))))
+    fill = rest / np.sqrt(dim - 3)
+    q[3:] = fill
+    return q
+
+
+def test_rescue_grants_when_top_cell_supports_answer(rescue_bank: Path):
+    """Below-gate query whose top-1 cell directly contains the answer
+    entity and a question anchor and clears the activation floor must be
+    rescued."""
+    encoder = _StubEncoder(dim=8)
+    encoder.responses["What is the capital of Canada?"] = (
+        _sub_threshold_query_vec()
+    )
+
+    def stub_gen(prompt: str) -> str:
+        return "The capital of Canada is Ottawa. [1]"
+
+    pipeline = AnswerPipeline(
+        bank_path=rescue_bank,
+        top_k=3,
+        encoder=encoder,
+        generator=stub_gen,
+    )
+    try:
+        result = pipeline.ask("What is the capital of Canada?")
+    finally:
+        pipeline.close()
+
+    # Gate did not fire; rescue did.
+    assert result.gate["fire"] is False
+    assert result.gate["margin"] < 0.015
+    assert result.silence is False, result.silence_reason
+    assert "Ottawa" in result.answer
+    assert 1 in result.citations
+
+    # Verifier accepted via Stage E v2.
+    assert result.verification is not None
+    assert result.verification["grounded"] is True
+
+    # Rescue audit trail.
+    assert result.rescue is not None
+    rescue = result.rescue
+    assert rescue["decision"] == "answer_rescued"
+    assert rescue["rescue_type"] == "direct_evidence"
+    assert rescue["normal_gate_passed"] is False
+    assert rescue["stage_e_v2_passed"] is True
+    assert rescue["activation_floor"] == 0.40
+    assert rescue["rank_window"] == 3
+    assert rescue["supporting_cell_rank"] == 0
+    assert rescue["supporting_cell_id"] == 1
+    assert rescue["supporting_cell_activation"] >= 0.40
+    assert rescue["answer_entity"] == "Ottawa"
+    assert rescue["entity_anchor_colocated"] is True
+    assert rescue["support_cell_cited"] is True
+
+
+def test_below_gate_verifier_reject_silences_without_rescue(rescue_bank: Path):
+    """Below-gate path where the generator confabulates: verifier rejects
+    so rescue is never attempted; rescue field stays None."""
+    encoder = _StubEncoder(dim=8)
+    encoder.responses["What is the capital of Canada?"] = (
+        _sub_threshold_query_vec()
+    )
+
+    def confab_gen(prompt: str) -> str:
+        # "Wakanda" is novel and appears in no cell — Stage E rejects.
+        return "The capital of Canada is Wakanda. [1]"
+
+    pipeline = AnswerPipeline(
+        bank_path=rescue_bank,
+        top_k=3,
+        encoder=encoder,
+        generator=confab_gen,
+    )
+    try:
+        result = pipeline.ask("What is the capital of Canada?")
+    finally:
+        pipeline.close()
+
+    assert result.gate["fire"] is False
+    assert result.silence is True
+    assert result.verification is not None
+    assert result.verification["grounded"] is False
+    # Rescue must not be attempted when the verifier rejects.
+    assert result.rescue is None
+    assert "verify:" in result.silence_reason
+    assert "gate:" in result.silence_reason
+
+
+def test_below_gate_pre_filter_skips_generator_when_top_acts_below_floor(
+    tiny_bank: Path,
+):
+    """When the gate fails AND no top-3 cell clears the activation floor,
+    the pipeline must not invoke the generator."""
+    encoder = _StubEncoder(dim=8)
+    # Tiny activations — no cell clears the 0.40 floor.
+    q = np.zeros(8, dtype=np.float32)
+    q[0] = 0.20
+    q[1] = 0.19
+    q[2] = 0.01
+    encoder.responses["a faint signal"] = q
+
+    calls: list[str] = []
+
+    def must_not_run(prompt: str) -> str:
+        calls.append(prompt)
+        raise AssertionError("generator must not run when pre-filter rejects")
+
+    pipeline = AnswerPipeline(
+        bank_path=tiny_bank,
+        top_k=3,
+        encoder=encoder,
+        generator=must_not_run,
+    )
+    try:
+        result = pipeline.ask("a faint signal")
+    finally:
+        pipeline.close()
+
+    assert calls == []
+    assert result.silence is True
+    assert result.gate["fire"] is False
+    assert result.rescue is None
+    assert result.verification is None
+
+
+# ---------- _decide_rescue helper unit tests ----------
+
+
+def _make_verdict(
+    *,
+    grounded: bool = True,
+    answer_entity: str = "Ottawa",
+    anchors: list[str] | None = None,
+) -> "object":
+    """Construct a minimal VerificationDecision for helper unit tests."""
+    from src.agent.v1_answer_verifier import VerificationDecision
+
+    log: list[dict] = []
+    if answer_entity is not None:
+        log.append(
+            {
+                "stage": "E",
+                "decision": "accept" if grounded else "reject",
+                "answer_entity": answer_entity,
+                "question_anchors": list(anchors or ["canada"]),
+                "entity_found_in_some_cell": True,
+                "anchor_found_in_same_cell_as_entity": grounded,
+                "fallback_used": False,
+                "reason": "ok" if grounded else "missing_anchor",
+            }
+        )
+    return VerificationDecision(
+        grounded=grounded,
+        coverage=1.0,
+        covered=1,
+        total=1,
+        threshold=0.5,
+        reason="ok" if grounded else "stage_e_rejected",
+        uncovered_tokens=[],
+        uncited_numerics=[],
+        unanchored_proper_nouns=[] if grounded else [answer_entity or ""],
+        stage_e_log=log,
+    )
+
+
+def test_decide_rescue_grants_when_top_cell_clears_floor():
+    from src.agent.answer_pipeline import _decide_rescue
+
+    retrieval = {
+        "top_k_cell_ids": [101, 102, 103],
+        "activations": [0.45, 0.44, 0.10],
+    }
+    cells = [
+        {"cell_id": 101, "text": "The capital of Canada is Ottawa."},
+        {"cell_id": 102, "text": "Tigers are large cats."},
+        {"cell_id": 103, "text": "Chess is a strategy game."},
+    ]
+    verdict = _make_verdict(answer_entity="Ottawa", anchors=["Canada"])
+
+    outcome, audit = _decide_rescue(
+        retrieval=retrieval,
+        cells=cells,
+        verdict=verdict,
+        gate_passed=False,
+        margin_observed=0.01,
+        margin_threshold=0.015,
+    )
+    assert outcome == "rescue"
+    assert audit["decision"] == "answer_rescued"
+    assert audit["supporting_cell_rank"] == 0
+    assert audit["supporting_cell_id"] == 101
+    assert audit["supporting_cell_activation"] == 0.45
+    assert audit["answer_entity"] == "Ottawa"
+
+
+def test_decide_rescue_rejects_when_supporting_cell_outside_rank_window():
+    """The supporting cell exists but is ranked beyond rank_window=3."""
+    from src.agent.answer_pipeline import _decide_rescue
+
+    retrieval = {
+        "top_k_cell_ids": [201, 202, 203, 204, 205],
+        "activations": [0.45, 0.44, 0.43, 0.42, 0.41],
+    }
+    cells = [
+        # First three cells lack the entity; cell 4 is the supporter.
+        {"cell_id": 201, "text": "Decoy one mentions nothing relevant."},
+        {"cell_id": 202, "text": "Decoy two also unrelated."},
+        {"cell_id": 203, "text": "Decoy three nothing here either."},
+        {"cell_id": 204, "text": "The capital of Canada is Ottawa."},
+        {"cell_id": 205, "text": "Decoy five."},
+    ]
+    verdict = _make_verdict(answer_entity="Ottawa", anchors=["Canada"])
+
+    outcome, audit = _decide_rescue(
+        retrieval=retrieval,
+        cells=cells,
+        verdict=verdict,
+        gate_passed=False,
+        margin_observed=0.01,
+        margin_threshold=0.015,
+    )
+    assert outcome == "reject_outside_window"
+    assert audit["decision"] == "silence"
+    assert audit["rescue_rejection_reason"] == "supporting_cell_outside_rank_window"
+    assert audit["supporting_cell_rank"] == 3
+    assert audit["supporting_cell_id"] == 204
+
+
+def test_decide_rescue_rejects_when_supporting_cell_below_floor():
+    from src.agent.answer_pipeline import _decide_rescue
+
+    retrieval = {
+        "top_k_cell_ids": [301, 302, 303],
+        "activations": [0.39, 0.38, 0.05],
+    }
+    cells = [
+        {"cell_id": 301, "text": "The capital of Canada is Ottawa."},
+        {"cell_id": 302, "text": "Decoy two."},
+        {"cell_id": 303, "text": "Decoy three."},
+    ]
+    verdict = _make_verdict(answer_entity="Ottawa", anchors=["Canada"])
+
+    outcome, audit = _decide_rescue(
+        retrieval=retrieval,
+        cells=cells,
+        verdict=verdict,
+        gate_passed=False,
+        margin_observed=0.01,
+        margin_threshold=0.015,
+    )
+    assert outcome == "reject_below_floor"
+    assert audit["decision"] == "silence"
+    assert audit["rescue_rejection_reason"] == "supporting_cell_below_floor"
+    assert audit["supporting_cell_rank"] == 0
+    assert audit["supporting_cell_activation"] == 0.39
+
+
+def test_decide_rescue_rejects_when_no_supporting_cell_anywhere():
+    from src.agent.answer_pipeline import _decide_rescue
+
+    retrieval = {
+        "top_k_cell_ids": [401, 402, 403],
+        "activations": [0.50, 0.45, 0.40],
+    }
+    cells = [
+        {"cell_id": 401, "text": "Decoy text."},
+        {"cell_id": 402, "text": "Other decoy."},
+        {"cell_id": 403, "text": "Yet another decoy."},
+    ]
+    verdict = _make_verdict(answer_entity="Ottawa", anchors=["Canada"])
+
+    outcome, audit = _decide_rescue(
+        retrieval=retrieval,
+        cells=cells,
+        verdict=verdict,
+        gate_passed=False,
+        margin_observed=0.01,
+        margin_threshold=0.015,
+    )
+    assert outcome == "reject_no_supporting_cell"
+    assert audit["rescue_rejection_reason"] == "no_supporting_cell"
+    assert "supporting_cell_rank" not in audit
+
+
+def test_decide_rescue_rejects_when_no_primary_entity():
+    from src.agent.answer_pipeline import _decide_rescue
+    from src.agent.v1_answer_verifier import VerificationDecision
+
+    # Verdict accepted but stage_e_log only has skip entries — there is
+    # no novel entity to anchor a rescue around.
+    verdict = VerificationDecision(
+        grounded=True,
+        coverage=1.0,
+        covered=1,
+        total=1,
+        threshold=0.5,
+        reason="ok",
+        uncovered_tokens=[],
+        stage_e_log=[
+            {
+                "stage": "E",
+                "decision": "skip",
+                "answer_entity": "Ottawa",
+                "question_anchors": [],
+                "entity_found_in_some_cell": None,
+                "anchor_found_in_same_cell_as_entity": None,
+                "fallback_used": True,
+                "reason": "no_question_anchors_available",
+            }
+        ],
+    )
+    retrieval = {
+        "top_k_cell_ids": [501],
+        "activations": [0.50],
+    }
+    cells = [{"cell_id": 501, "text": "The capital of Canada is Ottawa."}]
+
+    outcome, audit = _decide_rescue(
+        retrieval=retrieval,
+        cells=cells,
+        verdict=verdict,
+        gate_passed=False,
+        margin_observed=0.01,
+        margin_threshold=0.015,
+    )
+    assert outcome == "reject_no_primary"
+    assert audit["rescue_rejection_reason"] == "no_primary_entity"

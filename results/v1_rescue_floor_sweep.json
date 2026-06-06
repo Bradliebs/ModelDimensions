@@ -1,0 +1,1631 @@
+{
+  "input": "H:\\ModelDimensions_SLM\\ModelDimensions\\results\\v1_rescue_instrumentation.json",
+  "T_normal": 0.015,
+  "baseline": {
+    "rank_window": 0,
+    "activation_floor": 10.0,
+    "by_survey": {
+      "known": {
+        "n": 12,
+        "answered": 6,
+        "rescued": 0
+      },
+      "unknown": {
+        "n": 20,
+        "silenced": 20,
+        "wrongly_answered": 0,
+        "rescued": 0
+      },
+      "noise": {
+        "n": 10,
+        "silenced": 9,
+        "wrongly_answered": 1,
+        "rescued": 0
+      },
+      "multihop": {
+        "n": 8,
+        "ok": 4,
+        "wrong": 0,
+        "silenced": 4,
+        "rescued": 0,
+        "ok_rescued": 0,
+        "wrong_rescued": 0
+      }
+    },
+    "rescued_records": []
+  },
+  "sweep": [
+    {
+      "rank_window": 1,
+      "activation_floor": 0.3,
+      "by_survey": {
+        "known": {
+          "n": 12,
+          "answered": 7,
+          "rescued": 1
+        },
+        "unknown": {
+          "n": 20,
+          "silenced": 20,
+          "wrongly_answered": 0,
+          "rescued": 0
+        },
+        "noise": {
+          "n": 10,
+          "silenced": 9,
+          "wrongly_answered": 1,
+          "rescued": 0
+        },
+        "multihop": {
+          "n": 8,
+          "ok": 5,
+          "wrong": 0,
+          "silenced": 3,
+          "rescued": 1,
+          "ok_rescued": 1,
+          "wrong_rescued": 0
+        }
+      },
+      "rescued_records": [
+        {
+          "survey": "known",
+          "query": "Which book series referenced CBC in its satire of South Dublin culture?",
+          "sub_question": null,
+          "margin": 0.004781812429428101,
+          "primary_entity": "Ross O'Carroll Kelly's Guide",
+          "kw_hit": null,
+          "supporting_cell": {
+            "rank": 0,
+            "cell_id": 1170529,
+            "activation": 0.34870824217796326,
+            "anchors_present": [
+              "south dublin"
+            ]
+          }
+        },
+        {
+          "survey": "multihop",
+          "query": "What is the highest mountain in the country whose flag features a red maple leaf?",
+          "sub_question": "What is the highest mountain in Canada?",
+          "margin": 0.0004298090934753418,
+          "primary_entity": "Mount Logan",
+          "kw_hit": true,
+          "supporting_cell": {
+            "rank": 0,
+            "cell_id": 357181,
+            "activation": 0.4617217183113098,
+            "anchors_present": [
+              "canada"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "rank_window": 1,
+      "activation_floor": 0.35,
+      "by_survey": {
+        "known": {
+          "n": 12,
+          "answered": 6,
+          "rescued": 0
+        },
+        "unknown": {
+          "n": 20,
+          "silenced": 20,
+          "wrongly_answered": 0,
+          "rescued": 0
+        },
+        "noise": {
+          "n": 10,
+          "silenced": 9,
+          "wrongly_answered": 1,
+          "rescued": 0
+        },
+        "multihop": {
+          "n": 8,
+          "ok": 5,
+          "wrong": 0,
+          "silenced": 3,
+          "rescued": 1,
+          "ok_rescued": 1,
+          "wrong_rescued": 0
+        }
+      },
+      "rescued_records": [
+        {
+          "survey": "multihop",
+          "query": "What is the highest mountain in the country whose flag features a red maple leaf?",
+          "sub_question": "What is the highest mountain in Canada?",
+          "margin": 0.0004298090934753418,
+          "primary_entity": "Mount Logan",
+          "kw_hit": true,
+          "supporting_cell": {
+            "rank": 0,
+            "cell_id": 357181,
+            "activation": 0.4617217183113098,
+            "anchors_present": [
+              "canada"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "rank_window": 1,
+      "activation_floor": 0.38,
+      "by_survey": {
+        "known": {
+          "n": 12,
+          "answered": 6,
+          "rescued": 0
+        },
+        "unknown": {
+          "n": 20,
+          "silenced": 20,
+          "wrongly_answered": 0,
+          "rescued": 0
+        },
+        "noise": {
+          "n": 10,
+          "silenced": 9,
+          "wrongly_answered": 1,
+          "rescued": 0
+        },
+        "multihop": {
+          "n": 8,
+          "ok": 5,
+          "wrong": 0,
+          "silenced": 3,
+          "rescued": 1,
+          "ok_rescued": 1,
+          "wrong_rescued": 0
+        }
+      },
+      "rescued_records": [
+        {
+          "survey": "multihop",
+          "query": "What is the highest mountain in the country whose flag features a red maple leaf?",
+          "sub_question": "What is the highest mountain in Canada?",
+          "margin": 0.0004298090934753418,
+          "primary_entity": "Mount Logan",
+          "kw_hit": true,
+          "supporting_cell": {
+            "rank": 0,
+            "cell_id": 357181,
+            "activation": 0.4617217183113098,
+            "anchors_present": [
+              "canada"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "rank_window": 1,
+      "activation_floor": 0.4,
+      "by_survey": {
+        "known": {
+          "n": 12,
+          "answered": 6,
+          "rescued": 0
+        },
+        "unknown": {
+          "n": 20,
+          "silenced": 20,
+          "wrongly_answered": 0,
+          "rescued": 0
+        },
+        "noise": {
+          "n": 10,
+          "silenced": 9,
+          "wrongly_answered": 1,
+          "rescued": 0
+        },
+        "multihop": {
+          "n": 8,
+          "ok": 5,
+          "wrong": 0,
+          "silenced": 3,
+          "rescued": 1,
+          "ok_rescued": 1,
+          "wrong_rescued": 0
+        }
+      },
+      "rescued_records": [
+        {
+          "survey": "multihop",
+          "query": "What is the highest mountain in the country whose flag features a red maple leaf?",
+          "sub_question": "What is the highest mountain in Canada?",
+          "margin": 0.0004298090934753418,
+          "primary_entity": "Mount Logan",
+          "kw_hit": true,
+          "supporting_cell": {
+            "rank": 0,
+            "cell_id": 357181,
+            "activation": 0.4617217183113098,
+            "anchors_present": [
+              "canada"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "rank_window": 1,
+      "activation_floor": 0.42,
+      "by_survey": {
+        "known": {
+          "n": 12,
+          "answered": 6,
+          "rescued": 0
+        },
+        "unknown": {
+          "n": 20,
+          "silenced": 20,
+          "wrongly_answered": 0,
+          "rescued": 0
+        },
+        "noise": {
+          "n": 10,
+          "silenced": 9,
+          "wrongly_answered": 1,
+          "rescued": 0
+        },
+        "multihop": {
+          "n": 8,
+          "ok": 5,
+          "wrong": 0,
+          "silenced": 3,
+          "rescued": 1,
+          "ok_rescued": 1,
+          "wrong_rescued": 0
+        }
+      },
+      "rescued_records": [
+        {
+          "survey": "multihop",
+          "query": "What is the highest mountain in the country whose flag features a red maple leaf?",
+          "sub_question": "What is the highest mountain in Canada?",
+          "margin": 0.0004298090934753418,
+          "primary_entity": "Mount Logan",
+          "kw_hit": true,
+          "supporting_cell": {
+            "rank": 0,
+            "cell_id": 357181,
+            "activation": 0.4617217183113098,
+            "anchors_present": [
+              "canada"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "rank_window": 1,
+      "activation_floor": 0.44,
+      "by_survey": {
+        "known": {
+          "n": 12,
+          "answered": 6,
+          "rescued": 0
+        },
+        "unknown": {
+          "n": 20,
+          "silenced": 20,
+          "wrongly_answered": 0,
+          "rescued": 0
+        },
+        "noise": {
+          "n": 10,
+          "silenced": 9,
+          "wrongly_answered": 1,
+          "rescued": 0
+        },
+        "multihop": {
+          "n": 8,
+          "ok": 5,
+          "wrong": 0,
+          "silenced": 3,
+          "rescued": 1,
+          "ok_rescued": 1,
+          "wrong_rescued": 0
+        }
+      },
+      "rescued_records": [
+        {
+          "survey": "multihop",
+          "query": "What is the highest mountain in the country whose flag features a red maple leaf?",
+          "sub_question": "What is the highest mountain in Canada?",
+          "margin": 0.0004298090934753418,
+          "primary_entity": "Mount Logan",
+          "kw_hit": true,
+          "supporting_cell": {
+            "rank": 0,
+            "cell_id": 357181,
+            "activation": 0.4617217183113098,
+            "anchors_present": [
+              "canada"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "rank_window": 1,
+      "activation_floor": 0.45,
+      "by_survey": {
+        "known": {
+          "n": 12,
+          "answered": 6,
+          "rescued": 0
+        },
+        "unknown": {
+          "n": 20,
+          "silenced": 20,
+          "wrongly_answered": 0,
+          "rescued": 0
+        },
+        "noise": {
+          "n": 10,
+          "silenced": 9,
+          "wrongly_answered": 1,
+          "rescued": 0
+        },
+        "multihop": {
+          "n": 8,
+          "ok": 5,
+          "wrong": 0,
+          "silenced": 3,
+          "rescued": 1,
+          "ok_rescued": 1,
+          "wrong_rescued": 0
+        }
+      },
+      "rescued_records": [
+        {
+          "survey": "multihop",
+          "query": "What is the highest mountain in the country whose flag features a red maple leaf?",
+          "sub_question": "What is the highest mountain in Canada?",
+          "margin": 0.0004298090934753418,
+          "primary_entity": "Mount Logan",
+          "kw_hit": true,
+          "supporting_cell": {
+            "rank": 0,
+            "cell_id": 357181,
+            "activation": 0.4617217183113098,
+            "anchors_present": [
+              "canada"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "rank_window": 1,
+      "activation_floor": 0.46,
+      "by_survey": {
+        "known": {
+          "n": 12,
+          "answered": 6,
+          "rescued": 0
+        },
+        "unknown": {
+          "n": 20,
+          "silenced": 20,
+          "wrongly_answered": 0,
+          "rescued": 0
+        },
+        "noise": {
+          "n": 10,
+          "silenced": 9,
+          "wrongly_answered": 1,
+          "rescued": 0
+        },
+        "multihop": {
+          "n": 8,
+          "ok": 5,
+          "wrong": 0,
+          "silenced": 3,
+          "rescued": 1,
+          "ok_rescued": 1,
+          "wrong_rescued": 0
+        }
+      },
+      "rescued_records": [
+        {
+          "survey": "multihop",
+          "query": "What is the highest mountain in the country whose flag features a red maple leaf?",
+          "sub_question": "What is the highest mountain in Canada?",
+          "margin": 0.0004298090934753418,
+          "primary_entity": "Mount Logan",
+          "kw_hit": true,
+          "supporting_cell": {
+            "rank": 0,
+            "cell_id": 357181,
+            "activation": 0.4617217183113098,
+            "anchors_present": [
+              "canada"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "rank_window": 1,
+      "activation_floor": 0.48,
+      "by_survey": {
+        "known": {
+          "n": 12,
+          "answered": 6,
+          "rescued": 0
+        },
+        "unknown": {
+          "n": 20,
+          "silenced": 20,
+          "wrongly_answered": 0,
+          "rescued": 0
+        },
+        "noise": {
+          "n": 10,
+          "silenced": 9,
+          "wrongly_answered": 1,
+          "rescued": 0
+        },
+        "multihop": {
+          "n": 8,
+          "ok": 4,
+          "wrong": 0,
+          "silenced": 4,
+          "rescued": 0,
+          "ok_rescued": 0,
+          "wrong_rescued": 0
+        }
+      },
+      "rescued_records": []
+    },
+    {
+      "rank_window": 1,
+      "activation_floor": 0.5,
+      "by_survey": {
+        "known": {
+          "n": 12,
+          "answered": 6,
+          "rescued": 0
+        },
+        "unknown": {
+          "n": 20,
+          "silenced": 20,
+          "wrongly_answered": 0,
+          "rescued": 0
+        },
+        "noise": {
+          "n": 10,
+          "silenced": 9,
+          "wrongly_answered": 1,
+          "rescued": 0
+        },
+        "multihop": {
+          "n": 8,
+          "ok": 4,
+          "wrong": 0,
+          "silenced": 4,
+          "rescued": 0,
+          "ok_rescued": 0,
+          "wrong_rescued": 0
+        }
+      },
+      "rescued_records": []
+    },
+    {
+      "rank_window": 2,
+      "activation_floor": 0.3,
+      "by_survey": {
+        "known": {
+          "n": 12,
+          "answered": 7,
+          "rescued": 1
+        },
+        "unknown": {
+          "n": 20,
+          "silenced": 20,
+          "wrongly_answered": 0,
+          "rescued": 0
+        },
+        "noise": {
+          "n": 10,
+          "silenced": 9,
+          "wrongly_answered": 1,
+          "rescued": 0
+        },
+        "multihop": {
+          "n": 8,
+          "ok": 5,
+          "wrong": 0,
+          "silenced": 3,
+          "rescued": 1,
+          "ok_rescued": 1,
+          "wrong_rescued": 0
+        }
+      },
+      "rescued_records": [
+        {
+          "survey": "known",
+          "query": "Which book series referenced CBC in its satire of South Dublin culture?",
+          "sub_question": null,
+          "margin": 0.004781812429428101,
+          "primary_entity": "Ross O'Carroll Kelly's Guide",
+          "kw_hit": null,
+          "supporting_cell": {
+            "rank": 0,
+            "cell_id": 1170529,
+            "activation": 0.34870824217796326,
+            "anchors_present": [
+              "south dublin"
+            ]
+          }
+        },
+        {
+          "survey": "multihop",
+          "query": "What is the highest mountain in the country whose flag features a red maple leaf?",
+          "sub_question": "What is the highest mountain in Canada?",
+          "margin": 0.0004298090934753418,
+          "primary_entity": "Mount Logan",
+          "kw_hit": true,
+          "supporting_cell": {
+            "rank": 0,
+            "cell_id": 357181,
+            "activation": 0.4617217183113098,
+            "anchors_present": [
+              "canada"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "rank_window": 2,
+      "activation_floor": 0.35,
+      "by_survey": {
+        "known": {
+          "n": 12,
+          "answered": 6,
+          "rescued": 0
+        },
+        "unknown": {
+          "n": 20,
+          "silenced": 20,
+          "wrongly_answered": 0,
+          "rescued": 0
+        },
+        "noise": {
+          "n": 10,
+          "silenced": 9,
+          "wrongly_answered": 1,
+          "rescued": 0
+        },
+        "multihop": {
+          "n": 8,
+          "ok": 5,
+          "wrong": 0,
+          "silenced": 3,
+          "rescued": 1,
+          "ok_rescued": 1,
+          "wrong_rescued": 0
+        }
+      },
+      "rescued_records": [
+        {
+          "survey": "multihop",
+          "query": "What is the highest mountain in the country whose flag features a red maple leaf?",
+          "sub_question": "What is the highest mountain in Canada?",
+          "margin": 0.0004298090934753418,
+          "primary_entity": "Mount Logan",
+          "kw_hit": true,
+          "supporting_cell": {
+            "rank": 0,
+            "cell_id": 357181,
+            "activation": 0.4617217183113098,
+            "anchors_present": [
+              "canada"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "rank_window": 2,
+      "activation_floor": 0.38,
+      "by_survey": {
+        "known": {
+          "n": 12,
+          "answered": 6,
+          "rescued": 0
+        },
+        "unknown": {
+          "n": 20,
+          "silenced": 20,
+          "wrongly_answered": 0,
+          "rescued": 0
+        },
+        "noise": {
+          "n": 10,
+          "silenced": 9,
+          "wrongly_answered": 1,
+          "rescued": 0
+        },
+        "multihop": {
+          "n": 8,
+          "ok": 5,
+          "wrong": 0,
+          "silenced": 3,
+          "rescued": 1,
+          "ok_rescued": 1,
+          "wrong_rescued": 0
+        }
+      },
+      "rescued_records": [
+        {
+          "survey": "multihop",
+          "query": "What is the highest mountain in the country whose flag features a red maple leaf?",
+          "sub_question": "What is the highest mountain in Canada?",
+          "margin": 0.0004298090934753418,
+          "primary_entity": "Mount Logan",
+          "kw_hit": true,
+          "supporting_cell": {
+            "rank": 0,
+            "cell_id": 357181,
+            "activation": 0.4617217183113098,
+            "anchors_present": [
+              "canada"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "rank_window": 2,
+      "activation_floor": 0.4,
+      "by_survey": {
+        "known": {
+          "n": 12,
+          "answered": 6,
+          "rescued": 0
+        },
+        "unknown": {
+          "n": 20,
+          "silenced": 20,
+          "wrongly_answered": 0,
+          "rescued": 0
+        },
+        "noise": {
+          "n": 10,
+          "silenced": 9,
+          "wrongly_answered": 1,
+          "rescued": 0
+        },
+        "multihop": {
+          "n": 8,
+          "ok": 5,
+          "wrong": 0,
+          "silenced": 3,
+          "rescued": 1,
+          "ok_rescued": 1,
+          "wrong_rescued": 0
+        }
+      },
+      "rescued_records": [
+        {
+          "survey": "multihop",
+          "query": "What is the highest mountain in the country whose flag features a red maple leaf?",
+          "sub_question": "What is the highest mountain in Canada?",
+          "margin": 0.0004298090934753418,
+          "primary_entity": "Mount Logan",
+          "kw_hit": true,
+          "supporting_cell": {
+            "rank": 0,
+            "cell_id": 357181,
+            "activation": 0.4617217183113098,
+            "anchors_present": [
+              "canada"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "rank_window": 2,
+      "activation_floor": 0.42,
+      "by_survey": {
+        "known": {
+          "n": 12,
+          "answered": 6,
+          "rescued": 0
+        },
+        "unknown": {
+          "n": 20,
+          "silenced": 20,
+          "wrongly_answered": 0,
+          "rescued": 0
+        },
+        "noise": {
+          "n": 10,
+          "silenced": 9,
+          "wrongly_answered": 1,
+          "rescued": 0
+        },
+        "multihop": {
+          "n": 8,
+          "ok": 5,
+          "wrong": 0,
+          "silenced": 3,
+          "rescued": 1,
+          "ok_rescued": 1,
+          "wrong_rescued": 0
+        }
+      },
+      "rescued_records": [
+        {
+          "survey": "multihop",
+          "query": "What is the highest mountain in the country whose flag features a red maple leaf?",
+          "sub_question": "What is the highest mountain in Canada?",
+          "margin": 0.0004298090934753418,
+          "primary_entity": "Mount Logan",
+          "kw_hit": true,
+          "supporting_cell": {
+            "rank": 0,
+            "cell_id": 357181,
+            "activation": 0.4617217183113098,
+            "anchors_present": [
+              "canada"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "rank_window": 2,
+      "activation_floor": 0.44,
+      "by_survey": {
+        "known": {
+          "n": 12,
+          "answered": 6,
+          "rescued": 0
+        },
+        "unknown": {
+          "n": 20,
+          "silenced": 20,
+          "wrongly_answered": 0,
+          "rescued": 0
+        },
+        "noise": {
+          "n": 10,
+          "silenced": 9,
+          "wrongly_answered": 1,
+          "rescued": 0
+        },
+        "multihop": {
+          "n": 8,
+          "ok": 5,
+          "wrong": 0,
+          "silenced": 3,
+          "rescued": 1,
+          "ok_rescued": 1,
+          "wrong_rescued": 0
+        }
+      },
+      "rescued_records": [
+        {
+          "survey": "multihop",
+          "query": "What is the highest mountain in the country whose flag features a red maple leaf?",
+          "sub_question": "What is the highest mountain in Canada?",
+          "margin": 0.0004298090934753418,
+          "primary_entity": "Mount Logan",
+          "kw_hit": true,
+          "supporting_cell": {
+            "rank": 0,
+            "cell_id": 357181,
+            "activation": 0.4617217183113098,
+            "anchors_present": [
+              "canada"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "rank_window": 2,
+      "activation_floor": 0.45,
+      "by_survey": {
+        "known": {
+          "n": 12,
+          "answered": 6,
+          "rescued": 0
+        },
+        "unknown": {
+          "n": 20,
+          "silenced": 20,
+          "wrongly_answered": 0,
+          "rescued": 0
+        },
+        "noise": {
+          "n": 10,
+          "silenced": 9,
+          "wrongly_answered": 1,
+          "rescued": 0
+        },
+        "multihop": {
+          "n": 8,
+          "ok": 5,
+          "wrong": 0,
+          "silenced": 3,
+          "rescued": 1,
+          "ok_rescued": 1,
+          "wrong_rescued": 0
+        }
+      },
+      "rescued_records": [
+        {
+          "survey": "multihop",
+          "query": "What is the highest mountain in the country whose flag features a red maple leaf?",
+          "sub_question": "What is the highest mountain in Canada?",
+          "margin": 0.0004298090934753418,
+          "primary_entity": "Mount Logan",
+          "kw_hit": true,
+          "supporting_cell": {
+            "rank": 0,
+            "cell_id": 357181,
+            "activation": 0.4617217183113098,
+            "anchors_present": [
+              "canada"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "rank_window": 2,
+      "activation_floor": 0.46,
+      "by_survey": {
+        "known": {
+          "n": 12,
+          "answered": 6,
+          "rescued": 0
+        },
+        "unknown": {
+          "n": 20,
+          "silenced": 20,
+          "wrongly_answered": 0,
+          "rescued": 0
+        },
+        "noise": {
+          "n": 10,
+          "silenced": 9,
+          "wrongly_answered": 1,
+          "rescued": 0
+        },
+        "multihop": {
+          "n": 8,
+          "ok": 5,
+          "wrong": 0,
+          "silenced": 3,
+          "rescued": 1,
+          "ok_rescued": 1,
+          "wrong_rescued": 0
+        }
+      },
+      "rescued_records": [
+        {
+          "survey": "multihop",
+          "query": "What is the highest mountain in the country whose flag features a red maple leaf?",
+          "sub_question": "What is the highest mountain in Canada?",
+          "margin": 0.0004298090934753418,
+          "primary_entity": "Mount Logan",
+          "kw_hit": true,
+          "supporting_cell": {
+            "rank": 0,
+            "cell_id": 357181,
+            "activation": 0.4617217183113098,
+            "anchors_present": [
+              "canada"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "rank_window": 2,
+      "activation_floor": 0.48,
+      "by_survey": {
+        "known": {
+          "n": 12,
+          "answered": 6,
+          "rescued": 0
+        },
+        "unknown": {
+          "n": 20,
+          "silenced": 20,
+          "wrongly_answered": 0,
+          "rescued": 0
+        },
+        "noise": {
+          "n": 10,
+          "silenced": 9,
+          "wrongly_answered": 1,
+          "rescued": 0
+        },
+        "multihop": {
+          "n": 8,
+          "ok": 4,
+          "wrong": 0,
+          "silenced": 4,
+          "rescued": 0,
+          "ok_rescued": 0,
+          "wrong_rescued": 0
+        }
+      },
+      "rescued_records": []
+    },
+    {
+      "rank_window": 2,
+      "activation_floor": 0.5,
+      "by_survey": {
+        "known": {
+          "n": 12,
+          "answered": 6,
+          "rescued": 0
+        },
+        "unknown": {
+          "n": 20,
+          "silenced": 20,
+          "wrongly_answered": 0,
+          "rescued": 0
+        },
+        "noise": {
+          "n": 10,
+          "silenced": 9,
+          "wrongly_answered": 1,
+          "rescued": 0
+        },
+        "multihop": {
+          "n": 8,
+          "ok": 4,
+          "wrong": 0,
+          "silenced": 4,
+          "rescued": 0,
+          "ok_rescued": 0,
+          "wrong_rescued": 0
+        }
+      },
+      "rescued_records": []
+    },
+    {
+      "rank_window": 3,
+      "activation_floor": 0.3,
+      "by_survey": {
+        "known": {
+          "n": 12,
+          "answered": 7,
+          "rescued": 1
+        },
+        "unknown": {
+          "n": 20,
+          "silenced": 20,
+          "wrongly_answered": 0,
+          "rescued": 0
+        },
+        "noise": {
+          "n": 10,
+          "silenced": 9,
+          "wrongly_answered": 1,
+          "rescued": 0
+        },
+        "multihop": {
+          "n": 8,
+          "ok": 6,
+          "wrong": 0,
+          "silenced": 2,
+          "rescued": 2,
+          "ok_rescued": 2,
+          "wrong_rescued": 0
+        }
+      },
+      "rescued_records": [
+        {
+          "survey": "known",
+          "query": "Which book series referenced CBC in its satire of South Dublin culture?",
+          "sub_question": null,
+          "margin": 0.004781812429428101,
+          "primary_entity": "Ross O'Carroll Kelly's Guide",
+          "kw_hit": null,
+          "supporting_cell": {
+            "rank": 0,
+            "cell_id": 1170529,
+            "activation": 0.34870824217796326,
+            "anchors_present": [
+              "south dublin"
+            ]
+          }
+        },
+        {
+          "survey": "multihop",
+          "query": "What is the capital of the country where the 2010 Winter Olympics were held?",
+          "sub_question": "What is the capital of Canada?",
+          "margin": 0.00784328579902649,
+          "primary_entity": "Ottawa",
+          "kw_hit": true,
+          "supporting_cell": {
+            "rank": 2,
+            "cell_id": 14446,
+            "activation": 0.4040747880935669,
+            "anchors_present": [
+              "canada"
+            ]
+          }
+        },
+        {
+          "survey": "multihop",
+          "query": "What is the highest mountain in the country whose flag features a red maple leaf?",
+          "sub_question": "What is the highest mountain in Canada?",
+          "margin": 0.0004298090934753418,
+          "primary_entity": "Mount Logan",
+          "kw_hit": true,
+          "supporting_cell": {
+            "rank": 0,
+            "cell_id": 357181,
+            "activation": 0.4617217183113098,
+            "anchors_present": [
+              "canada"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "rank_window": 3,
+      "activation_floor": 0.35,
+      "by_survey": {
+        "known": {
+          "n": 12,
+          "answered": 6,
+          "rescued": 0
+        },
+        "unknown": {
+          "n": 20,
+          "silenced": 20,
+          "wrongly_answered": 0,
+          "rescued": 0
+        },
+        "noise": {
+          "n": 10,
+          "silenced": 9,
+          "wrongly_answered": 1,
+          "rescued": 0
+        },
+        "multihop": {
+          "n": 8,
+          "ok": 6,
+          "wrong": 0,
+          "silenced": 2,
+          "rescued": 2,
+          "ok_rescued": 2,
+          "wrong_rescued": 0
+        }
+      },
+      "rescued_records": [
+        {
+          "survey": "multihop",
+          "query": "What is the capital of the country where the 2010 Winter Olympics were held?",
+          "sub_question": "What is the capital of Canada?",
+          "margin": 0.00784328579902649,
+          "primary_entity": "Ottawa",
+          "kw_hit": true,
+          "supporting_cell": {
+            "rank": 2,
+            "cell_id": 14446,
+            "activation": 0.4040747880935669,
+            "anchors_present": [
+              "canada"
+            ]
+          }
+        },
+        {
+          "survey": "multihop",
+          "query": "What is the highest mountain in the country whose flag features a red maple leaf?",
+          "sub_question": "What is the highest mountain in Canada?",
+          "margin": 0.0004298090934753418,
+          "primary_entity": "Mount Logan",
+          "kw_hit": true,
+          "supporting_cell": {
+            "rank": 0,
+            "cell_id": 357181,
+            "activation": 0.4617217183113098,
+            "anchors_present": [
+              "canada"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "rank_window": 3,
+      "activation_floor": 0.38,
+      "by_survey": {
+        "known": {
+          "n": 12,
+          "answered": 6,
+          "rescued": 0
+        },
+        "unknown": {
+          "n": 20,
+          "silenced": 20,
+          "wrongly_answered": 0,
+          "rescued": 0
+        },
+        "noise": {
+          "n": 10,
+          "silenced": 9,
+          "wrongly_answered": 1,
+          "rescued": 0
+        },
+        "multihop": {
+          "n": 8,
+          "ok": 6,
+          "wrong": 0,
+          "silenced": 2,
+          "rescued": 2,
+          "ok_rescued": 2,
+          "wrong_rescued": 0
+        }
+      },
+      "rescued_records": [
+        {
+          "survey": "multihop",
+          "query": "What is the capital of the country where the 2010 Winter Olympics were held?",
+          "sub_question": "What is the capital of Canada?",
+          "margin": 0.00784328579902649,
+          "primary_entity": "Ottawa",
+          "kw_hit": true,
+          "supporting_cell": {
+            "rank": 2,
+            "cell_id": 14446,
+            "activation": 0.4040747880935669,
+            "anchors_present": [
+              "canada"
+            ]
+          }
+        },
+        {
+          "survey": "multihop",
+          "query": "What is the highest mountain in the country whose flag features a red maple leaf?",
+          "sub_question": "What is the highest mountain in Canada?",
+          "margin": 0.0004298090934753418,
+          "primary_entity": "Mount Logan",
+          "kw_hit": true,
+          "supporting_cell": {
+            "rank": 0,
+            "cell_id": 357181,
+            "activation": 0.4617217183113098,
+            "anchors_present": [
+              "canada"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "rank_window": 3,
+      "activation_floor": 0.4,
+      "by_survey": {
+        "known": {
+          "n": 12,
+          "answered": 6,
+          "rescued": 0
+        },
+        "unknown": {
+          "n": 20,
+          "silenced": 20,
+          "wrongly_answered": 0,
+          "rescued": 0
+        },
+        "noise": {
+          "n": 10,
+          "silenced": 9,
+          "wrongly_answered": 1,
+          "rescued": 0
+        },
+        "multihop": {
+          "n": 8,
+          "ok": 6,
+          "wrong": 0,
+          "silenced": 2,
+          "rescued": 2,
+          "ok_rescued": 2,
+          "wrong_rescued": 0
+        }
+      },
+      "rescued_records": [
+        {
+          "survey": "multihop",
+          "query": "What is the capital of the country where the 2010 Winter Olympics were held?",
+          "sub_question": "What is the capital of Canada?",
+          "margin": 0.00784328579902649,
+          "primary_entity": "Ottawa",
+          "kw_hit": true,
+          "supporting_cell": {
+            "rank": 2,
+            "cell_id": 14446,
+            "activation": 0.4040747880935669,
+            "anchors_present": [
+              "canada"
+            ]
+          }
+        },
+        {
+          "survey": "multihop",
+          "query": "What is the highest mountain in the country whose flag features a red maple leaf?",
+          "sub_question": "What is the highest mountain in Canada?",
+          "margin": 0.0004298090934753418,
+          "primary_entity": "Mount Logan",
+          "kw_hit": true,
+          "supporting_cell": {
+            "rank": 0,
+            "cell_id": 357181,
+            "activation": 0.4617217183113098,
+            "anchors_present": [
+              "canada"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "rank_window": 3,
+      "activation_floor": 0.42,
+      "by_survey": {
+        "known": {
+          "n": 12,
+          "answered": 6,
+          "rescued": 0
+        },
+        "unknown": {
+          "n": 20,
+          "silenced": 20,
+          "wrongly_answered": 0,
+          "rescued": 0
+        },
+        "noise": {
+          "n": 10,
+          "silenced": 9,
+          "wrongly_answered": 1,
+          "rescued": 0
+        },
+        "multihop": {
+          "n": 8,
+          "ok": 5,
+          "wrong": 0,
+          "silenced": 3,
+          "rescued": 1,
+          "ok_rescued": 1,
+          "wrong_rescued": 0
+        }
+      },
+      "rescued_records": [
+        {
+          "survey": "multihop",
+          "query": "What is the highest mountain in the country whose flag features a red maple leaf?",
+          "sub_question": "What is the highest mountain in Canada?",
+          "margin": 0.0004298090934753418,
+          "primary_entity": "Mount Logan",
+          "kw_hit": true,
+          "supporting_cell": {
+            "rank": 0,
+            "cell_id": 357181,
+            "activation": 0.4617217183113098,
+            "anchors_present": [
+              "canada"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "rank_window": 3,
+      "activation_floor": 0.44,
+      "by_survey": {
+        "known": {
+          "n": 12,
+          "answered": 6,
+          "rescued": 0
+        },
+        "unknown": {
+          "n": 20,
+          "silenced": 20,
+          "wrongly_answered": 0,
+          "rescued": 0
+        },
+        "noise": {
+          "n": 10,
+          "silenced": 9,
+          "wrongly_answered": 1,
+          "rescued": 0
+        },
+        "multihop": {
+          "n": 8,
+          "ok": 5,
+          "wrong": 0,
+          "silenced": 3,
+          "rescued": 1,
+          "ok_rescued": 1,
+          "wrong_rescued": 0
+        }
+      },
+      "rescued_records": [
+        {
+          "survey": "multihop",
+          "query": "What is the highest mountain in the country whose flag features a red maple leaf?",
+          "sub_question": "What is the highest mountain in Canada?",
+          "margin": 0.0004298090934753418,
+          "primary_entity": "Mount Logan",
+          "kw_hit": true,
+          "supporting_cell": {
+            "rank": 0,
+            "cell_id": 357181,
+            "activation": 0.4617217183113098,
+            "anchors_present": [
+              "canada"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "rank_window": 3,
+      "activation_floor": 0.45,
+      "by_survey": {
+        "known": {
+          "n": 12,
+          "answered": 6,
+          "rescued": 0
+        },
+        "unknown": {
+          "n": 20,
+          "silenced": 20,
+          "wrongly_answered": 0,
+          "rescued": 0
+        },
+        "noise": {
+          "n": 10,
+          "silenced": 9,
+          "wrongly_answered": 1,
+          "rescued": 0
+        },
+        "multihop": {
+          "n": 8,
+          "ok": 5,
+          "wrong": 0,
+          "silenced": 3,
+          "rescued": 1,
+          "ok_rescued": 1,
+          "wrong_rescued": 0
+        }
+      },
+      "rescued_records": [
+        {
+          "survey": "multihop",
+          "query": "What is the highest mountain in the country whose flag features a red maple leaf?",
+          "sub_question": "What is the highest mountain in Canada?",
+          "margin": 0.0004298090934753418,
+          "primary_entity": "Mount Logan",
+          "kw_hit": true,
+          "supporting_cell": {
+            "rank": 0,
+            "cell_id": 357181,
+            "activation": 0.4617217183113098,
+            "anchors_present": [
+              "canada"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "rank_window": 3,
+      "activation_floor": 0.46,
+      "by_survey": {
+        "known": {
+          "n": 12,
+          "answered": 6,
+          "rescued": 0
+        },
+        "unknown": {
+          "n": 20,
+          "silenced": 20,
+          "wrongly_answered": 0,
+          "rescued": 0
+        },
+        "noise": {
+          "n": 10,
+          "silenced": 9,
+          "wrongly_answered": 1,
+          "rescued": 0
+        },
+        "multihop": {
+          "n": 8,
+          "ok": 5,
+          "wrong": 0,
+          "silenced": 3,
+          "rescued": 1,
+          "ok_rescued": 1,
+          "wrong_rescued": 0
+        }
+      },
+      "rescued_records": [
+        {
+          "survey": "multihop",
+          "query": "What is the highest mountain in the country whose flag features a red maple leaf?",
+          "sub_question": "What is the highest mountain in Canada?",
+          "margin": 0.0004298090934753418,
+          "primary_entity": "Mount Logan",
+          "kw_hit": true,
+          "supporting_cell": {
+            "rank": 0,
+            "cell_id": 357181,
+            "activation": 0.4617217183113098,
+            "anchors_present": [
+              "canada"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "rank_window": 3,
+      "activation_floor": 0.48,
+      "by_survey": {
+        "known": {
+          "n": 12,
+          "answered": 6,
+          "rescued": 0
+        },
+        "unknown": {
+          "n": 20,
+          "silenced": 20,
+          "wrongly_answered": 0,
+          "rescued": 0
+        },
+        "noise": {
+          "n": 10,
+          "silenced": 9,
+          "wrongly_answered": 1,
+          "rescued": 0
+        },
+        "multihop": {
+          "n": 8,
+          "ok": 4,
+          "wrong": 0,
+          "silenced": 4,
+          "rescued": 0,
+          "ok_rescued": 0,
+          "wrong_rescued": 0
+        }
+      },
+      "rescued_records": []
+    },
+    {
+      "rank_window": 3,
+      "activation_floor": 0.5,
+      "by_survey": {
+        "known": {
+          "n": 12,
+          "answered": 6,
+          "rescued": 0
+        },
+        "unknown": {
+          "n": 20,
+          "silenced": 20,
+          "wrongly_answered": 0,
+          "rescued": 0
+        },
+        "noise": {
+          "n": 10,
+          "silenced": 9,
+          "wrongly_answered": 1,
+          "rescued": 0
+        },
+        "multihop": {
+          "n": 8,
+          "ok": 4,
+          "wrong": 0,
+          "silenced": 4,
+          "rescued": 0,
+          "ok_rescued": 0,
+          "wrong_rescued": 0
+        }
+      },
+      "rescued_records": []
+    }
+  ],
+  "recommended": {
+    "rank_window": 3,
+    "activation_floor": 0.3,
+    "by_survey": {
+      "known": {
+        "n": 12,
+        "answered": 7,
+        "rescued": 1
+      },
+      "unknown": {
+        "n": 20,
+        "silenced": 20,
+        "wrongly_answered": 0,
+        "rescued": 0
+      },
+      "noise": {
+        "n": 10,
+        "silenced": 9,
+        "wrongly_answered": 1,
+        "rescued": 0
+      },
+      "multihop": {
+        "n": 8,
+        "ok": 6,
+        "wrong": 0,
+        "silenced": 2,
+        "rescued": 2,
+        "ok_rescued": 2,
+        "wrong_rescued": 0
+      }
+    },
+    "rescued_records": [
+      {
+        "survey": "known",
+        "query": "Which book series referenced CBC in its satire of South Dublin culture?",
+        "sub_question": null,
+        "margin": 0.004781812429428101,
+        "primary_entity": "Ross O'Carroll Kelly's Guide",
+        "kw_hit": null,
+        "supporting_cell": {
+          "rank": 0,
+          "cell_id": 1170529,
+          "activation": 0.34870824217796326,
+          "anchors_present": [
+            "south dublin"
+          ]
+        }
+      },
+      {
+        "survey": "multihop",
+        "query": "What is the capital of the country where the 2010 Winter Olympics were held?",
+        "sub_question": "What is the capital of Canada?",
+        "margin": 0.00784328579902649,
+        "primary_entity": "Ottawa",
+        "kw_hit": true,
+        "supporting_cell": {
+          "rank": 2,
+          "cell_id": 14446,
+          "activation": 0.4040747880935669,
+          "anchors_present": [
+            "canada"
+          ]
+        }
+      },
+      {
+        "survey": "multihop",
+        "query": "What is the highest mountain in the country whose flag features a red maple leaf?",
+        "sub_question": "What is the highest mountain in Canada?",
+        "margin": 0.0004298090934753418,
+        "primary_entity": "Mount Logan",
+        "kw_hit": true,
+        "supporting_cell": {
+          "rank": 0,
+          "cell_id": 357181,
+          "activation": 0.4617217183113098,
+          "anchors_present": [
+            "canada"
+          ]
+        }
+      }
+    ]
+  }
+}
