@@ -1,0 +1,697 @@
+{
+  "case_count": 24,
+  "cases": [
+    {
+      "case_id": "preserve_capital_paraphrase",
+      "category": "preserved_paraphrase",
+      "claim": "Paris sits on the Seine and is the capital of France.",
+      "evidence": "Paris is the capital of France and sits on the Seine.",
+      "expected_label": "accept",
+      "nli_label": "entailment",
+      "notes": "",
+      "relation_id": "capital_france",
+      "relation_role": "preserved"
+    },
+    {
+      "case_id": "flip_capital_entity",
+      "category": "entity_swap",
+      "claim": "Paris is the capital of Germany and sits on the Seine.",
+      "evidence": "Paris is the capital of France and sits on the Seine.",
+      "expected_label": "reject",
+      "nli_label": "contradiction",
+      "notes": "",
+      "relation_id": "capital_france",
+      "relation_role": "entity_flip"
+    },
+    {
+      "case_id": "preserve_meeting_fixture",
+      "category": "preserved_paraphrase",
+      "claim": "There is a morning client meeting on Tuesday.",
+      "evidence": "The client meeting is on Tuesday morning.",
+      "expected_label": "accept",
+      "nli_label": "entailment",
+      "notes": "",
+      "relation_id": "meeting_day",
+      "relation_role": "preserved"
+    },
+    {
+      "case_id": "flip_weekday",
+      "category": "date_weekday_flip",
+      "claim": "The client meeting is on Friday morning.",
+      "evidence": "The client meeting is on Tuesday morning.",
+      "expected_label": "reject",
+      "nli_label": "contradiction",
+      "notes": "",
+      "relation_id": "meeting_day",
+      "relation_role": "weekday_flip"
+    },
+    {
+      "case_id": "preserve_budget_digit_words",
+      "category": "number_preserved",
+      "claim": "The project budget is 90000 dollars.",
+      "evidence": "The project budget is ninety thousand dollars.",
+      "expected_label": "accept",
+      "nli_label": "entailment",
+      "notes": "",
+      "relation_id": "budget",
+      "relation_role": "preserved"
+    },
+    {
+      "case_id": "flip_budget_number",
+      "category": "number_flip",
+      "claim": "The project budget is forty thousand dollars.",
+      "evidence": "The project budget is ninety thousand dollars.",
+      "expected_label": "reject",
+      "nli_label": "contradiction",
+      "notes": "",
+      "relation_id": "budget",
+      "relation_role": "number_flip"
+    },
+    {
+      "case_id": "preserve_backup_region",
+      "category": "preserved_paraphrase",
+      "claim": "We keep nightly backups in the Frankfurt region.",
+      "evidence": "Nightly backups are stored in the Frankfurt region.",
+      "expected_label": "accept",
+      "nli_label": "entailment",
+      "notes": "",
+      "relation_id": "backup_region",
+      "relation_role": "preserved"
+    },
+    {
+      "case_id": "flip_backup_region",
+      "category": "entity_swap",
+      "claim": "Nightly backups are stored in the Dublin region.",
+      "evidence": "Nightly backups are stored in the Frankfurt region.",
+      "expected_label": "reject",
+      "nli_label": "contradiction",
+      "notes": "",
+      "relation_id": "backup_region",
+      "relation_role": "entity_flip"
+    },
+    {
+      "case_id": "preserve_access_policy",
+      "category": "modal_preserved",
+      "claim": "Administrators are required to review access every quarter.",
+      "evidence": "Administrators must review access every quarter.",
+      "expected_label": "accept",
+      "nli_label": "entailment",
+      "notes": "",
+      "relation_id": "access_policy",
+      "relation_role": "preserved"
+    },
+    {
+      "case_id": "flip_access_modal",
+      "category": "modal_flip",
+      "claim": "Administrators may review access every quarter.",
+      "evidence": "Administrators must review access every quarter.",
+      "expected_label": "reject",
+      "nli_label": "contradiction",
+      "notes": "",
+      "relation_id": "access_policy",
+      "relation_role": "modal_flip"
+    },
+    {
+      "case_id": "preserve_rotation",
+      "category": "negation_preserved",
+      "claim": "The database password rotates every ninety days.",
+      "evidence": "The database password rotates every ninety days.",
+      "expected_label": "accept",
+      "nli_label": "entailment",
+      "notes": "",
+      "relation_id": "rotation",
+      "relation_role": "preserved"
+    },
+    {
+      "case_id": "flip_rotation_negation",
+      "category": "negation_flip",
+      "claim": "The database password never rotates every ninety days.",
+      "evidence": "The database password rotates every ninety days.",
+      "expected_label": "reject",
+      "nli_label": "contradiction",
+      "notes": "",
+      "relation_id": "rotation",
+      "relation_role": "negation_flip"
+    },
+    {
+      "case_id": "preserve_direction_relationship",
+      "category": "direction_preserved",
+      "claim": "Irene Joliot-Curie was mentored by Marie Curie in the laboratory.",
+      "evidence": "Marie Curie mentored Irene Joliot-Curie in the laboratory.",
+      "expected_label": "accept",
+      "nli_label": "entailment",
+      "notes": "",
+      "relation_id": "mentorship",
+      "relation_role": "preserved"
+    },
+    {
+      "case_id": "flip_direction_relationship",
+      "category": "direction_flip",
+      "claim": "Irene Joliot-Curie mentored Marie Curie in the laboratory.",
+      "evidence": "Marie Curie mentored Irene Joliot-Curie in the laboratory.",
+      "expected_label": "reject",
+      "nli_label": "contradiction",
+      "notes": "",
+      "relation_id": "mentorship",
+      "relation_role": "direction_flip"
+    },
+    {
+      "case_id": "preserve_quantifier",
+      "category": "quantifier_preserved",
+      "claim": "Every production server requires encrypted backups.",
+      "evidence": "All production servers require encrypted backups.",
+      "expected_label": "accept",
+      "nli_label": "entailment",
+      "notes": "",
+      "relation_id": "backup_quantifier",
+      "relation_role": "preserved"
+    },
+    {
+      "case_id": "flip_quantifier",
+      "category": "quantifier_flip",
+      "claim": "Some production servers require encrypted backups.",
+      "evidence": "All production servers require encrypted backups.",
+      "expected_label": "reject",
+      "nli_label": "contradiction",
+      "notes": "",
+      "relation_id": "backup_quantifier",
+      "relation_role": "quantifier_flip"
+    },
+    {
+      "case_id": "preserve_unit",
+      "category": "unit_preserved",
+      "claim": "The storage limit is 5 GB per file.",
+      "evidence": "The storage limit is 5 gigabytes per file.",
+      "expected_label": "accept",
+      "nli_label": "entailment",
+      "notes": "",
+      "relation_id": "storage_limit",
+      "relation_role": "preserved"
+    },
+    {
+      "case_id": "flip_unit",
+      "category": "unit_flip",
+      "claim": "The storage limit is 5 megabytes per file.",
+      "evidence": "The storage limit is 5 gigabytes per file.",
+      "expected_label": "reject",
+      "nli_label": "contradiction",
+      "notes": "",
+      "relation_id": "storage_limit",
+      "relation_role": "unit_flip"
+    },
+    {
+      "case_id": "preserve_multiclause_scope",
+      "category": "scope_preserved",
+      "claim": "Linux servers running the payment service are covered by the alert.",
+      "evidence": "The alert applies to Linux servers that run the payment service.",
+      "expected_label": "accept",
+      "nli_label": "entailment",
+      "notes": "",
+      "relation_id": "alert_scope",
+      "relation_role": "preserved"
+    },
+    {
+      "case_id": "flip_multiclause_scope",
+      "category": "scope_flip",
+      "claim": "The alert applies to all Linux servers, not only those running the payment service.",
+      "evidence": "The alert applies to Linux servers that run the payment service.",
+      "expected_label": "reject",
+      "nli_label": "contradiction",
+      "notes": "",
+      "relation_id": "alert_scope",
+      "relation_role": "scope_flip"
+    },
+    {
+      "case_id": "near_miss_same_topic",
+      "category": "natural_near_miss",
+      "claim": "Victoria is the capital city of Canada.",
+      "evidence": "Ottawa is the capital city of Canada.",
+      "expected_label": "reject",
+      "nli_label": "contradiction",
+      "notes": "",
+      "relation_id": "canada_capital",
+      "relation_role": "near_miss"
+    },
+    {
+      "case_id": "preserve_currency",
+      "category": "currency_preserved",
+      "claim": "The refund amount is forty euros.",
+      "evidence": "The refund amount is 40 euros.",
+      "expected_label": "accept",
+      "nli_label": "entailment",
+      "notes": "",
+      "relation_id": "refund",
+      "relation_role": "preserved"
+    },
+    {
+      "case_id": "flip_currency",
+      "category": "currency_flip",
+      "claim": "The refund amount is 40 dollars.",
+      "evidence": "The refund amount is 40 euros.",
+      "expected_label": "reject",
+      "nli_label": "contradiction",
+      "notes": "",
+      "relation_id": "refund",
+      "relation_role": "currency_flip"
+    },
+    {
+      "case_id": "neutral_related",
+      "category": "neutral_related",
+      "claim": "Apollo 12 launched later in 1969.",
+      "evidence": "The Apollo 11 mission landed on the Moon in 1969.",
+      "expected_label": "reject",
+      "nli_label": "neutral",
+      "notes": "",
+      "relation_id": "apollo",
+      "relation_role": "related_neutral"
+    }
+  ],
+  "detector_ablations": [
+    {
+      "ablated_false_accepts": 1,
+      "baseline_false_accepts": 0,
+      "detector_name": "detect_entity_mismatch",
+      "newly_accepted_case_ids": [
+        "flip_direction_relationship"
+      ]
+    },
+    {
+      "ablated_false_accepts": 0,
+      "baseline_false_accepts": 0,
+      "detector_name": "detect_number_mismatch",
+      "newly_accepted_case_ids": []
+    },
+    {
+      "ablated_false_accepts": 0,
+      "baseline_false_accepts": 0,
+      "detector_name": "detect_date_or_weekday_mismatch",
+      "newly_accepted_case_ids": []
+    },
+    {
+      "ablated_false_accepts": 1,
+      "baseline_false_accepts": 0,
+      "detector_name": "detect_negation_flip",
+      "newly_accepted_case_ids": [
+        "flip_rotation_negation"
+      ]
+    },
+    {
+      "ablated_false_accepts": 0,
+      "baseline_false_accepts": 0,
+      "detector_name": "detect_antonym_flip_basic",
+      "newly_accepted_case_ids": []
+    },
+    {
+      "ablated_false_accepts": 0,
+      "baseline_false_accepts": 0,
+      "detector_name": "detect_modal_flip",
+      "newly_accepted_case_ids": []
+    }
+  ],
+  "metrics": [
+    {
+      "name": "coverage",
+      "negative": 20,
+      "negative_label": "not_answered",
+      "observed_rate": 0.16666666666666666,
+      "positive": 4,
+      "positive_label": "answered",
+      "rule_of_three_upper_bound": null,
+      "total": 24,
+      "wilson_95": {
+        "lower": 0.0667867632863295,
+        "upper": 0.35853070649699065
+      }
+    },
+    {
+      "name": "false_accept_rate",
+      "negative": 13,
+      "negative_label": "safe_reject",
+      "observed_rate": 0.0,
+      "positive": 0,
+      "positive_label": "false_accept",
+      "rule_of_three_upper_bound": 0.23076923076923078,
+      "total": 13,
+      "wilson_95": {
+        "lower": 0.0,
+        "upper": 0.22809537235419838
+      }
+    },
+    {
+      "name": "over_refusal_rate",
+      "negative": 4,
+      "negative_label": "accepted",
+      "observed_rate": 0.6363636363636364,
+      "positive": 7,
+      "positive_label": "over_refusal",
+      "rule_of_three_upper_bound": null,
+      "total": 11,
+      "wilson_95": {
+        "lower": 0.35380117450784887,
+        "upper": 0.8483352890463243
+      }
+    },
+    {
+      "name": "accuracy_among_answered",
+      "negative": 0,
+      "negative_label": "wrong_answer",
+      "observed_rate": 1.0,
+      "positive": 4,
+      "positive_label": "correct_answer",
+      "rule_of_three_upper_bound": null,
+      "total": 4,
+      "wilson_95": {
+        "lower": 0.5101091635454027,
+        "upper": 1.0
+      }
+    }
+  ],
+  "observations": [
+    {
+      "answered": true,
+      "case_id": "preserve_capital_paraphrase",
+      "category": "preserved_paraphrase",
+      "expected_label": "accept",
+      "false_accept": false,
+      "nli_agreement": "agreement",
+      "nli_label": "entailment",
+      "over_refusal": false,
+      "safe": true,
+      "verdict": "accept"
+    },
+    {
+      "answered": false,
+      "case_id": "flip_capital_entity",
+      "category": "entity_swap",
+      "expected_label": "reject",
+      "false_accept": false,
+      "nli_agreement": "agreement",
+      "nli_label": "contradiction",
+      "over_refusal": false,
+      "safe": true,
+      "verdict": "reject"
+    },
+    {
+      "answered": true,
+      "case_id": "preserve_meeting_fixture",
+      "category": "preserved_paraphrase",
+      "expected_label": "accept",
+      "false_accept": false,
+      "nli_agreement": "agreement",
+      "nli_label": "entailment",
+      "over_refusal": false,
+      "safe": true,
+      "verdict": "accept"
+    },
+    {
+      "answered": false,
+      "case_id": "flip_weekday",
+      "category": "date_weekday_flip",
+      "expected_label": "reject",
+      "false_accept": false,
+      "nli_agreement": "agreement",
+      "nli_label": "contradiction",
+      "over_refusal": false,
+      "safe": true,
+      "verdict": "reject"
+    },
+    {
+      "answered": false,
+      "case_id": "preserve_budget_digit_words",
+      "category": "number_preserved",
+      "expected_label": "accept",
+      "false_accept": false,
+      "nli_agreement": "possible_over_refusal",
+      "nli_label": "entailment",
+      "over_refusal": true,
+      "safe": true,
+      "verdict": "reject"
+    },
+    {
+      "answered": false,
+      "case_id": "flip_budget_number",
+      "category": "number_flip",
+      "expected_label": "reject",
+      "false_accept": false,
+      "nli_agreement": "agreement",
+      "nli_label": "contradiction",
+      "over_refusal": false,
+      "safe": true,
+      "verdict": "reject"
+    },
+    {
+      "answered": true,
+      "case_id": "preserve_backup_region",
+      "category": "preserved_paraphrase",
+      "expected_label": "accept",
+      "false_accept": false,
+      "nli_agreement": "agreement",
+      "nli_label": "entailment",
+      "over_refusal": false,
+      "safe": true,
+      "verdict": "accept"
+    },
+    {
+      "answered": false,
+      "case_id": "flip_backup_region",
+      "category": "entity_swap",
+      "expected_label": "reject",
+      "false_accept": false,
+      "nli_agreement": "agreement",
+      "nli_label": "contradiction",
+      "over_refusal": false,
+      "safe": true,
+      "verdict": "reject"
+    },
+    {
+      "answered": false,
+      "case_id": "preserve_access_policy",
+      "category": "modal_preserved",
+      "expected_label": "accept",
+      "false_accept": false,
+      "nli_agreement": "review",
+      "nli_label": "entailment",
+      "over_refusal": true,
+      "safe": true,
+      "verdict": "ambiguous"
+    },
+    {
+      "answered": false,
+      "case_id": "flip_access_modal",
+      "category": "modal_flip",
+      "expected_label": "reject",
+      "false_accept": false,
+      "nli_agreement": "agreement",
+      "nli_label": "contradiction",
+      "over_refusal": false,
+      "safe": true,
+      "verdict": "reject"
+    },
+    {
+      "answered": true,
+      "case_id": "preserve_rotation",
+      "category": "negation_preserved",
+      "expected_label": "accept",
+      "false_accept": false,
+      "nli_agreement": "agreement",
+      "nli_label": "entailment",
+      "over_refusal": false,
+      "safe": true,
+      "verdict": "accept"
+    },
+    {
+      "answered": false,
+      "case_id": "flip_rotation_negation",
+      "category": "negation_flip",
+      "expected_label": "reject",
+      "false_accept": false,
+      "nli_agreement": "agreement",
+      "nli_label": "contradiction",
+      "over_refusal": false,
+      "safe": true,
+      "verdict": "reject"
+    },
+    {
+      "answered": false,
+      "case_id": "preserve_direction_relationship",
+      "category": "direction_preserved",
+      "expected_label": "accept",
+      "false_accept": false,
+      "nli_agreement": "possible_over_refusal",
+      "nli_label": "entailment",
+      "over_refusal": true,
+      "safe": true,
+      "verdict": "reject"
+    },
+    {
+      "answered": false,
+      "case_id": "flip_direction_relationship",
+      "category": "direction_flip",
+      "expected_label": "reject",
+      "false_accept": false,
+      "nli_agreement": "agreement",
+      "nli_label": "contradiction",
+      "over_refusal": false,
+      "safe": true,
+      "verdict": "reject"
+    },
+    {
+      "answered": false,
+      "case_id": "preserve_quantifier",
+      "category": "quantifier_preserved",
+      "expected_label": "accept",
+      "false_accept": false,
+      "nli_agreement": "review",
+      "nli_label": "entailment",
+      "over_refusal": true,
+      "safe": true,
+      "verdict": "ambiguous"
+    },
+    {
+      "answered": false,
+      "case_id": "flip_quantifier",
+      "category": "quantifier_flip",
+      "expected_label": "reject",
+      "false_accept": false,
+      "nli_agreement": "review",
+      "nli_label": "contradiction",
+      "over_refusal": false,
+      "safe": true,
+      "verdict": "ambiguous"
+    },
+    {
+      "answered": false,
+      "case_id": "preserve_unit",
+      "category": "unit_preserved",
+      "expected_label": "accept",
+      "false_accept": false,
+      "nli_agreement": "review",
+      "nli_label": "entailment",
+      "over_refusal": true,
+      "safe": true,
+      "verdict": "ambiguous"
+    },
+    {
+      "answered": false,
+      "case_id": "flip_unit",
+      "category": "unit_flip",
+      "expected_label": "reject",
+      "false_accept": false,
+      "nli_agreement": "review",
+      "nli_label": "contradiction",
+      "over_refusal": false,
+      "safe": true,
+      "verdict": "ambiguous"
+    },
+    {
+      "answered": false,
+      "case_id": "preserve_multiclause_scope",
+      "category": "scope_preserved",
+      "expected_label": "accept",
+      "false_accept": false,
+      "nli_agreement": "review",
+      "nli_label": "entailment",
+      "over_refusal": true,
+      "safe": true,
+      "verdict": "ambiguous"
+    },
+    {
+      "answered": false,
+      "case_id": "flip_multiclause_scope",
+      "category": "scope_flip",
+      "expected_label": "reject",
+      "false_accept": false,
+      "nli_agreement": "agreement",
+      "nli_label": "contradiction",
+      "over_refusal": false,
+      "safe": true,
+      "verdict": "reject"
+    },
+    {
+      "answered": false,
+      "case_id": "near_miss_same_topic",
+      "category": "natural_near_miss",
+      "expected_label": "reject",
+      "false_accept": false,
+      "nli_agreement": "review",
+      "nli_label": "contradiction",
+      "over_refusal": false,
+      "safe": true,
+      "verdict": "ambiguous"
+    },
+    {
+      "answered": false,
+      "case_id": "preserve_currency",
+      "category": "currency_preserved",
+      "expected_label": "accept",
+      "false_accept": false,
+      "nli_agreement": "review",
+      "nli_label": "entailment",
+      "over_refusal": true,
+      "safe": true,
+      "verdict": "ambiguous"
+    },
+    {
+      "answered": false,
+      "case_id": "flip_currency",
+      "category": "currency_flip",
+      "expected_label": "reject",
+      "false_accept": false,
+      "nli_agreement": "review",
+      "nli_label": "contradiction",
+      "over_refusal": false,
+      "safe": true,
+      "verdict": "ambiguous"
+    },
+    {
+      "answered": false,
+      "case_id": "neutral_related",
+      "category": "neutral_related",
+      "expected_label": "reject",
+      "false_accept": false,
+      "nli_agreement": "review",
+      "nli_label": "neutral",
+      "over_refusal": false,
+      "safe": true,
+      "verdict": "reject"
+    }
+  ],
+  "risk_coverage_curve": [
+    {
+      "answered": 21,
+      "correct_accepts": 10,
+      "coverage_rate": 0.875,
+      "error_rate_among_answered": 0.5238095238095238,
+      "false_accepts": 11,
+      "threshold": 0.35,
+      "total": 24
+    },
+    {
+      "answered": 21,
+      "correct_accepts": 10,
+      "coverage_rate": 0.875,
+      "error_rate_among_answered": 0.5238095238095238,
+      "false_accepts": 11,
+      "threshold": 0.5,
+      "total": 24
+    },
+    {
+      "answered": 20,
+      "correct_accepts": 9,
+      "coverage_rate": 0.8333333333333334,
+      "error_rate_among_answered": 0.55,
+      "false_accepts": 11,
+      "threshold": 0.65,
+      "total": 24
+    },
+    {
+      "answered": 15,
+      "correct_accepts": 7,
+      "coverage_rate": 0.625,
+      "error_rate_among_answered": 0.5333333333333333,
+      "false_accepts": 8,
+      "threshold": 0.8,
+      "total": 24
+    }
+  ]
+}

@@ -21,6 +21,12 @@ bank.db
 bank.db-shm
 bank.db-wal
 
+# Bank Management Workspace local operator state (overlay edits + Q&A log)
+results/v1_bank/overlay.db
+results/v1_bank/overlay.db-shm
+results/v1_bank/overlay.db-wal
+results/v1_bank/qa_history.jsonl
+
 # RetroGPT training checkpoints and run artefacts (large binary state)
 out-retro-*/
 src/retro/data/**/*.bin

@@ -26,7 +26,7 @@ import json
 import sqlite3
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Iterable, List, Optional
+from typing import TYPE_CHECKING, Any, Callable, Iterable, List, Optional
 
 import numpy as np
 
@@ -53,7 +53,8 @@ class StreamingBank:
 
     def __init__(self, db_path: str | Path,
                  report_every: int = 500_000,
-                 overlay: Optional["OverlayStore"] = None) -> None:
+                 overlay: Optional["OverlayStore"] = None,
+                 progress_callback: Optional[Callable[[dict], None]] = None) -> None:
         self.db_path = str(db_path)
         uri = f"file:{self.db_path}?mode=ro"
         # Overlay support: an optional editable bank whose cells are merged
@@ -106,6 +107,14 @@ class StreamingBank:
         self.cell_ids = np.empty(self.n_cells, dtype=np.int64)
 
         t0 = time.time()
+        if progress_callback is not None:
+            progress_callback({
+                "loaded": 0,
+                "total": self.n_cells,
+                "elapsed_seconds": 0.0,
+                "rate_per_second": 0.0,
+                "eta_seconds": None,
+            })
         cur2 = self._conn.cursor()
         cur2.execute("SELECT id, weight, theta FROM cells ORDER BY id ASC")
         for i, (cell_id, weight_blob, theta) in enumerate(cur2):
@@ -116,12 +125,29 @@ class StreamingBank:
                 elapsed = time.time() - t0
                 rate = (i + 1) / elapsed if elapsed > 0 else 0.0
                 eta = (self.n_cells - i - 1) / rate if rate > 0 else 0.0
+                if progress_callback is not None:
+                    progress_callback({
+                        "loaded": i + 1,
+                        "total": self.n_cells,
+                        "elapsed_seconds": elapsed,
+                        "rate_per_second": rate,
+                        "eta_seconds": eta,
+                    })
                 print(
                     f"  [streaming_bank] {i + 1:,}/{self.n_cells:,} "
                     f"({rate:,.0f}/s, eta {eta:.0f}s)",
                     flush=True,
                 )
         self.load_seconds = time.time() - t0
+        if progress_callback is not None:
+            rate = self.n_cells / self.load_seconds if self.load_seconds > 0 else 0.0
+            progress_callback({
+                "loaded": self.n_cells,
+                "total": self.n_cells,
+                "elapsed_seconds": self.load_seconds,
+                "rate_per_second": rate,
+                "eta_seconds": 0.0,
+            })
 
         if self._overlay is not None:
             self._merge_overlay()

@@ -124,6 +124,38 @@ def _check_generator(use_4bit: bool) -> dict:
         )
 
 
+def _check_calibration_fingerprint(
+    bank_path: Path,
+    expected_path: Path | None,
+    write_path: Path | None,
+) -> dict:
+    """Compute the V1 calibration fingerprint without loading all cells."""
+    try:
+        from src.agent.calibration_fingerprint import (
+            CalibrationMismatchError,
+            fingerprint_from_bank_path,
+            load_expected_fingerprint,
+            validate_calibration,
+            write_expected_fingerprint,
+        )
+        current = fingerprint_from_bank_path(bank_path)
+        details = f"current={current.fingerprint}"
+        if write_path is not None:
+            write_expected_fingerprint(write_path, current)
+            details += f"; wrote {write_path}"
+        if expected_path is not None:
+            expected = load_expected_fingerprint(expected_path)
+            validation = validate_calibration(current, expected)
+            details += f"; expected={validation.expected_fingerprint}; match"
+        return _record("calibration_fingerprint", True, details)
+    except CalibrationMismatchError as exc:
+        return _record("calibration_fingerprint", False, str(exc))
+    except Exception as exc:
+        return _record(
+            "calibration_fingerprint", False, f"{type(exc).__name__}: {exc}"
+        )
+
+
 def _check_smoke_ask(
     bank: Any, encoder: Any, question: str, use_4bit: bool
 ) -> dict:
@@ -175,6 +207,16 @@ def main() -> int:
         "--no-4bit", action="store_true",
         help="Load Phi-3 in bfloat16 instead of 4-bit NF4 for the smoke ask.",
     )
+    parser.add_argument(
+        "--calibration-fingerprint",
+        default=None,
+        help="Expected V1 calibration fingerprint JSON. Mismatch fails setup.",
+    )
+    parser.add_argument(
+        "--write-calibration-fingerprint",
+        default=None,
+        help="Write the current V1 calibration fingerprint JSON.",
+    )
     parser.add_argument("--question", default=DEFAULT_SMOKE_QUESTION)
     args = parser.parse_args()
 
@@ -190,6 +232,26 @@ def main() -> int:
     rec = _check_bank_path(bank_path)
     checks.append(rec)
     print(f"  {'OK' if rec['ok'] else 'FAIL'}: {rec['details']}", flush=True)
+
+    if rec["ok"]:
+        expected_fingerprint = (
+            Path(args.calibration_fingerprint)
+            if args.calibration_fingerprint else None
+        )
+        write_fingerprint = (
+            Path(args.write_calibration_fingerprint)
+            if args.write_calibration_fingerprint else None
+        )
+        if expected_fingerprint is not None or write_fingerprint is not None:
+            print("[setup] checking calibration fingerprint...", flush=True)
+            rec = _check_calibration_fingerprint(
+                bank_path, expected_fingerprint, write_fingerprint
+            )
+            checks.append(rec)
+            print(
+                f"  {'OK' if rec['ok'] else 'FAIL'}: {rec['details']}",
+                flush=True,
+            )
 
     if rec["ok"]:
         print("[setup] opening bank...", flush=True)

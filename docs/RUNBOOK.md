@@ -42,7 +42,33 @@ The pipeline returns one of:
 - **Honest silence: drift** — gate fired but the generator's answer wasn't grounded in the cited cell.
 - **Rescued answer** — gate failed but a single high-activation cell within the top-3 contained the answer entity verbatim. Logged in `result.rescue.decision == "answer_rescued"`.
 
-## 3. Add a cell to the overlay
+## 3. Open the Bank Management Workspace
+
+Double-click `run_bank_workspace.bat`, then open:
+
+```text
+http://127.0.0.1:8765
+```
+
+The workspace lets you:
+
+- Ask questions against the current bank.
+- Preview cells from pasted text, Markdown, text files, or extractable PDFs.
+- Add approved cells to the existing overlay store at `results/v1_bank/overlay.db`.
+- Search existing base and overlay cells.
+- Tombstone incorrect cells with a reason.
+- Reload the bank explicitly after overlay edits, with background progress.
+- Inspect overlay change history.
+
+The base bank remains read-only. All additions and removals go through
+`OverlayStore`; no second knowledge-management layer is introduced.
+
+After adding or tombstoning cells, click **Reload bank** before asking questions
+that depend on those edits. Reload runs in the background; the page shows cells
+loaded, percent complete, and ETA while the 5.7M-cell bank is read. The header
+shows whether a reload is required and whether the bank is ready for questions.
+
+## 4. Add a cell to the overlay from the command line
 
 ```pwsh
 python -c "from pathlib import Path; from src.cc_service.encoder import EncoderSingleton; from src.agent.streaming_bank import StreamingBank; from src.agent.bank_admin import OverlayStore, add_cell_from_text; bank = StreamingBank(r'H:\MiniLM\cc_service\bank.db'); enc = EncoderSingleton(model_name=bank.encoder_model); ov = OverlayStore(Path('results/v1_bank/overlay.db')); cid, _ = add_cell_from_text(ov, bank_dim=bank.dim, base_max_id=int(bank.cell_ids.max()), encoder=enc, whiten_fn=bank.whiten, text='Mars has two moons, Phobos and Deimos.', source='manual', label='cell_mars_moons'); print('added cell_id=', cid); ov.close(); bank.close()"
@@ -56,7 +82,7 @@ python scripts/ask.py "What are Mars' moons?" --overlay-path results/v1_bank/ove
 
 Or set `MD_OVERLAY_PATH` in your environment so every `ask.py` call merges the overlay automatically.
 
-## 4. Remove a cell
+## 5. Remove a cell from the command line
 
 ```pwsh
 python -c "from pathlib import Path; from src.agent.bank_admin import OverlayStore; ov = OverlayStore(Path('results/v1_bank/overlay.db')); ov.remove_cell(123456, reason='wrong attribution'); ov.close(); print('tombstoned 123456')"
@@ -64,7 +90,7 @@ python -c "from pathlib import Path; from src.agent.bank_admin import OverlaySto
 
 Tombstones a base or overlay cell id. The merged bank suppresses the cell in `topk` from the next process restart onward. Provenance is preserved — the row in `overlay_cells` is not deleted, and `provenance_log` records the removal with reason and timestamp.
 
-## 5. Inspect provenance
+## 6. Inspect provenance
 
 ```pwsh
 python -c "from pathlib import Path; from src.agent.bank_admin import OverlayStore; ov = OverlayStore(Path('results/v1_bank/overlay.db')); [print(r) for r in ov.provenance()]; ov.close()"
@@ -72,7 +98,7 @@ python -c "from pathlib import Path; from src.agent.bank_admin import OverlaySto
 
 Lists every `add` and `remove` op against the overlay, oldest first, with timestamps and reasons.
 
-## 6. Re-run validations after changes
+## 7. Re-run validations after changes
 
 After any change to the encoder, whitening, indexing, similarity scoring, or model quantisation, **the rescue floor `0.40` is no longer guaranteed valid** and must be recalibrated:
 
@@ -89,9 +115,44 @@ For the test suite:
 python -m pytest evals/
 ```
 
-V1 baseline: 144 tests pass.
+Current eval baseline: 165 tests pass.
 
-## 7. Recovery
+## 7A. Run the V1.1 verification audit
+
+```pwsh
+python scripts/run_verification_audit.py
+```
+
+Writes `reports/v1_1_verification_audit.json` and
+`reports/v1_1_verification_audit.md` from the independent seed corpus at
+`evals/fixtures/v1_1_independent_verification_cases.jsonl`.
+
+The audit reports sample counts, observed rates, Wilson 95% intervals,
+rule-of-three upper bounds for zero-event metrics, a threshold risk/coverage
+curve, verifier/NLI disagreement candidates, and detector ablations. Treat it
+as a credibility check, not as product telemetry.
+
+## 7B. Bind calibration before trusting thresholds
+
+To write the current calibration fingerprint:
+
+```pwsh
+python scripts/setup.py --skip-generator --write-calibration-fingerprint results/v1_calibration_fingerprint.json
+```
+
+To validate a saved fingerprint:
+
+```pwsh
+python scripts/setup.py --skip-generator --calibration-fingerprint results/v1_calibration_fingerprint.json
+```
+
+The fingerprint binds encoder identity, embedding dimension, whitening
+checksum, scoring mode, quantisation, gate threshold, rescue floor, rescue
+rank window, and calibration version. A mismatch fails setup with
+`RECALIBRATION_REQUIRED`; recalibrate before using the thresholds with the new
+geometry.
+
+## 8. Recovery
 
 The base bank is read-only; nothing the V1 pipeline does can corrupt it. To revert all overlay edits to a clean state:
 
@@ -99,9 +160,9 @@ The base bank is read-only; nothing the V1 pipeline does can corrupt it. To reve
 Remove-Item results/v1_bank/overlay.db
 ```
 
-The next pipeline construction proceeds without an overlay. To revert a single edit, tombstone its `cell_id` (Section 4) — provenance is preserved.
+The next pipeline construction proceeds without an overlay. To revert a single edit, tombstone its `cell_id` (Section 5); provenance is preserved.
 
-## 8. Known V1 limitations
+## 9. Known V1 limitations
 
 V1 silences are honest — the pipeline never produces a confident wrong answer. On the canonical 8-question multi-hop set (`experiments/exp20_multihop_probe.py::MULTIHOP_QUERIES`) the V1 baseline scores 6/8 grounded, 0/8 wrong, 2/8 silenced. The two silenced queries are research-known and have measured causes (`results/v1_rerank_diagnostic.json`, exp27):
 
@@ -109,6 +170,35 @@ V1 silences are honest — the pipeline never produces a confident wrong answer.
 - **Q5 (WWII monarch succession → Elizabeth II):** decomposer fault. The Phi-3 sub-question generator flips direction (asks "Who succeeded Elizabeth II?" instead of "Who succeeded George VI?"); top retrieval is correct *for the flipped question*, but margin top1−top2 sits at ~0.011 and the gate silences. A future direction-preserving validator on the decomposer output would be needed.
 
 Both are out of scope for V1. The system's contract — "ground or stay silent, never confabulate" — holds on the 8-question set and on the broader 144-test eval suite.
+
+## 10. Optional hardening for non-personal deployments
+
+The workspace is open by default (personal, localhost, single operator). For an
+internal/team or public deployment, `app/bank_workspace.py` reads these
+environment variables (all off unless set):
+
+| Variable                       | Effect                                                                 |
+| ------------------------------ | ---------------------------------------------------------------------- |
+| `WORKSPACE_API_TOKEN`          | Require `Authorization: Bearer <token>` on mutating routes (commit, tombstone, reload, preview). |
+| `WORKSPACE_REQUIRE_AUTH_READS` | When truthy and a token is set, also require the token on read routes (ask, search, status, history). |
+| `WORKSPACE_MAX_BODY_MB`        | Reject requests whose `Content-Length` exceeds this many MB (413). Caps the base64 upload path. |
+| `WORKSPACE_RATE_LIMIT_PER_MIN` | Per-client fixed-window limit on the expensive routes (ask, preview); excess returns 429. |
+
+`/health` returns `status: "ok"` only when the bank is loaded, else
+`"degraded"` — wire it to your supervisor/load-balancer health probe.
+
+Measure before sizing a public deployment. With the server running, point the
+load harness at it (it does not load the bank itself):
+
+```pwsh
+.\.venv\Scripts\python.exe scripts\loadtest_workspace.py --url http://127.0.0.1:8765 --concurrency 4 --requests 40 --output results\loadtest.json
+```
+
+It reports p50/p95/p99 latency, throughput, and error rate for `/api/ask`.
+These controls do not replace a reverse proxy, TLS, or process supervision; they
+are the application-level floor. The grounded-answer contract is validated for
+the current single-process pipeline only — re-validate if you add multi-worker
+serving, batching, or a shared vector store.
 
 ## Where things live
 
@@ -118,6 +208,8 @@ Both are out of scope for V1. The system's contract — "ground or stay silent, 
 | Editable overlay              | `results/v1_bank/overlay.db`              |
 | Setup verdict                 | `results/setup_check.json`                |
 | Rescue calibration            | `results/v1_rescue_verification.json`     |
+| Verification audit            | `reports/v1_1_verification_audit.*`       |
+| Calibration fingerprint        | `results/v1_calibration_fingerprint.json` |
 | Pipeline                      | `src/agent/answer_pipeline.py`            |
 | Bank loader                   | `src/agent/streaming_bank.py`             |
 | Overlay admin API             | `src/agent/bank_admin.py`                 |
