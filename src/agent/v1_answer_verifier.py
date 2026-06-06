@@ -57,6 +57,17 @@ _NUMBER_RE = re.compile(r"\d+(?:[.,]\d+)?")
 # these are markup, not facts, so strip them before numeric extraction.
 _CITATION_BRACKET_RE = re.compile(r"\[\d+\]")
 
+# Word boundary used to strip bare cell-ID numerics that the generator
+# was supposed to bracket but didn't (e.g. "fact 51098" instead of
+# "fact [51098]"). Built per-call from the cell IDs we presented.
+def _build_bare_cell_id_re(cell_ids: Sequence[int]) -> re.Pattern[str] | None:
+    if not cell_ids:
+        return None
+    parts = sorted({str(int(c)) for c in cell_ids}, key=len, reverse=True)
+    if not parts:
+        return None
+    return re.compile(r"\b(?:" + "|".join(re.escape(p) for p in parts) + r")\b")
+
 _MONTHS: frozenset[str] = frozenset({
     "january", "february", "march", "april", "may", "june",
     "july", "august", "september", "october", "november", "december",
@@ -151,13 +162,25 @@ def _extract_numerics(text: str) -> list[str]:
 
 
 def verify(answer: str, cell_texts: Sequence[str], question: str = "",
-           min_coverage: float = MIN_COVERAGE) -> VerificationDecision:
-    """Verify ``answer`` against ``cell_texts``; ``question`` is filtered out."""
+           min_coverage: float = MIN_COVERAGE,
+           cell_ids: Sequence[int] | None = None) -> VerificationDecision:
+    """Verify ``answer`` against ``cell_texts``; ``question`` is filtered out.
+
+    ``cell_ids`` is the set of bracketed IDs we presented in the prompt.
+    When supplied, those numerics are treated as markup wherever they
+    appear in the answer — bracketed or bare — so a generator that
+    drops the brackets ("fact 51098" instead of "fact [51098]") is not
+    penalised by Stage B as a confabulated numeric.
+    """
 
     # Strip citation markers ("[1]", "[123]") before any extraction: they
     # are prompt-shaped markup, not facts, and would otherwise be classified
     # as uncited numerics.
     answer_clean = _CITATION_BRACKET_RE.sub(" ", answer)
+    if cell_ids:
+        bare_re = _build_bare_cell_id_re(cell_ids)
+        if bare_re is not None:
+            answer_clean = bare_re.sub(" ", answer_clean)
 
     question_tokens = set(_content_tokens(question)) if question else set()
     question_numerics = set(_extract_numerics(question)) if question else set()

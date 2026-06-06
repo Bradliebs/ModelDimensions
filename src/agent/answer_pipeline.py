@@ -391,20 +391,33 @@ class AnswerPipeline:
         verdict = v1_answer_verifier.verify(
             raw_answer, cell_texts, question=question,
             min_coverage=self.min_coverage,
+            cell_ids=[c["cell_id"] for c in cells],
         )
         timings["verify"] = time.time() - t0
 
         if not verdict.grounded:
+            if verdict.coverage < verdict.threshold and verdict.uncited_numerics:
+                reason = (
+                    f"verify: coverage={verdict.coverage:.2f} "
+                    f"< {verdict.threshold:.2f} AND "
+                    f"uncited numerics={verdict.uncited_numerics[:3]}"
+                )
+            elif verdict.coverage < verdict.threshold:
+                reason = (
+                    f"verify: coverage={verdict.coverage:.2f} "
+                    f"< {verdict.threshold:.2f}; "
+                    f"uncovered={verdict.uncovered_tokens[:5]}"
+                )
+            else:
+                reason = (
+                    f"verify: uncited numerics in answer "
+                    f"{verdict.uncited_numerics[:3]}"
+                )
             return PipelineResult(
                 question=question,
                 answer=SILENCE_DRIFT,
                 silence=True,
-                silence_reason=(
-                    f"verify: coverage={verdict.coverage:.2f} "
-                    f"< {verdict.threshold:.2f}; "
-                    f"uncovered={verdict.uncovered_tokens[:5]}; "
-                    f"uncited_numerics={verdict.uncited_numerics[:3]}"
-                ),
+                silence_reason=reason,
                 citations=[c["cell_id"] for c in cells],
                 retrieval=retrieval,
                 gate=gate_dict,

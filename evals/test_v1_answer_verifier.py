@@ -105,3 +105,54 @@ def test_decimal_numerics_handled():
     v = verify(answer, cells, question="What is pi?")
     assert v.grounded is True
     assert v.uncited_numerics == []
+
+
+def test_bare_cell_id_is_not_confabulated_numeric():
+    """When cell_ids is supplied, an unbracketed cell ID emitted by the
+    generator ("fact 51098" instead of "fact [51098]") must not count as
+    a confabulated numeric. The brackets are markup, not facts; the ID
+    itself was given to the model and is presentation noise."""
+    cells = [
+        "Saint Helena is a British overseas territory whose official "
+        "language is English; Napoleon was exiled to Saint Helena."
+    ]
+    answer = (
+        "Saint Helena is a British territory and its official language "
+        "is English, as supported by fact 51098."
+    )
+    v = verify(answer, cells, question="What language?", cell_ids=[51098])
+    assert v.grounded is True
+    assert v.uncited_numerics == []
+
+
+def test_bare_cell_id_not_stripped_when_cell_ids_omitted():
+    """Backward compatibility: callers that do not pass cell_ids still get
+    strict numeric checking, so an unbracketed 51098 still fails."""
+    cells = [
+        "Saint Helena is a British overseas territory whose official "
+        "language is English; Napoleon was exiled to Saint Helena."
+    ]
+    answer = (
+        "Saint Helena is a British territory and its official language "
+        "is English, as supported by fact 51098."
+    )
+    v = verify(answer, cells, question="What language?")
+    assert v.grounded is False
+    assert "51098" in v.uncited_numerics
+
+
+def test_bare_cell_id_does_not_mask_real_confabulated_numeric():
+    """Even with cell_ids supplied, a year/number not in any cell must
+    still fail Stage B."""
+    cells = [
+        "Saint Helena is a British overseas territory whose official "
+        "language is English; Napoleon was exiled to Saint Helena."
+    ]
+    answer = (
+        "Saint Helena is a British territory; its official language has "
+        "been English since 1834. See fact 51098."
+    )
+    v = verify(answer, cells, question="What language?", cell_ids=[51098])
+    assert v.grounded is False
+    assert "1834" in v.uncited_numerics
+    assert "51098" not in v.uncited_numerics
