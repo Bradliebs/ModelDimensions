@@ -200,6 +200,31 @@ are the application-level floor. The grounded-answer contract is validated for
 the current single-process pipeline only — re-validate if you add multi-worker
 serving, batching, or a shared vector store.
 
+### Hosted / GPU inference (escaping the CPU latency wall)
+
+The default generator is local Phi-3 on CPU. A measured load test (12 requests,
+concurrency 4) showed ~132 s cold, ~258 s p50 under load, ~0.02 rps, with
+timeouts beginning at 4 concurrent requests — generation, not retrieval, is the
+bottleneck. To serve more than a single sequential operator, point the workspace
+at an OpenAI-compatible inference endpoint (Azure OpenAI, or a vLLM/Ollama host
+on a GPU). When `WORKSPACE_LLM_BASE_URL` is set, `app/bank_workspace.py` uses the
+hosted generator instead of loading local Phi-3; unset, behaviour is unchanged.
+
+| Variable                  | Effect                                                                 |
+| ------------------------- | ---------------------------------------------------------------------- |
+| `WORKSPACE_LLM_BASE_URL`  | OpenAI-compatible base, e.g. `https://api.openai.com/v1` or `http://gpu-host:8000/v1`. Enables hosted inference. |
+| `WORKSPACE_LLM_MODEL`     | Model name to request (default `gpt-4o-mini`).                          |
+| `WORKSPACE_LLM_API_KEY`   | Optional bearer token for the endpoint.                                |
+| `WORKSPACE_LLM_TIMEOUT`   | Per-request timeout in seconds (default 60).                           |
+| `WORKSPACE_LLM_MAX_TOKENS`| Max generated tokens (default 512).                                    |
+
+The hosted generator is deterministic (`temperature=0`) to match the local Phi-3
+path, so the grounded-answer verification sees comparable drafts. It calls
+`POST {base_url}/chat/completions` and raises an error rather than returning an
+empty or fabricated answer on failure. Switching backends does not change the
+grounding contract, but re-run `python -m pytest evals -q` and a smoke ask after
+pointing at a new endpoint.
+
 ## Where things live
 
 | What                          | Where                                     |

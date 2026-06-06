@@ -16,8 +16,10 @@ if str(ROOT) not in sys.path:
 from src.agent.bank_admin import OverlayStore
 from src.agent.bank_workspace import (
     CandidateCell,
+    HostedHttpGenerator,
     WorkspaceError,
     WorkspaceSession,
+    build_generator_from_env,
     build_ingestion_draft,
     commit_candidate_cells,
     extract_pdf_text,
@@ -326,3 +328,115 @@ def test_given_unloaded_session_when_asked_then_user_gets_reload_error(tmp_path:
             raise AssertionError("Expected unloaded session to require explicit reload")
     finally:
         session.close()
+
+
+def test_given_prompt_when_hosted_generator_then_posts_openai_payload_and_parses():
+    # Arrange
+    captured: dict = {}
+
+    def fake_transport(url, payload, headers, timeout):
+        captured["url"] = url
+        captured["payload"] = payload
+        captured["headers"] = headers
+        captured["timeout"] = timeout
+        return {"choices": [{"message": {"content": "  grounded draft  "}}]}
+
+    gen = HostedHttpGenerator(
+        base_url="https://endpoint.example/v1/",
+        model="my-model",
+        api_key="secret-token",
+        timeout=12.0,
+        max_tokens=256,
+        transport=fake_transport,
+    )
+
+    # Act
+    result = gen("Why is the sky blue?")
+
+    # Assert
+    assert result == "grounded draft"
+    assert captured["url"] == "https://endpoint.example/v1/chat/completions"
+    assert captured["payload"]["model"] == "my-model"
+    assert captured["payload"]["messages"] == [{"role": "user", "content": "Why is the sky blue?"}]
+    assert captured["payload"]["max_tokens"] == 256
+    assert captured["payload"]["temperature"] == 0
+    assert captured["headers"]["Authorization"] == "Bearer secret-token"
+    assert captured["timeout"] == 12.0
+
+
+def test_given_no_api_key_when_hosted_generator_then_no_auth_header():
+    # Arrange
+    captured: dict = {}
+
+    def fake_transport(url, payload, headers, timeout):
+        captured["headers"] = headers
+        return {"choices": [{"message": {"content": "ok"}}]}
+
+    gen = HostedHttpGenerator(base_url="http://h/v1", model="m", transport=fake_transport)
+
+    # Act
+    gen("hi")
+
+    # Assert
+    assert "Authorization" not in captured["headers"]
+
+
+def test_given_bad_response_shape_when_hosted_generator_then_workspace_error():
+    # Arrange
+    gen = HostedHttpGenerator(
+        base_url="http://h/v1",
+        model="m",
+        transport=lambda *a: {"unexpected": True},
+    )
+
+    # Act / Assert
+    try:
+        gen("hi")
+    except WorkspaceError as exc:
+        assert "unexpected response shape" in str(exc)
+    else:
+        raise AssertionError("Expected WorkspaceError on malformed response")
+
+
+def test_given_transport_failure_when_hosted_generator_then_workspace_error():
+    # Arrange
+    def boom(*_args):
+        raise ConnectionError("refused")
+
+    gen = HostedHttpGenerator(base_url="http://h/v1", model="m", transport=boom)
+
+    # Act / Assert
+    try:
+        gen("hi")
+    except WorkspaceError as exc:
+        assert "request failed" in str(exc)
+    else:
+        raise AssertionError("Expected WorkspaceError on transport failure")
+
+
+def test_given_base_url_env_when_build_generator_then_hosted_instance():
+    # Arrange
+    env = {
+        "WORKSPACE_LLM_BASE_URL": "http://gpu-host:8000/v1",
+        "WORKSPACE_LLM_MODEL": "phi3-vllm",
+        "WORKSPACE_LLM_API_KEY": "k",
+        "WORKSPACE_LLM_TIMEOUT": "30",
+        "WORKSPACE_LLM_MAX_TOKENS": "256",
+    }
+
+    # Act
+    gen = build_generator_from_env(env)
+
+    # Assert
+    assert isinstance(gen, HostedHttpGenerator)
+    assert gen.base_url == "http://gpu-host:8000/v1"
+    assert gen.model == "phi3-vllm"
+    assert gen.api_key == "k"
+    assert gen.timeout == 30.0
+    assert gen.max_tokens == 256
+
+
+def test_given_no_base_url_env_when_build_generator_then_none():
+    # Act / Assert
+    assert build_generator_from_env({}) is None
+    assert build_generator_from_env({"WORKSPACE_LLM_BASE_URL": "   "}) is None

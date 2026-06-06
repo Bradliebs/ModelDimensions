@@ -9,10 +9,13 @@ from __future__ import annotations
 
 import base64
 import json
+import os
 import re
 import sqlite3
 import threading
 import time
+import urllib.error
+import urllib.request
 import zlib
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -57,6 +60,104 @@ class LazyPhi3Generator:
                     generate, _ = _build_phi3_generator(self.model_name, self.use_4bit)
                     self._generate = generate
         return self._generate(prompt)
+
+
+def _http_post_json(url: str, payload: dict, headers: dict, timeout: float) -> dict:
+    data = json.dumps(payload).encode("utf-8")
+    request = urllib.request.Request(url, data=data, headers=headers, method="POST")
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+        return json.loads(response.read().decode("utf-8"))
+
+
+class HostedHttpGenerator:
+    """Generate answers via an OpenAI-compatible chat/completions endpoint.
+
+    Backend-agnostic: point ``base_url`` at any OpenAI-compatible server
+    (Azure OpenAI, a vLLM or Ollama GPU host, etc.). Deterministic
+    (``temperature=0``) to match the local Phi-3 path so the grounded-answer
+    contract sees comparable drafts. Raises ``WorkspaceError`` on any failure
+    rather than returning an empty or fabricated string.
+    """
+
+    def __init__(
+        self,
+        *,
+        base_url: str,
+        model: str,
+        api_key: str | None = None,
+        timeout: float = 60.0,
+        max_tokens: int = 512,
+        transport: Callable[[str, dict, dict, float], dict] | None = None,
+    ) -> None:
+        self.base_url = base_url.rstrip("/")
+        self.model = model
+        self.api_key = api_key
+        self.timeout = timeout
+        self.max_tokens = max_tokens
+        self._transport = transport if transport is not None else _http_post_json
+
+    def __call__(self, prompt: str) -> str:
+        url = f"{self.base_url}/chat/completions"
+        payload = {
+            "model": self.model,
+            "messages": [{"role": "user", "content": prompt}],
+            "max_tokens": self.max_tokens,
+            "temperature": 0,
+        }
+        headers = {"Content-Type": "application/json"}
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
+        try:
+            body = self._transport(url, payload, headers, self.timeout)
+        except urllib.error.HTTPError as exc:
+            detail = ""
+            try:
+                detail = exc.read().decode("utf-8", "replace")[:500]
+            except Exception:
+                pass
+            raise WorkspaceError(f"Hosted LLM HTTP {exc.code}: {detail}") from exc
+        except Exception as exc:
+            raise WorkspaceError(f"Hosted LLM request failed: {exc}") from exc
+        try:
+            content = body["choices"][0]["message"]["content"]
+        except (KeyError, IndexError, TypeError) as exc:
+            raise WorkspaceError(
+                f"Hosted LLM returned an unexpected response shape: {body!r}"[:500]
+            ) from exc
+        if not isinstance(content, str):
+            raise WorkspaceError("Hosted LLM returned non-text content.")
+        return content.strip()
+
+
+def build_generator_from_env(
+    env: dict[str, str] | None = None,
+) -> Callable[[str], str] | None:
+    """Return a hosted generator if ``WORKSPACE_LLM_BASE_URL`` is set, else None.
+
+    Returning ``None`` preserves the default local Phi-3 path, so the personal
+    tier is unchanged unless an operator opts in to a hosted endpoint.
+    """
+    env = env if env is not None else os.environ
+    base_url = (env.get("WORKSPACE_LLM_BASE_URL") or "").strip()
+    if not base_url:
+        return None
+    model = (env.get("WORKSPACE_LLM_MODEL") or "gpt-4o-mini").strip()
+    api_key = (env.get("WORKSPACE_LLM_API_KEY") or "").strip() or None
+    try:
+        timeout = float(env.get("WORKSPACE_LLM_TIMEOUT") or "60")
+    except ValueError:
+        timeout = 60.0
+    try:
+        max_tokens = int(env.get("WORKSPACE_LLM_MAX_TOKENS") or "512")
+    except ValueError:
+        max_tokens = 512
+    return HostedHttpGenerator(
+        base_url=base_url,
+        model=model,
+        api_key=api_key,
+        timeout=timeout,
+        max_tokens=max_tokens,
+    )
 
 
 @dataclass(frozen=True)

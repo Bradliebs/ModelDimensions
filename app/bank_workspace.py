@@ -32,6 +32,7 @@ from src.agent.bank_workspace import (  # noqa: E402
     DEFAULT_OVERLAY,
     WorkspaceError,
     WorkspaceSession,
+    build_generator_from_env,
     build_ingestion_draft,
     candidates_from_payload,
     commit_candidate_cells,
@@ -523,7 +524,10 @@ def create_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     parser = create_parser()
     args = parser.parse_args(argv)
-    generator = (lambda prompt: "I drafted an answer but could not ground it in memory.") if args.skip_generator else None
+    if args.skip_generator:
+        generator = lambda prompt: "I drafted an answer but could not ground it in memory."
+    else:
+        generator = build_generator_from_env()
     session = WorkspaceSession(
         bank_path=args.bank_path,
         overlay_path=args.overlay_path,
