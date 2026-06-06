@@ -33,7 +33,7 @@ def main() -> int:
     )
     parser.add_argument("--top-k", type=int, default=10)
     parser.add_argument(
-        "--margin", type=float, default=0.05,
+        "--margin", type=float, default=0.03,
         help="Silence-gate margin threshold (top1 - top2).",
     )
     parser.add_argument(

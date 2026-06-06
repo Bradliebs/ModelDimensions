@@ -32,7 +32,7 @@ def main() -> int:
     parser.add_argument("--port", type=int, default=8080)
     parser.add_argument("--bank-path", default=DEFAULT_BANK)
     parser.add_argument("--top-k", type=int, default=10)
-    parser.add_argument("--margin", type=float, default=0.05)
+    parser.add_argument("--margin", type=float, default=0.03)
     parser.add_argument("--no-4bit", action="store_true")
     args = parser.parse_args()
 

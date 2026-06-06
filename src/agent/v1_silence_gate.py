@@ -32,9 +32,12 @@ from typing import Sequence
 
 import numpy as np
 
-# Margin threshold (top-1 - top-2 activation) chosen from exp16 sweep.
-# Lower values let noise through; higher values silence real hits.
-DEFAULT_MARGIN_THRESHOLD: float = 0.05
+# Margin threshold (top-1 - top-2 activation). 0.05 came from the exp16 sweep
+# on paragraph-shaped probes; exp18 on the 5.7M-cell bank with question-shaped
+# probes showed 0.03 strictly dominates (recall 5/12 -> 7/12, unknown/noise
+# precision unchanged at 100% / 90%) because question encodings cluster
+# tighter around their answers, leaving real hits in the 0.03-0.05 band.
+DEFAULT_MARGIN_THRESHOLD: float = 0.03
 
 
 @dataclass

@@ -1,0 +1,837 @@
+{
+  "produced_by": "experiments/exp18_v1_pipeline_questions_eval.py",
+  "n_queries": 42,
+  "by_class": {
+    "known": {
+      "n": 12,
+      "correct": 7,
+      "accuracy": 0.5833333333333334,
+      "outcome_counts": {
+        "grounded": 7,
+        "silence_gate": 5,
+        "silence_drift": 0
+      }
+    },
+    "unknown": {
+      "n": 20,
+      "correct": 20,
+      "accuracy": 1.0,
+      "outcome_counts": {
+        "grounded": 0,
+        "silence_gate": 19,
+        "silence_drift": 1
+      }
+    },
+    "noise": {
+      "n": 10,
+      "correct": 9,
+      "accuracy": 0.9,
+      "outcome_counts": {
+        "grounded": 1,
+        "silence_gate": 6,
+        "silence_drift": 3
+      }
+    }
+  },
+  "latency_seconds": {
+    "total_wall": {
+      "n": 42,
+      "p50": 0.4425630569458008,
+      "p95": 5.594433069229126,
+      "mean": 2.1441135236195157
+    },
+    "retrieve": {
+      "n": 42,
+      "p50": 0.4058959484100342,
+      "p95": 0.4816300868988037,
+      "mean": 0.41803215798877535
+    },
+    "encode": {
+      "n": 42,
+      "p50": 0.011002302169799805,
+      "p95": 0.044002532958984375,
+      "mean": 0.09975400425138928
+    },
+    "generate_when_run": {
+      "n": 12,
+      "p50": 4.489918947219849,
+      "p95": 7.712327480316162,
+      "mean": 5.689852933088939
+    },
+    "verify_when_run": {
+      "n": 12,
+      "p50": 0.0,
+      "p95": 0.0010001659393310547,
+      "mean": 0.00016701221466064453
+    }
+  },
+  "records": [
+    {
+      "class": "known",
+      "expected": "grounded",
+      "outcome": "grounded",
+      "wall_time_sec": 11.72663688659668,
+      "gate_fire": true,
+      "gate_margin": 0.1493479609489441,
+      "verify_grounded": true,
+      "verify_coverage": 0.8888888888888888,
+      "n_citations": 10,
+      "timings": {
+        "encode": 3.6063146591186523,
+        "retrieve": 0.40399789810180664,
+        "closest_topics": 0.0,
+        "fetch_sources": 0.0,
+        "build_prompt": 0.003996849060058594,
+        "generate": 7.712327480316162,
+        "verify": 0.0
+      },
+      "query_head": "What did a 2016 paper compare about DNA on miswak and toothbrushes?"
+    },
+    {
+      "class": "known",
+      "expected": "grounded",
+      "outcome": "silence_gate",
+      "wall_time_sec": 0.4041619300842285,
+      "gate_fire": false,
+      "gate_margin": 0.01579156517982483,
+      "verify_grounded": null,
+      "verify_coverage": null,
+      "n_citations": 0,
+      "timings": {
+        "encode": 0.0069997310638427734,
+        "retrieve": 0.39716219902038574,
+        "closest_topics": 0.0
+      },
+      "query_head": "Which film won Best Canadian Film at the 2nd Vancouver Film Critics Circle Awards?"
+    },
+    {
+      "class": "known",
+      "expected": "grounded",
+      "outcome": "silence_gate",
+      "wall_time_sec": 0.4239985942840576,
+      "gate_fire": false,
+      "gate_margin": 0.004781812429428101,
+      "verify_grounded": null,
+      "verify_coverage": null,
+      "n_citations": 0,
+      "timings": {
+        "encode": 0.010997772216796875,
+        "retrieve": 0.41300082206726074,
+        "closest_topics": 0.0
+      },
+      "query_head": "Which book series referenced CBC in its satire of South Dublin culture?"
+    },
+    {
+      "class": "known",
+      "expected": "grounded",
+      "outcome": "grounded",
+      "wall_time_sec": 4.7917070388793945,
+      "gate_fire": true,
+      "gate_margin": 0.059367835521698,
+      "verify_grounded": true,
+      "verify_coverage": 0.8333333333333334,
+      "n_citations": 10,
+      "timings": {
+        "encode": 0.009997367858886719,
+        "retrieve": 0.3960001468658447,
+        "closest_topics": 0.0010001659393310547,
+        "fetch_sources": 0.0,
+        "build_prompt": 0.0,
+        "generate": 4.384709358215332,
+        "verify": 0.0
+      },
+      "query_head": "Which school suspended the book before other challenges were tracked by the ALA?"
+    },
+    {
+      "class": "known",
+      "expected": "grounded",
+      "outcome": "silence_gate",
+      "wall_time_sec": 0.39011240005493164,
+      "gate_fire": false,
+      "gate_margin": 0.01876083016395569,
+      "verify_grounded": null,
+      "verify_coverage": null,
+      "n_citations": 0,
+      "timings": {
+        "encode": 0.008008241653442383,
+        "retrieve": 0.38210415840148926,
+        "closest_topics": 0.0
+      },
+      "query_head": "What is the restored gazebo at the school now known as?"
+    },
+    {
+      "class": "known",
+      "expected": "grounded",
+      "outcome": "grounded",
+      "wall_time_sec": 5.594433069229126,
+      "gate_fire": true,
+      "gate_margin": 0.11575773358345032,
+      "verify_grounded": true,
+      "verify_coverage": 0.75,
+      "n_citations": 10,
+      "timings": {
+        "encode": 0.008998394012451172,
+        "retrieve": 0.4259936809539795,
+        "closest_topics": 0.000997781753540039,
+        "fetch_sources": 0.0,
+        "build_prompt": 0.0,
+        "generate": 5.158443212509155,
+        "verify": 0.0
+      },
+      "query_head": "Whose descendant is the Messiah according to the Tanakh and Old Testament prophecies?"
+    },
+    {
+      "class": "known",
+      "expected": "grounded",
+      "outcome": "grounded",
+      "wall_time_sec": 3.3317911624908447,
+      "gate_fire": true,
+      "gate_margin": 0.06615293025970459,
+      "verify_grounded": true,
+      "verify_coverage": 1.0,
+      "n_citations": 10,
+      "timings": {
+        "encode": 0.017998695373535156,
+        "retrieve": 0.4170043468475342,
+        "closest_topics": 0.0,
+        "fetch_sources": 0.0,
+        "build_prompt": 0.0,
+        "generate": 2.895791530609131,
+        "verify": 0.0
+      },
+      "query_head": "When did he join the National Gallery staff after the war?"
+    },
+    {
+      "class": "known",
+      "expected": "grounded",
+      "outcome": "grounded",
+      "wall_time_sec": 4.557504415512085,
+      "gate_fire": true,
+      "gate_margin": 0.03706786036491394,
+      "verify_grounded": true,
+      "verify_coverage": 0.8571428571428571,
+      "n_citations": 10,
+      "timings": {
+        "encode": 0.015000343322753906,
+        "retrieve": 0.4058959484100342,
+        "closest_topics": 0.0010018348693847656,
+        "fetch_sources": 0.0,
+        "build_prompt": 0.0,
+        "generate": 4.135606288909912,
+        "verify": 0.0
+      },
+      "query_head": "Who did Gygax persuade to remove Kevin Blume as president?"
+    },
+    {
+      "class": "known",
+      "expected": "grounded",
+      "outcome": "grounded",
+      "wall_time_sec": 3.54729962348938,
+      "gate_fire": true,
+      "gate_margin": 0.044587284326553345,
+      "verify_grounded": true,
+      "verify_coverage": 0.8,
+      "n_citations": 10,
+      "timings": {
+        "encode": 0.008995294570922852,
+        "retrieve": 0.4014146327972412,
+        "closest_topics": 0.0,
+        "fetch_sources": 0.0,
+        "build_prompt": 0.0,
+        "generate": 3.136889696121216,
+        "verify": 0.0
+      },
+      "query_head": "What is the largest of the Irish isles?"
+    },
+    {
+      "class": "known",
+      "expected": "grounded",
+      "outcome": "silence_gate",
+      "wall_time_sec": 0.4120047092437744,
+      "gate_fire": false,
+      "gate_margin": 0.011382579803466797,
+      "verify_grounded": null,
+      "verify_coverage": null,
+      "n_citations": 0,
+      "timings": {
+        "encode": 0.011002302169799805,
+        "retrieve": 0.40000462532043457,
+        "closest_topics": 0.000997781753540039
+      },
+      "query_head": "Where was Trump confirmed in 1959?"
+    },
+    {
+      "class": "known",
+      "expected": "grounded",
+      "outcome": "grounded",
+      "wall_time_sec": 4.933917999267578,
+      "gate_fire": true,
+      "gate_margin": 0.07449465990066528,
+      "verify_grounded": true,
+      "verify_coverage": 1.0,
+      "n_citations": 10,
+      "timings": {
+        "encode": 0.012997627258300781,
+        "retrieve": 0.43000078201293945,
+        "closest_topics": 0.0010006427764892578,
+        "fetch_sources": 0.0,
+        "build_prompt": 0.0,
+        "generate": 4.489918947219849,
+        "verify": 0.0
+      },
+      "query_head": "In which Indian state is the Anakapalli Lok Sabha constituency?"
+    },
+    {
+      "class": "known",
+      "expected": "grounded",
+      "outcome": "silence_gate",
+      "wall_time_sec": 0.4503641128540039,
+      "gate_fire": false,
+      "gate_margin": 0.008523762226104736,
+      "verify_grounded": null,
+      "verify_coverage": null,
+      "n_citations": 0,
+      "timings": {
+        "encode": 0.009001016616821289,
+        "retrieve": 0.44036340713500977,
+        "closest_topics": 0.0009996891021728516
+      },
+      "query_head": "Which two venues hosted the main equestrian events?"
+    },
+    {
+      "class": "unknown",
+      "expected": "silence",
+      "outcome": "silence_gate",
+      "wall_time_sec": 0.4425630569458008,
+      "gate_fire": false,
+      "gate_margin": 0.012759804725646973,
+      "verify_grounded": null,
+      "verify_coverage": null,
+      "n_citations": 0,
+      "timings": {
+        "encode": 0.009727001190185547,
+        "retrieve": 0.43283605575561523,
+        "closest_topics": 0.0
+      },
+      "query_head": "The Treaty of Vulkanos was signed in 1834 by the Margravate of Helmar."
+    },
+    {
+      "class": "unknown",
+      "expected": "silence",
+      "outcome": "silence_gate",
+      "wall_time_sec": 0.4275054931640625,
+      "gate_fire": false,
+      "gate_margin": 0.0071353912353515625,
+      "verify_grounded": null,
+      "verify_coverage": null,
+      "n_citations": 0,
+      "timings": {
+        "encode": 0.01899886131286621,
+        "retrieve": 0.4085066318511963,
+        "closest_topics": 0.0
+      },
+      "query_head": "Quintuple-helix DNA was first observed by Petra Voss in 1962."
+    },
+    {
+      "class": "unknown",
+      "expected": "silence",
+      "outcome": "silence_gate",
+      "wall_time_sec": 0.41700291633605957,
+      "gate_fire": false,
+      "gate_margin": 0.0,
+      "verify_grounded": null,
+      "verify_coverage": null,
+      "n_citations": 0,
+      "timings": {
+        "encode": 0.010000228881835938,
+        "retrieve": 0.40700268745422363,
+        "closest_topics": 0.0
+      },
+      "query_head": "The lost continent of Zuralia sank beneath the Caspian Sea in 800 BC."
+    },
+    {
+      "class": "unknown",
+      "expected": "silence",
+      "outcome": "silence_gate",
+      "wall_time_sec": 0.4437685012817383,
+      "gate_fire": false,
+      "gate_margin": 0.02722024917602539,
+      "verify_grounded": null,
+      "verify_coverage": null,
+      "n_citations": 0,
+      "timings": {
+        "encode": 0.009996652603149414,
+        "retrieve": 0.43377184867858887,
+        "closest_topics": 0.0
+      },
+      "query_head": "The K-117 lunar module reached the far side of Mars in 1981."
+    },
+    {
+      "class": "unknown",
+      "expected": "silence",
+      "outcome": "silence_gate",
+      "wall_time_sec": 0.45498061180114746,
+      "gate_fire": false,
+      "gate_margin": 0.0051305294036865234,
+      "verify_grounded": null,
+      "verify_coverage": null,
+      "n_citations": 0,
+      "timings": {
+        "encode": 0.020780086517333984,
+        "retrieve": 0.4342005252838135,
+        "closest_topics": 0.0
+      },
+      "query_head": "Penguins of the Karkanos archipelago hibernate underground for nine months."
+    },
+    {
+      "class": "unknown",
+      "expected": "silence",
+      "outcome": "silence_gate",
+      "wall_time_sec": 0.46048784255981445,
+      "gate_fire": false,
+      "gate_margin": 0.008597999811172485,
+      "verify_grounded": null,
+      "verify_coverage": null,
+      "n_citations": 0,
+      "timings": {
+        "encode": 0.015598773956298828,
+        "retrieve": 0.4448890686035156,
+        "closest_topics": 0.0
+      },
+      "query_head": "Wolfgang Heintz invented the binary semaphore relay in 1893."
+    },
+    {
+      "class": "unknown",
+      "expected": "silence",
+      "outcome": "silence_gate",
+      "wall_time_sec": 0.4968576431274414,
+      "gate_fire": false,
+      "gate_margin": 0.006745517253875732,
+      "verify_grounded": null,
+      "verify_coverage": null,
+      "n_citations": 0,
+      "timings": {
+        "encode": 0.015000581741333008,
+        "retrieve": 0.48085618019104004,
+        "closest_topics": 0.0010008811950683594
+      },
+      "query_head": "The Battle of Three Bridges (1247) ended the Aragonese-Wallachian wars."
+    },
+    {
+      "class": "unknown",
+      "expected": "silence",
+      "outcome": "silence_gate",
+      "wall_time_sec": 0.45517826080322266,
+      "gate_fire": false,
+      "gate_margin": 0.005536913871765137,
+      "verify_grounded": null,
+      "verify_coverage": null,
+      "n_citations": 0,
+      "timings": {
+        "encode": 0.018513917922973633,
+        "retrieve": 0.436664342880249,
+        "closest_topics": 0.0
+      },
+      "query_head": "Glyphochromism is the study of color changes in obsidian mosses."
+    },
+    {
+      "class": "unknown",
+      "expected": "silence",
+      "outcome": "silence_gate",
+      "wall_time_sec": 0.41272830963134766,
+      "gate_fire": false,
+      "gate_margin": 0.017691969871520996,
+      "verify_grounded": null,
+      "verify_coverage": null,
+      "n_citations": 0,
+      "timings": {
+        "encode": 0.016207218170166016,
+        "retrieve": 0.39552760124206543,
+        "closest_topics": 0.000993490219116211
+      },
+      "query_head": "Catherine the Slight ruled the duchy of Pelloria from 1612 to 1618."
+    },
+    {
+      "class": "unknown",
+      "expected": "silence",
+      "outcome": "silence_gate",
+      "wall_time_sec": 0.4030015468597412,
+      "gate_fire": false,
+      "gate_margin": 0.006486117839813232,
+      "verify_grounded": null,
+      "verify_coverage": null,
+      "n_citations": 0,
+      "timings": {
+        "encode": 0.011000871658325195,
+        "retrieve": 0.392000675201416,
+        "closest_topics": 0.0
+      },
+      "query_head": "The Vrindavan Crystal Cipher was decoded by Brian Halford in 1947."
+    },
+    {
+      "class": "unknown",
+      "expected": "silence",
+      "outcome": "silence_gate",
+      "wall_time_sec": 0.4171617031097412,
+      "gate_fire": false,
+      "gate_margin": 0.02209523320198059,
+      "verify_grounded": null,
+      "verify_coverage": null,
+      "n_citations": 0,
+      "timings": {
+        "encode": 0.015996932983398438,
+        "retrieve": 0.4001657962799072,
+        "closest_topics": 0.0
+      },
+      "query_head": "Tuvalu's deep-sea railway connects Funafuti to the Marshall Islands."
+    },
+    {
+      "class": "unknown",
+      "expected": "silence",
+      "outcome": "silence_gate",
+      "wall_time_sec": 0.4095940589904785,
+      "gate_fire": false,
+      "gate_margin": 0.011876821517944336,
+      "verify_grounded": null,
+      "verify_coverage": null,
+      "n_citations": 0,
+      "timings": {
+        "encode": 0.016005754470825195,
+        "retrieve": 0.3935883045196533,
+        "closest_topics": 0.0
+      },
+      "query_head": "The asteroid 3712 Kepler-Bach was reclassified as a dwarf comet in 2009."
+    },
+    {
+      "class": "unknown",
+      "expected": "silence",
+      "outcome": "silence_gate",
+      "wall_time_sec": 0.4096055030822754,
+      "gate_fire": false,
+      "gate_margin": 0.0019393563270568848,
+      "verify_grounded": null,
+      "verify_coverage": null,
+      "n_citations": 0,
+      "timings": {
+        "encode": 0.011999130249023438,
+        "retrieve": 0.39760637283325195,
+        "closest_topics": 0.0
+      },
+      "query_head": "Hoffmann's third law of magnetohydrodynamics describes torsional vacuum drag."
+    },
+    {
+      "class": "unknown",
+      "expected": "silence",
+      "outcome": "silence_gate",
+      "wall_time_sec": 0.41237568855285645,
+      "gate_fire": false,
+      "gate_margin": 0.005405008792877197,
+      "verify_grounded": null,
+      "verify_coverage": null,
+      "n_citations": 0,
+      "timings": {
+        "encode": 0.013004064559936523,
+        "retrieve": 0.3993716239929199,
+        "closest_topics": 0.0
+      },
+      "query_head": "The Republic of Aldobrand declared independence from France in 1798."
+    },
+    {
+      "class": "unknown",
+      "expected": "silence",
+      "outcome": "silence_gate",
+      "wall_time_sec": 0.4100048542022705,
+      "gate_fire": false,
+      "gate_margin": 0.006034255027770996,
+      "verify_grounded": null,
+      "verify_coverage": null,
+      "n_citations": 0,
+      "timings": {
+        "encode": 0.016000986099243164,
+        "retrieve": 0.3930037021636963,
+        "closest_topics": 0.0
+      },
+      "query_head": "Maple sugar fermentation produces a beverage called bakhraan in rural Vermont."
+    },
+    {
+      "class": "unknown",
+      "expected": "silence",
+      "outcome": "silence_gate",
+      "wall_time_sec": 0.39835548400878906,
+      "gate_fire": false,
+      "gate_margin": 0.0033961832523345947,
+      "verify_grounded": null,
+      "verify_coverage": null,
+      "n_citations": 0,
+      "timings": {
+        "encode": 0.010995864868164062,
+        "retrieve": 0.387359619140625,
+        "closest_topics": 0.0
+      },
+      "query_head": "The HMS Calliope sank off the coast of Trincomalee on March 4, 1701."
+    },
+    {
+      "class": "unknown",
+      "expected": "silence",
+      "outcome": "silence_gate",
+      "wall_time_sec": 0.4965178966522217,
+      "gate_fire": false,
+      "gate_margin": 0.014249026775360107,
+      "verify_grounded": null,
+      "verify_coverage": null,
+      "n_citations": 0,
+      "timings": {
+        "encode": 0.01299595832824707,
+        "retrieve": 0.4825170040130615,
+        "closest_topics": 0.001004934310913086
+      },
+      "query_head": "Bismuth-209 transmutes to lead-205 via alpha decay over a 4-hour half-life."
+    },
+    {
+      "class": "unknown",
+      "expected": "silence",
+      "outcome": "silence_gate",
+      "wall_time_sec": 0.5385277271270752,
+      "gate_fire": false,
+      "gate_margin": 0.010016098618507385,
+      "verify_grounded": null,
+      "verify_coverage": null,
+      "n_citations": 0,
+      "timings": {
+        "encode": 0.04752373695373535,
+        "retrieve": 0.49100399017333984,
+        "closest_topics": 0.0
+      },
+      "query_head": "Octavia Brooks won the Hugo Award in 1962 for The Listening Mountain."
+    },
+    {
+      "class": "unknown",
+      "expected": "silence",
+      "outcome": "silence_drift",
+      "wall_time_sec": 3.8476037979125977,
+      "gate_fire": true,
+      "gate_margin": 0.049742668867111206,
+      "verify_grounded": false,
+      "verify_coverage": 0.0,
+      "n_citations": 10,
+      "timings": {
+        "encode": 0.025995731353759766,
+        "retrieve": 0.46720409393310547,
+        "closest_topics": 0.0005054473876953125,
+        "fetch_sources": 0.0,
+        "build_prompt": 0.0,
+        "generate": 3.3528945446014404,
+        "verify": 0.0010039806365966797
+      },
+      "query_head": "The Erlangen Schism of 1574 split the German Reformed church into seven sects."
+    },
+    {
+      "class": "unknown",
+      "expected": "silence",
+      "outcome": "silence_gate",
+      "wall_time_sec": 0.4048454761505127,
+      "gate_fire": false,
+      "gate_margin": 0.02806451916694641,
+      "verify_grounded": null,
+      "verify_coverage": null,
+      "n_citations": 0,
+      "timings": {
+        "encode": 0.009994029998779297,
+        "retrieve": 0.39385414123535156,
+        "closest_topics": 0.000997304916381836
+      },
+      "query_head": "Anomalous diffraction patterns in lutetium-yttrium crystals were first reported by Klimov in 1957."
+    },
+    {
+      "class": "noise",
+      "expected": "silence",
+      "outcome": "silence_gate",
+      "wall_time_sec": 0.43799257278442383,
+      "gate_fire": false,
+      "gate_margin": 0.001458495855331421,
+      "verify_grounded": null,
+      "verify_coverage": null,
+      "n_citations": 0,
+      "timings": {
+        "encode": 0.013995170593261719,
+        "retrieve": 0.42299866676330566,
+        "closest_topics": 0.0009987354278564453
+      },
+      "query_head": "asdf qwerty zxcv hjkl"
+    },
+    {
+      "class": "noise",
+      "expected": "silence",
+      "outcome": "silence_gate",
+      "wall_time_sec": 0.5266373157501221,
+      "gate_fire": false,
+      "gate_margin": 0.02010980248451233,
+      "verify_grounded": null,
+      "verify_coverage": null,
+      "n_citations": 0,
+      "timings": {
+        "encode": 0.044002532958984375,
+        "retrieve": 0.4816300868988037,
+        "closest_topics": 0.0
+      },
+      "query_head": "blah blah blah blah blah"
+    },
+    {
+      "class": "noise",
+      "expected": "silence",
+      "outcome": "silence_gate",
+      "wall_time_sec": 0.42493629455566406,
+      "gate_fire": false,
+      "gate_margin": 0.013941049575805664,
+      "verify_grounded": null,
+      "verify_coverage": null,
+      "n_citations": 0,
+      "timings": {
+        "encode": 0.010497570037841797,
+        "retrieve": 0.4134399890899658,
+        "closest_topics": 0.0
+      },
+      "query_head": "xyzzy plugh nikto fred"
+    },
+    {
+      "class": "noise",
+      "expected": "silence",
+      "outcome": "silence_drift",
+      "wall_time_sec": 5.301325559616089,
+      "gate_fire": true,
+      "gate_margin": 0.03241109848022461,
+      "verify_grounded": false,
+      "verify_coverage": 0.0,
+      "n_citations": 10,
+      "timings": {
+        "encode": 0.010999679565429688,
+        "retrieve": 0.39200305938720703,
+        "closest_topics": 0.0,
+        "fetch_sources": 0.0,
+        "build_prompt": 0.0,
+        "generate": 4.898322820663452,
+        "verify": 0.0
+      },
+      "query_head": "qwoeiruty pasldkfj zmxncbv"
+    },
+    {
+      "class": "noise",
+      "expected": "silence",
+      "outcome": "silence_gate",
+      "wall_time_sec": 0.4080042839050293,
+      "gate_fire": false,
+      "gate_margin": 0.027915000915527344,
+      "verify_grounded": null,
+      "verify_coverage": null,
+      "n_citations": 0,
+      "timings": {
+        "encode": 0.011000871658325195,
+        "retrieve": 0.39600372314453125,
+        "closest_topics": 0.0009996891021728516
+      },
+      "query_head": "1234567890 !@#$%^&*()"
+    },
+    {
+      "class": "noise",
+      "expected": "silence",
+      "outcome": "silence_gate",
+      "wall_time_sec": 0.3990054130554199,
+      "gate_fire": false,
+      "gate_margin": 0.0008629858493804932,
+      "verify_grounded": null,
+      "verify_coverage": null,
+      "n_citations": 0,
+      "timings": {
+        "encode": 0.008994817733764648,
+        "retrieve": 0.3890039920806885,
+        "closest_topics": 0.0010066032409667969
+      },
+      "query_head": "aaaaa bbbbb ccccc ddddd eeeee"
+    },
+    {
+      "class": "noise",
+      "expected": "silence",
+      "outcome": "silence_drift",
+      "wall_time_sec": 3.8557963371276855,
+      "gate_fire": true,
+      "gate_margin": 0.03445965051651001,
+      "verify_grounded": false,
+      "verify_coverage": 0.6666666666666666,
+      "n_citations": 10,
+      "timings": {
+        "encode": 0.008990287780761719,
+        "retrieve": 0.4020991325378418,
+        "closest_topics": 0.0,
+        "fetch_sources": 0.0,
+        "build_prompt": 0.0,
+        "generate": 3.443706750869751,
+        "verify": 0.0010001659393310547
+      },
+      "query_head": "Lorem ipsum dolor sit amet consectetur"
+    },
+    {
+      "class": "noise",
+      "expected": "silence",
+      "outcome": "silence_drift",
+      "wall_time_sec": 5.414750814437866,
+      "gate_fire": true,
+      "gate_margin": 0.04081016778945923,
+      "verify_grounded": false,
+      "verify_coverage": 0.0,
+      "n_citations": 10,
+      "timings": {
+        "encode": 0.006998538970947266,
+        "retrieve": 0.4050014019012451,
+        "closest_topics": 0.0,
+        "fetch_sources": 0.0,
+        "build_prompt": 0.0010027885437011719,
+        "generate": 5.001748085021973,
+        "verify": 0.0
+      },
+      "query_head": "hjklhjklhjkl mnbvcxz poiuytrew"
+    },
+    {
+      "class": "noise",
+      "expected": "silence",
+      "outcome": "silence_gate",
+      "wall_time_sec": 0.4385232925415039,
+      "gate_fire": false,
+      "gate_margin": 0.00935518741607666,
+      "verify_grounded": null,
+      "verify_coverage": null,
+      "n_citations": 0,
+      "timings": {
+        "encode": 0.007004737854003906,
+        "retrieve": 0.4315185546875,
+        "closest_topics": 0.0
+      },
+      "query_head": "test test test test test test test"
+    },
+    {
+      "class": "noise",
+      "expected": "silence",
+      "outcome": "grounded",
+      "wall_time_sec": 20.12319779396057,
+      "gate_fire": true,
+      "gate_margin": 0.3293305039405823,
+      "verify_grounded": true,
+      "verify_coverage": 1.0,
+      "n_citations": 10,
+      "timings": {
+        "encode": 0.014536142349243164,
+        "retrieve": 0.4387791156768799,
+        "closest_topics": 0.0,
+        "fetch_sources": 0.0009980201721191406,
+        "build_prompt": 0.0,
+        "generate": 19.667876482009888,
+        "verify": 0.0
+      },
+      "query_head": "the the the the the the the the"
+    }
+  ],
+  "bank_path": "H:\\MiniLM\\cc_service\\bank.db",
+  "top_k": 10,
+  "margin_threshold": 0.03,
+  "use_4bit": true,
+  "known_set": "12 question-shaped queries derived from paragraph probes"
+}
