@@ -27,6 +27,7 @@ from typing import Callable, List, Optional, Sequence
 import numpy as np
 
 from src.agent import v1_answer_verifier, v1_silence_gate
+from src.agent.reranker import CrossEncoderReranker
 from src.agent.streaming_bank import StreamingBank
 from src.cc_service.encoder import EncoderSingleton
 
@@ -185,11 +186,25 @@ class AnswerPipeline:
         use_4bit: bool = True,
         encoder: Optional[EncoderSingleton] = None,
         bank: Optional[StreamingBank] = None,
+        reranker: Optional[CrossEncoderReranker] = None,
+        rerank_margin_threshold: Optional[float] = None,
     ) -> None:
         self.top_k = int(top_k)
         self.margin_threshold = float(margin_threshold)
         self.min_coverage = float(min_coverage)
         self.closest_topics_k = int(closest_topics_k)
+        self.reranker = reranker
+        # Reranker score scale differs from cosine activation scale, so the
+        # threshold has to be supplied explicitly when reranker is on. No
+        # safe default exists across cross-encoders.
+        if reranker is not None and rerank_margin_threshold is None:
+            raise ValueError(
+                "rerank_margin_threshold must be set when reranker is provided"
+            )
+        self.rerank_margin_threshold = (
+            float(rerank_margin_threshold)
+            if rerank_margin_threshold is not None else None
+        )
 
         t0 = time.time()
         self.bank = bank if bank is not None else StreamingBank(bank_path)
@@ -266,14 +281,56 @@ class AnswerPipeline:
         timings["retrieve"] = time.time() - t0
 
         activations = topk["activations"]
-        gate = v1_silence_gate.decide(
-            activations.tolist(), margin_threshold=self.margin_threshold
-        )
         retrieval = {
             "top_k_cell_ids": [int(c) for c in topk["cell_ids"]],
             "activations": [float(a) for a in activations],
             "thetas": [float(t) for t in topk["thetas"]],
         }
+
+        # Reranker path: fetch texts now so the cross-encoder can score
+        # (query, text) pairs, then reorder cells by rerank score and gate
+        # on the rerank margin instead of the cosine margin.
+        reranked_cell_texts: Optional[list[str]] = None
+        if self.reranker is not None:
+            t0 = time.time()
+            pre_texts = self.bank.fetch_source_texts(
+                retrieval["top_k_cell_ids"]
+            )
+            timings["fetch_sources"] = time.time() - t0
+
+            t0 = time.time()
+            text_strs = [t or "" for t in pre_texts]
+            rerank_scores = self.reranker.score(question, text_strs)
+            # Cells with no source text are pushed below the rest by giving
+            # them -inf; they cannot ground an answer in any case.
+            for i, t in enumerate(pre_texts):
+                if not t:
+                    rerank_scores[i] = -float("inf")
+            order = np.argsort(-rerank_scores)
+            retrieval["top_k_cell_ids"] = [
+                retrieval["top_k_cell_ids"][i] for i in order
+            ]
+            retrieval["activations"] = [
+                retrieval["activations"][i] for i in order
+            ]
+            retrieval["thetas"] = [retrieval["thetas"][i] for i in order]
+            retrieval["rerank_scores"] = [float(rerank_scores[i]) for i in order]
+            reranked_cell_texts = [text_strs[i] for i in order]
+            timings["rerank"] = time.time() - t0
+
+            gate_signal = retrieval["rerank_scores"]
+            gate_threshold = self.rerank_margin_threshold
+        else:
+            gate_signal = activations.tolist()
+            gate_threshold = self.margin_threshold
+
+        gate = v1_silence_gate.decide(
+            gate_signal, margin_threshold=gate_threshold
+        )
+        gate_dict = gate.as_dict()
+        gate_dict["signal_source"] = (
+            "rerank" if self.reranker is not None else "encoder"
+        )
 
         t0 = time.time()
         closest_topics = self._build_closest_topics(retrieval)
@@ -287,21 +344,25 @@ class AnswerPipeline:
                 silence_reason=f"gate: {gate.reason}",
                 citations=[],
                 retrieval=retrieval,
-                gate=gate.as_dict(),
+                gate=gate_dict,
                 verification=None,
                 timings=timings,
                 closest_topics=closest_topics,
             )
 
-        # Gate fired: fetch source texts only for the cells we'll cite.
-        t0 = time.time()
-        texts = self.bank.fetch_source_texts(retrieval["top_k_cell_ids"])
+        # Gate fired: fetch source texts only for the cells we'll cite
+        # (reranker path already has them in hand and in the right order).
+        if reranked_cell_texts is not None:
+            texts = reranked_cell_texts
+        else:
+            t0 = time.time()
+            texts = self.bank.fetch_source_texts(retrieval["top_k_cell_ids"])
+            timings["fetch_sources"] = time.time() - t0
         cells = [
             {"cell_id": cid, "text": txt or ""}
             for cid, txt in zip(retrieval["top_k_cell_ids"], texts)
             if txt
         ]
-        timings["fetch_sources"] = time.time() - t0
 
         if not cells:
             return PipelineResult(
@@ -311,7 +372,7 @@ class AnswerPipeline:
                 silence_reason="gate fired but no source text on disk for top cells",
                 citations=[],
                 retrieval=retrieval,
-                gate=gate.as_dict(),
+                gate=gate_dict,
                 verification=None,
                 timings=timings,
                 closest_topics=closest_topics,
@@ -346,7 +407,7 @@ class AnswerPipeline:
                 ),
                 citations=[c["cell_id"] for c in cells],
                 retrieval=retrieval,
-                gate=gate.as_dict(),
+                gate=gate_dict,
                 verification=verdict.as_dict(),
                 timings=timings,
                 closest_topics=closest_topics,
@@ -359,7 +420,7 @@ class AnswerPipeline:
             silence_reason="",
             citations=[c["cell_id"] for c in cells],
             retrieval=retrieval,
-            gate=gate.as_dict(),
+            gate=gate_dict,
             verification=verdict.as_dict(),
             timings=timings,
             closest_topics=closest_topics,

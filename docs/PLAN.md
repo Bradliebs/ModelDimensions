@@ -159,6 +159,71 @@ turn. Examples: `"Which book series referenced CBC…"` (margin 0.005),
 The single false-fire on noise remains the `"the the the…"` outlier at
 margin +0.329, documented as a known wart.
 
+### Step 3 follow-on — cross-encoder reranker (encoder-ceiling probe)
+
+[src/agent/reranker.py](../src/agent/reranker.py) wraps
+`cross-encoder/ms-marco-MiniLM-L-6-v2` (~80 MB) as an opt-in second-stage
+scorer over the top-k bi-encoder candidates.
+[src/agent/answer_pipeline.py](../src/agent/answer_pipeline.py) takes a
+`reranker=…, rerank_margin_threshold=…` pair: when supplied, the gate
+operates on rerank-margin (logit top1 − top2) instead of cosine-margin
+and the cell order seen by the verifier is the reranker's order.
+
+[experiments/exp19_reranker_sweep.py](../experiments/exp19_reranker_sweep.py)
+runs the same 12-question / 20-unknown / 10-noise probe set with the
+reranker enabled. A calibration probe first established that the
+reranker's logit margin on knowns has a floor of +0.286 (q9 "Irish isles")
+and the encoder-ceiling cases jump dramatically (q3 0.005 → 9.420; q5
+0.019 → 6.840; q12 0.009 → 3.779), so a `rerank-margin = 0.25` threshold
+fires on every known.
+
+Full-pipeline result at rerank-margin 0.25 vs. the encoder-only baseline:
+
+| signal           | known      | unknown   | noise     | p50 latency | result file |
+|------------------|-----------:|----------:|----------:|------------:|-------------|
+| encoder m=0.03   |  7/12 58%  | 20/20 100%| 9/10 90%  |    0.44 s   | `results/v1_pipeline_questions_eval_m003.json` |
+| **rerank m=0.25**| **11/12 92%** | 18/20 90% | 5/10 50% |   7.11 s   | `results/v1_pipeline_reranker_eval_mp025.json` |
+
+**Recall on knowns**: closes the encoder ceiling. All 5 previously
+gate-silenced knowns (the ≤ 0.019 cluster) now ground correctly,
+including q10 Trump-1959 and q12 equestrian venues. The single remaining
+miss is q2 Vancouver Film Critics, which the reranker promotes correctly
+but the verifier rejects on a token-coverage edge case (silence_drift,
+not gate failure).
+
+**Precision cost**: noise accuracy drops 90 % → 50 %. The cross-encoder
+is trained on MS MARCO passage ranking — it is built to find the "most
+relevant" passage, not to say "nothing here". Gibberish like
+`"asdf qwerty zxcv hjkl"` (rerank-margin +8.59), `"1234567890 !@#$%^&*()"`
+(+6.70), and `"test test test test…"` (+1.24) all blow past any threshold
+that preserves known recall, then Phi-3 generates coverage-passing text
+about whichever Wikipedia cell happened to lexically match. Unknown
+accuracy also slips 100 % → 90 % for the same reason.
+
+**Latency cost**: p50 wall time goes from 0.44 s → 7.11 s. The gate
+short-circuit no longer suppresses noise queries, so Phi-3 generation
+runs on 36/42 queries (was 12/42). The reranker itself adds only a
+modest per-query overhead; the dominant cost is the lost short-circuit.
+
+**Verdict**: the reranker is a real solution to the encoder ceiling on
+recall but is **not a drop-in replacement** for the encoder gate. The
+honest options are:
+
+1. **Hybrid gate** — use the encoder gate as a cheap noise filter, fall
+   back to the reranker only on queries the encoder gate silences with
+   ambiguous-but-not-zero margins (e.g. 0.005 ≤ encoder-margin < 0.03).
+   Preserves the 0.44 s p50 for noise/cold queries, recovers the
+   encoder-ceiling knowns, never lets gibberish reach the reranker.
+2. **Stronger noise pre-filter** — character-level entropy or perplexity
+   check before retrieval. Independent of the gate.
+3. **Accept the tradeoff** as configured if real workloads have low
+   noise rates and latency budget allows.
+
+Implementation in
+[experiments/exp19_reranker_sweep.py](../experiments/exp19_reranker_sweep.py)
+and `results/v1_pipeline_reranker_eval_mp025.json`. Default pipeline is
+unchanged (no reranker); existing 101 tests pass.
+
 **Takeaway:** the probe set quality dominated the algorithm at this scale.
 With questions, the verifier handles precision and the gate becomes a
 latency optimisation. The shipped V1 honestly answers question-shaped
