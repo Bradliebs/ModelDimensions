@@ -101,6 +101,15 @@ Remove-Item results/v1_bank/overlay.db
 
 The next pipeline construction proceeds without an overlay. To revert a single edit, tombstone its `cell_id` (Section 4) — provenance is preserved.
 
+## 8. Known V1 limitations
+
+V1 silences are honest — the pipeline never produces a confident wrong answer. On the canonical 8-question multi-hop set (`experiments/exp20_multihop_probe.py::MULTIHOP_QUERIES`) the V1 baseline scores 6/8 grounded, 0/8 wrong, 2/8 silenced. The two silenced queries are research-known and have measured causes (`results/v1_rerank_diagnostic.json`, exp27):
+
+- **Q2 (Best Picture 1972 → Don Ellis):** recall fault. The keyword-bearing cell is not in the top-50 cosine pool of the production bank; cross-encoder rerank cannot recover it. A future hybrid lexical + dense retrieval pass would be needed.
+- **Q5 (WWII monarch succession → Elizabeth II):** decomposer fault. The Phi-3 sub-question generator flips direction (asks "Who succeeded Elizabeth II?" instead of "Who succeeded George VI?"); top retrieval is correct *for the flipped question*, but margin top1−top2 sits at ~0.011 and the gate silences. A future direction-preserving validator on the decomposer output would be needed.
+
+Both are out of scope for V1. The system's contract — "ground or stay silent, never confabulate" — holds on the 8-question set and on the broader 144-test eval suite.
+
 ## Where things live
 
 | What                          | Where                                     |
