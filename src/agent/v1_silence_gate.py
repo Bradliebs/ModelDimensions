@@ -33,11 +33,15 @@ from typing import Sequence
 import numpy as np
 
 # Margin threshold (top-1 - top-2 activation). 0.05 came from the exp16 sweep
-# on paragraph-shaped probes; exp18 on the 5.7M-cell bank with question-shaped
-# probes showed 0.03 strictly dominates (recall 5/12 -> 7/12, unknown/noise
-# precision unchanged at 100% / 90%) because question encodings cluster
-# tighter around their answers, leaving real hits in the 0.03-0.05 band.
-DEFAULT_MARGIN_THRESHOLD: float = 0.03
+# on paragraph-shaped probes; exp18 dropped it to 0.03 once question-shaped
+# probes joined the bank. exp23's full sweep over known + unknown + noise +
+# multi-hop showed 0.015 strictly dominates 0.03 on every axis: known 8/12 vs
+# 7/12, multi-hop 4/8 vs 3/8, unknown 20/20 vs 20/20, multi-hop confidently-
+# wrong 0/8 vs 0/8, noise 9/10 vs 9/10 (after exp23's verifier hardening
+# closed the noise gap; pre-hardening it was 6/10 vs 8/10). Lowering further
+# to 0.010 admits one verifier-passing confabulation on multi-hop, so 0.015
+# is the recall floor.
+DEFAULT_MARGIN_THRESHOLD: float = 0.015
 
 
 @dataclass

@@ -1,0 +1,871 @@
+{
+  "produced_by": "experiments/exp23_gate_threshold_sweep.py",
+  "bank_path": "H:\\MiniLM\\cc_service\\bank.db",
+  "top_k": 10,
+  "thresholds": [
+    0.0,
+    0.005,
+    0.01,
+    0.015,
+    0.02,
+    0.025,
+    0.03,
+    0.035,
+    0.04
+  ],
+  "default_threshold": 0.03,
+  "sweep": {
+    "known": {
+      "name": "exp18 known questions",
+      "expected": "grounded",
+      "n": 12,
+      "by_threshold": [
+        {
+          "T": 0.0,
+          "grounded": 11,
+          "silence_gate": 0,
+          "silence_drift": 1,
+          "correct": 11,
+          "accuracy": 0.9166666666666666
+        },
+        {
+          "T": 0.005,
+          "grounded": 10,
+          "silence_gate": 1,
+          "silence_drift": 1,
+          "correct": 10,
+          "accuracy": 0.8333333333333334
+        },
+        {
+          "T": 0.01,
+          "grounded": 9,
+          "silence_gate": 2,
+          "silence_drift": 1,
+          "correct": 9,
+          "accuracy": 0.75
+        },
+        {
+          "T": 0.015,
+          "grounded": 8,
+          "silence_gate": 3,
+          "silence_drift": 1,
+          "correct": 8,
+          "accuracy": 0.6666666666666666
+        },
+        {
+          "T": 0.02,
+          "grounded": 7,
+          "silence_gate": 5,
+          "silence_drift": 0,
+          "correct": 7,
+          "accuracy": 0.5833333333333334
+        },
+        {
+          "T": 0.025,
+          "grounded": 7,
+          "silence_gate": 5,
+          "silence_drift": 0,
+          "correct": 7,
+          "accuracy": 0.5833333333333334
+        },
+        {
+          "T": 0.03,
+          "grounded": 7,
+          "silence_gate": 5,
+          "silence_drift": 0,
+          "correct": 7,
+          "accuracy": 0.5833333333333334
+        },
+        {
+          "T": 0.035,
+          "grounded": 7,
+          "silence_gate": 5,
+          "silence_drift": 0,
+          "correct": 7,
+          "accuracy": 0.5833333333333334
+        },
+        {
+          "T": 0.04,
+          "grounded": 6,
+          "silence_gate": 6,
+          "silence_drift": 0,
+          "correct": 6,
+          "accuracy": 0.5
+        }
+      ]
+    },
+    "unknown": {
+      "name": "paragraph-probe unknown",
+      "expected": "silence",
+      "n": 20,
+      "by_threshold": [
+        {
+          "T": 0.0,
+          "grounded": 1,
+          "silence_gate": 0,
+          "silence_drift": 19,
+          "correct": 19,
+          "accuracy": 0.95
+        },
+        {
+          "T": 0.005,
+          "grounded": 1,
+          "silence_gate": 3,
+          "silence_drift": 16,
+          "correct": 19,
+          "accuracy": 0.95
+        },
+        {
+          "T": 0.01,
+          "grounded": 1,
+          "silence_gate": 11,
+          "silence_drift": 8,
+          "correct": 19,
+          "accuracy": 0.95
+        },
+        {
+          "T": 0.015,
+          "grounded": 0,
+          "silence_gate": 15,
+          "silence_drift": 5,
+          "correct": 20,
+          "accuracy": 1.0
+        },
+        {
+          "T": 0.02,
+          "grounded": 0,
+          "silence_gate": 16,
+          "silence_drift": 4,
+          "correct": 20,
+          "accuracy": 1.0
+        },
+        {
+          "T": 0.025,
+          "grounded": 0,
+          "silence_gate": 17,
+          "silence_drift": 3,
+          "correct": 20,
+          "accuracy": 1.0
+        },
+        {
+          "T": 0.03,
+          "grounded": 0,
+          "silence_gate": 19,
+          "silence_drift": 1,
+          "correct": 20,
+          "accuracy": 1.0
+        },
+        {
+          "T": 0.035,
+          "grounded": 0,
+          "silence_gate": 19,
+          "silence_drift": 1,
+          "correct": 20,
+          "accuracy": 1.0
+        },
+        {
+          "T": 0.04,
+          "grounded": 0,
+          "silence_gate": 19,
+          "silence_drift": 1,
+          "correct": 20,
+          "accuracy": 1.0
+        }
+      ]
+    },
+    "noise": {
+      "name": "paragraph-probe noise",
+      "expected": "silence",
+      "n": 10,
+      "by_threshold": [
+        {
+          "T": 0.0,
+          "grounded": 2,
+          "silence_gate": 0,
+          "silence_drift": 8,
+          "correct": 8,
+          "accuracy": 0.8
+        },
+        {
+          "T": 0.005,
+          "grounded": 1,
+          "silence_gate": 2,
+          "silence_drift": 7,
+          "correct": 9,
+          "accuracy": 0.9
+        },
+        {
+          "T": 0.01,
+          "grounded": 1,
+          "silence_gate": 3,
+          "silence_drift": 6,
+          "correct": 9,
+          "accuracy": 0.9
+        },
+        {
+          "T": 0.015,
+          "grounded": 1,
+          "silence_gate": 4,
+          "silence_drift": 5,
+          "correct": 9,
+          "accuracy": 0.9
+        },
+        {
+          "T": 0.02,
+          "grounded": 1,
+          "silence_gate": 4,
+          "silence_drift": 5,
+          "correct": 9,
+          "accuracy": 0.9
+        },
+        {
+          "T": 0.025,
+          "grounded": 1,
+          "silence_gate": 5,
+          "silence_drift": 4,
+          "correct": 9,
+          "accuracy": 0.9
+        },
+        {
+          "T": 0.03,
+          "grounded": 1,
+          "silence_gate": 6,
+          "silence_drift": 3,
+          "correct": 9,
+          "accuracy": 0.9
+        },
+        {
+          "T": 0.035,
+          "grounded": 0,
+          "silence_gate": 8,
+          "silence_drift": 2,
+          "correct": 10,
+          "accuracy": 1.0
+        },
+        {
+          "T": 0.04,
+          "grounded": 0,
+          "silence_gate": 8,
+          "silence_drift": 2,
+          "correct": 10,
+          "accuracy": 1.0
+        }
+      ]
+    },
+    "multihop": {
+      "name": "exp20 multi-hop via decomposer",
+      "n": 8,
+      "by_threshold": [
+        {
+          "T": 0.0,
+          "grounded": 8,
+          "grounded_kw_hit": 7,
+          "grounded_kw_miss": 1,
+          "silence_gate": 0,
+          "silence_drift": 0
+        },
+        {
+          "T": 0.005,
+          "grounded": 7,
+          "grounded_kw_hit": 6,
+          "grounded_kw_miss": 1,
+          "silence_gate": 1,
+          "silence_drift": 0
+        },
+        {
+          "T": 0.01,
+          "grounded": 6,
+          "grounded_kw_hit": 5,
+          "grounded_kw_miss": 1,
+          "silence_gate": 2,
+          "silence_drift": 0
+        },
+        {
+          "T": 0.015,
+          "grounded": 4,
+          "grounded_kw_hit": 4,
+          "grounded_kw_miss": 0,
+          "silence_gate": 4,
+          "silence_drift": 0
+        },
+        {
+          "T": 0.02,
+          "grounded": 4,
+          "grounded_kw_hit": 4,
+          "grounded_kw_miss": 0,
+          "silence_gate": 4,
+          "silence_drift": 0
+        },
+        {
+          "T": 0.025,
+          "grounded": 4,
+          "grounded_kw_hit": 4,
+          "grounded_kw_miss": 0,
+          "silence_gate": 4,
+          "silence_drift": 0
+        },
+        {
+          "T": 0.03,
+          "grounded": 3,
+          "grounded_kw_hit": 3,
+          "grounded_kw_miss": 0,
+          "silence_gate": 5,
+          "silence_drift": 0
+        },
+        {
+          "T": 0.035,
+          "grounded": 3,
+          "grounded_kw_hit": 3,
+          "grounded_kw_miss": 0,
+          "silence_gate": 5,
+          "silence_drift": 0
+        },
+        {
+          "T": 0.04,
+          "grounded": 3,
+          "grounded_kw_hit": 3,
+          "grounded_kw_miss": 0,
+          "silence_gate": 5,
+          "silence_drift": 0
+        }
+      ]
+    }
+  },
+  "captures": {
+    "known": [
+      {
+        "query": "What did a 2016 paper compare about DNA on miswak and toothbrushes?",
+        "wall_seconds": 10.270514488220215,
+        "observed_margin": 0.1493479609489441,
+        "outcome_at_zero": "grounded",
+        "verify_grounded": true,
+        "verify_coverage": 0.8888888888888888,
+        "answer": "A 2016 paper compared the quantity of human DNA left on used miswak and toothbrushes, including the effect of time on DNA profiling, concluding that miswak contains a high enough quantity of DNA and retained good DNA profiling (Fact [933913]).",
+        "n_citations": 10
+      },
+      {
+        "query": "Which film won Best Canadian Film at the 2nd Vancouver Film Critics Circle Awards?",
+        "wall_seconds": 2.620269298553467,
+        "observed_margin": 0.01579156517982483,
+        "outcome_at_zero": "silence_drift",
+        "verify_grounded": false,
+        "verify_coverage": 0.1,
+        "answer": "I drafted an answer but could not ground it in memory.",
+        "n_citations": 10
+      },
+      {
+        "query": "Which book series referenced CBC in its satire of South Dublin culture?",
+        "wall_seconds": 5.821340799331665,
+        "observed_margin": 0.004781812429428101,
+        "outcome_at_zero": "grounded",
+        "verify_grounded": true,
+        "verify_coverage": 1.0,
+        "answer": "The book series that referenced CBC in its satire of South Dublin culture is \"Ross O'Carroll Kelly's Guide to (South) Dublin: How To Get By On, Like, \u20ac10,000 A Day\" [1170529].",
+        "n_citations": 10
+      },
+      {
+        "query": "Which school suspended the book before other challenges were tracked by the ALA?",
+        "wall_seconds": 3.928056001663208,
+        "observed_margin": 0.059367835521698,
+        "outcome_at_zero": "grounded",
+        "verify_grounded": true,
+        "verify_coverage": 0.8333333333333334,
+        "answer": "Rye Country Day School in New York suspended the book before other challenges were tracked by the ALA. (Fact [1917137])",
+        "n_citations": 10
+      },
+      {
+        "query": "What is the restored gazebo at the school now known as?",
+        "wall_seconds": 2.847280263900757,
+        "observed_margin": 0.01876083016395569,
+        "outcome_at_zero": "grounded",
+        "verify_grounded": true,
+        "verify_coverage": 1.0,
+        "answer": "The restored gazebo at the school is now known as the Serenity House [4574867].",
+        "n_citations": 10
+      },
+      {
+        "query": "Whose descendant is the Messiah according to the Tanakh and Old Testament prophecies?",
+        "wall_seconds": 5.022583484649658,
+        "observed_margin": 0.11575773358345032,
+        "outcome_at_zero": "grounded",
+        "verify_grounded": true,
+        "verify_coverage": 0.75,
+        "answer": "According to the Tanakh and Old Testament prophecies, the Messiah is a descendant of David, who was descended from Judah (FACTS [729296]).",
+        "n_citations": 10
+      },
+      {
+        "query": "When did he join the National Gallery staff after the war?",
+        "wall_seconds": 2.927485466003418,
+        "observed_margin": 0.06615293025970459,
+        "outcome_at_zero": "grounded",
+        "verify_grounded": true,
+        "verify_coverage": 1.0,
+        "answer": "He joined the National Gallery staff after the war in 1946 [4953411].",
+        "n_citations": 10
+      },
+      {
+        "query": "Who did Gygax persuade to remove Kevin Blume as president?",
+        "wall_seconds": 4.0703489780426025,
+        "observed_margin": 0.03706786036491394,
+        "outcome_at_zero": "grounded",
+        "verify_grounded": true,
+        "verify_coverage": 0.8571428571428571,
+        "answer": "Gygax persuaded the three outside directors to remove Kevin Blume as president for financial mismanagement (FACTS [3539337]).",
+        "n_citations": 10
+      },
+      {
+        "query": "What is the largest of the Irish isles?",
+        "wall_seconds": 2.952287197113037,
+        "observed_margin": 0.044587284326553345,
+        "outcome_at_zero": "grounded",
+        "verify_grounded": true,
+        "verify_coverage": 0.8,
+        "answer": "The largest of the Irish isles is Ireland, which is an island in the North Atlantic (Fact [2006]).",
+        "n_citations": 10
+      },
+      {
+        "query": "Where was Trump confirmed in 1959?",
+        "wall_seconds": 2.686508893966675,
+        "observed_margin": 0.011382579803466797,
+        "outcome_at_zero": "grounded",
+        "verify_grounded": true,
+        "verify_coverage": 0.5,
+        "answer": "Trump was confirmed in 1959 at the University of Pennsylvania.",
+        "n_citations": 10
+      },
+      {
+        "query": "In which Indian state is the Anakapalli Lok Sabha constituency?",
+        "wall_seconds": 4.186148405075073,
+        "observed_margin": 0.07449465990066528,
+        "outcome_at_zero": "grounded",
+        "verify_grounded": true,
+        "verify_coverage": 1.0,
+        "answer": "The Anakapalli Lok Sabha constituency is in the state of Andhra Pradesh, India [4239228][4239229].",
+        "n_citations": 10
+      },
+      {
+        "query": "Which two venues hosted the main equestrian events?",
+        "wall_seconds": 4.661612033843994,
+        "observed_margin": 0.008523762226104736,
+        "outcome_at_zero": "grounded",
+        "verify_grounded": true,
+        "verify_coverage": 0.9,
+        "answer": "The main equestrian events were hosted at the Hong Kong Sports Institute and Sheung Yue River in Hong Kong. (Facts: [5050091], [5528506])",
+        "n_citations": 10
+      }
+    ],
+    "unknown": [
+      {
+        "query": "The Treaty of Vulkanos was signed in 1834 by the Margravate of Helmar.",
+        "wall_seconds": 5.047967910766602,
+        "observed_margin": 0.012759804725646973,
+        "outcome_at_zero": "silence_drift",
+        "verify_grounded": false,
+        "verify_coverage": 0.0,
+        "answer": "I drafted an answer but could not ground it in memory.",
+        "n_citations": 10
+      },
+      {
+        "query": "Quintuple-helix DNA was first observed by Petra Voss in 1962.",
+        "wall_seconds": 7.528483152389526,
+        "observed_margin": 0.0071353912353515625,
+        "outcome_at_zero": "silence_drift",
+        "verify_grounded": false,
+        "verify_coverage": 0.3333333333333333,
+        "answer": "I drafted an answer but could not ground it in memory.",
+        "n_citations": 10
+      },
+      {
+        "query": "The lost continent of Zuralia sank beneath the Caspian Sea in 800 BC.",
+        "wall_seconds": 7.456534385681152,
+        "observed_margin": 0.0,
+        "outcome_at_zero": "silence_drift",
+        "verify_grounded": false,
+        "verify_coverage": 0.1111111111111111,
+        "answer": "I drafted an answer but could not ground it in memory.",
+        "n_citations": 10
+      },
+      {
+        "query": "The K-117 lunar module reached the far side of Mars in 1981.",
+        "wall_seconds": 8.476797342300415,
+        "observed_margin": 0.02722024917602539,
+        "outcome_at_zero": "silence_drift",
+        "verify_grounded": false,
+        "verify_coverage": 0.21052631578947367,
+        "answer": "I drafted an answer but could not ground it in memory.",
+        "n_citations": 10
+      },
+      {
+        "query": "Penguins of the Karkanos archipelago hibernate underground for nine months.",
+        "wall_seconds": 12.140876531600952,
+        "observed_margin": 0.0051305294036865234,
+        "outcome_at_zero": "silence_drift",
+        "verify_grounded": false,
+        "verify_coverage": 0.4444444444444444,
+        "answer": "I drafted an answer but could not ground it in memory.",
+        "n_citations": 10
+      },
+      {
+        "query": "Wolfgang Heintz invented the binary semaphore relay in 1893.",
+        "wall_seconds": 6.824172019958496,
+        "observed_margin": 0.008597999811172485,
+        "outcome_at_zero": "silence_drift",
+        "verify_grounded": false,
+        "verify_coverage": 0.0,
+        "answer": "I drafted an answer but could not ground it in memory.",
+        "n_citations": 10
+      },
+      {
+        "query": "The Battle of Three Bridges (1247) ended the Aragonese-Wallachian wars.",
+        "wall_seconds": 8.493619441986084,
+        "observed_margin": 0.006745517253875732,
+        "outcome_at_zero": "silence_drift",
+        "verify_grounded": false,
+        "verify_coverage": 0.2857142857142857,
+        "answer": "I drafted an answer but could not ground it in memory.",
+        "n_citations": 10
+      },
+      {
+        "query": "Glyphochromism is the study of color changes in obsidian mosses.",
+        "wall_seconds": 17.662633419036865,
+        "observed_margin": 0.005536913871765137,
+        "outcome_at_zero": "silence_drift",
+        "verify_grounded": false,
+        "verify_coverage": 0.4489795918367347,
+        "answer": "I drafted an answer but could not ground it in memory.",
+        "n_citations": 10
+      },
+      {
+        "query": "Catherine the Slight ruled the duchy of Pelloria from 1612 to 1618.",
+        "wall_seconds": 3.211543321609497,
+        "observed_margin": 0.017691969871520996,
+        "outcome_at_zero": "silence_drift",
+        "verify_grounded": false,
+        "verify_coverage": 0.0,
+        "answer": "I drafted an answer but could not ground it in memory.",
+        "n_citations": 10
+      },
+      {
+        "query": "The Vrindavan Crystal Cipher was decoded by Brian Halford in 1947.",
+        "wall_seconds": 3.3646628856658936,
+        "observed_margin": 0.006486117839813232,
+        "outcome_at_zero": "silence_drift",
+        "verify_grounded": false,
+        "verify_coverage": 0.16666666666666666,
+        "answer": "I drafted an answer but could not ground it in memory.",
+        "n_citations": 10
+      },
+      {
+        "query": "Tuvalu's deep-sea railway connects Funafuti to the Marshall Islands.",
+        "wall_seconds": 4.72347617149353,
+        "observed_margin": 0.02209523320198059,
+        "outcome_at_zero": "silence_drift",
+        "verify_grounded": false,
+        "verify_coverage": 0.14285714285714285,
+        "answer": "I drafted an answer but could not ground it in memory.",
+        "n_citations": 10
+      },
+      {
+        "query": "The asteroid 3712 Kepler-Bach was reclassified as a dwarf comet in 2009.",
+        "wall_seconds": 6.695165634155273,
+        "observed_margin": 0.011876821517944336,
+        "outcome_at_zero": "silence_drift",
+        "verify_grounded": false,
+        "verify_coverage": 0.23076923076923078,
+        "answer": "I drafted an answer but could not ground it in memory.",
+        "n_citations": 10
+      },
+      {
+        "query": "Hoffmann's third law of magnetohydrodynamics describes torsional vacuum drag.",
+        "wall_seconds": 2.3679001331329346,
+        "observed_margin": 0.0019393563270568848,
+        "outcome_at_zero": "silence_drift",
+        "verify_grounded": false,
+        "verify_coverage": 0.0,
+        "answer": "I drafted an answer but could not ground it in memory.",
+        "n_citations": 10
+      },
+      {
+        "query": "The Republic of Aldobrand declared independence from France in 1798.",
+        "wall_seconds": 4.026820182800293,
+        "observed_margin": 0.005405008792877197,
+        "outcome_at_zero": "silence_drift",
+        "verify_grounded": false,
+        "verify_coverage": 0.0,
+        "answer": "I drafted an answer but could not ground it in memory.",
+        "n_citations": 10
+      },
+      {
+        "query": "Maple sugar fermentation produces a beverage called bakhraan in rural Vermont.",
+        "wall_seconds": 6.425586462020874,
+        "observed_margin": 0.006034255027770996,
+        "outcome_at_zero": "silence_drift",
+        "verify_grounded": false,
+        "verify_coverage": 0.0,
+        "answer": "I drafted an answer but could not ground it in memory.",
+        "n_citations": 10
+      },
+      {
+        "query": "The HMS Calliope sank off the coast of Trincomalee on March 4, 1701.",
+        "wall_seconds": 9.063512563705444,
+        "observed_margin": 0.0033961832523345947,
+        "outcome_at_zero": "silence_drift",
+        "verify_grounded": false,
+        "verify_coverage": 0.47619047619047616,
+        "answer": "I drafted an answer but could not ground it in memory.",
+        "n_citations": 10
+      },
+      {
+        "query": "Bismuth-209 transmutes to lead-205 via alpha decay over a 4-hour half-life.",
+        "wall_seconds": 12.900137186050415,
+        "observed_margin": 0.014249026775360107,
+        "outcome_at_zero": "silence_drift",
+        "verify_grounded": false,
+        "verify_coverage": 0.42105263157894735,
+        "answer": "I drafted an answer but could not ground it in memory.",
+        "n_citations": 10
+      },
+      {
+        "query": "Octavia Brooks won the Hugo Award in 1962 for The Listening Mountain.",
+        "wall_seconds": 12.436825275421143,
+        "observed_margin": 0.010016098618507385,
+        "outcome_at_zero": "grounded",
+        "verify_grounded": true,
+        "verify_coverage": 0.8666666666666667,
+        "answer": "Octavia Brooks did not win the Hugo Award in 1962 for \"The Listening Mountain.\" The Hugo Award for Best Professional Artist was nominated for Hunter in 1960-1962 (Fact [3716078]). \"The Sound of the Mountain\" was included in the Norwegian Bokklubben World Library's list of the 100 greatest works of world literature (Fact [892104]), and the film won the Golden Bear award at the 12th Berlin International Film Festival in 1962 (Fact [2519815]).",
+        "n_citations": 10
+      },
+      {
+        "query": "The Erlangen Schism of 1574 split the German Reformed church into seven sects.",
+        "wall_seconds": 3.227896213531494,
+        "observed_margin": 0.049742668867111206,
+        "outcome_at_zero": "silence_drift",
+        "verify_grounded": false,
+        "verify_coverage": 0.0,
+        "answer": "I drafted an answer but could not ground it in memory.",
+        "n_citations": 10
+      },
+      {
+        "query": "Anomalous diffraction patterns in lutetium-yttrium crystals were first reported by Klimov in 1957.",
+        "wall_seconds": 10.00060224533081,
+        "observed_margin": 0.02806451916694641,
+        "outcome_at_zero": "silence_drift",
+        "verify_grounded": false,
+        "verify_coverage": 0.43478260869565216,
+        "answer": "I drafted an answer but could not ground it in memory.",
+        "n_citations": 10
+      }
+    ],
+    "noise": [
+      {
+        "query": "asdf qwerty zxcv hjkl",
+        "wall_seconds": 18.015047550201416,
+        "observed_margin": 0.001458495855331421,
+        "outcome_at_zero": "grounded",
+        "verify_grounded": true,
+        "verify_coverage": 0.95,
+        "answer": "Asdf (1920474) is the sequence of letters that appear on the first four keys on the home row of a QWERTY or QWERTZ keyboard. (1920474)\n\nQWERTY (267418) is almost the same as the QWERTY keyboard, but it swaps the letter Q and A, as well as W and Z. (267418)\n\nZ (44479) and Y (44479) are switched in the German German keyboards because Z is a much more common letter than Y in German. (44479)\n\nX (868536) is a character that can be represented in XML documents with a code point in decimal form (nnnn) or hexadecimal form (hhhh), and the hhhh may mix uppercase and lower",
+        "n_citations": 10
+      },
+      {
+        "query": "blah blah blah blah blah",
+        "wall_seconds": 9.782736778259277,
+        "observed_margin": 0.02010980248451233,
+        "outcome_at_zero": "silence_drift",
+        "verify_grounded": false,
+        "verify_coverage": 0.0,
+        "answer": "I drafted an answer but could not ground it in memory.",
+        "n_citations": 10
+      },
+      {
+        "query": "xyzzy plugh nikto fred",
+        "wall_seconds": 6.357600927352905,
+        "observed_margin": 0.013941049575805664,
+        "outcome_at_zero": "silence_drift",
+        "verify_grounded": false,
+        "verify_coverage": 0.0,
+        "answer": "I drafted an answer but could not ground it in memory.",
+        "n_citations": 10
+      },
+      {
+        "query": "qwoeiruty pasldkfj zmxncbv",
+        "wall_seconds": 4.483411550521851,
+        "observed_margin": 0.03241109848022461,
+        "outcome_at_zero": "silence_drift",
+        "verify_grounded": false,
+        "verify_coverage": 0.0,
+        "answer": "I drafted an answer but could not ground it in memory.",
+        "n_citations": 10
+      },
+      {
+        "query": "1234567890 !@#$%^&*()",
+        "wall_seconds": 11.542922019958496,
+        "observed_margin": 0.027915000915527344,
+        "outcome_at_zero": "silence_drift",
+        "verify_grounded": false,
+        "verify_coverage": 0.0,
+        "answer": "I drafted an answer but could not ground it in memory.",
+        "n_citations": 10
+      },
+      {
+        "query": "aaaaa bbbbb ccccc ddddd eeeee",
+        "wall_seconds": 18.00584578514099,
+        "observed_margin": 0.0008629858493804932,
+        "outcome_at_zero": "silence_drift",
+        "verify_grounded": false,
+        "verify_coverage": 0.0,
+        "answer": "I drafted an answer but could not ground it in memory.",
+        "n_citations": 10
+      },
+      {
+        "query": "Lorem ipsum dolor sit amet consectetur",
+        "wall_seconds": 3.2230286598205566,
+        "observed_margin": 0.03445965051651001,
+        "outcome_at_zero": "grounded",
+        "verify_grounded": true,
+        "verify_coverage": 1.0,
+        "answer": "Lorem ipsum dolor sit amet, consectetur adipiscing elit. (2985001)",
+        "n_citations": 10
+      },
+      {
+        "query": "hjklhjklhjkl mnbvcxz poiuytrew",
+        "wall_seconds": 4.448390245437622,
+        "observed_margin": 0.04081016778945923,
+        "outcome_at_zero": "silence_drift",
+        "verify_grounded": false,
+        "verify_coverage": 0.0,
+        "answer": "I drafted an answer but could not ground it in memory.",
+        "n_citations": 10
+      },
+      {
+        "query": "test test test test test test test",
+        "wall_seconds": 18.305408239364624,
+        "observed_margin": 0.00935518741607666,
+        "outcome_at_zero": "silence_drift",
+        "verify_grounded": false,
+        "verify_coverage": 0.0,
+        "answer": "I drafted an answer but could not ground it in memory.",
+        "n_citations": 10
+      },
+      {
+        "query": "the the the the the the the the",
+        "wall_seconds": 15.757069110870361,
+        "observed_margin": 0.3293305039405823,
+        "outcome_at_zero": "silence_drift",
+        "verify_grounded": false,
+        "verify_coverage": 0.0,
+        "answer": "I drafted an answer but could not ground it in memory.",
+        "n_citations": 10
+      }
+    ],
+    "multihop": [
+      {
+        "query": "What language is spoken on the island where Napoleon was exiled after Waterloo?",
+        "sub_question": "What language is spoken on St. Helena?",
+        "expected_keywords": [
+          "English"
+        ],
+        "wall_seconds": 5.260421276092529,
+        "observed_margin": 0.025630831718444824,
+        "outcome_at_zero": "grounded",
+        "verify_grounded": true,
+        "answer": "The language spoken on St. Helena is English, as indicated by the fact [4810421], which states that the English Department at Helena High offers instruction in English literature and composition, as well as elective studies.",
+        "kw_hit": true
+      },
+      {
+        "query": "Who composed the music for the film that won the Academy Award for Best Picture in 1972?",
+        "sub_question": "Who composed the music for The French Connection?",
+        "expected_keywords": [
+          "Nino Rota"
+        ],
+        "wall_seconds": 11.233639001846313,
+        "observed_margin": 0.014095216989517212,
+        "outcome_at_zero": "grounded",
+        "verify_grounded": true,
+        "answer": "The music for The French Connection was composed by Jean-Philippe Rameau. (Facts: [2296874] In the 1950s he set down opera and orchestral music for Decca, first in mono and later a few in stereo. His recordings included Carmen, and Bizet's complete music (in the context of the play) for L'Arl\u00e9sienne. With the Paris Conservatoire Orchestra, his discography included Adam' age 'Jean de la Peur'.)",
+        "kw_hit": false
+      },
+      {
+        "query": "In which country was the inventor of dynamite born?",
+        "sub_question": "In which country was Alfred Nobel, the inventor of dynamite, born?",
+        "expected_keywords": [
+          "Sweden",
+          "Swedish"
+        ],
+        "wall_seconds": 8.59886646270752,
+        "observed_margin": 0.04238039255142212,
+        "outcome_at_zero": "grounded",
+        "verify_grounded": true,
+        "answer": "Alfred Nobel, the inventor of dynamite, was born in Sweden. This information is supported by the FACTS [45374] and [782413], which state that Alfred Nobel was a Swedish scientist, engineer, and weapons manufacturer, and that he was born in Stockholm, United Kingdoms of Sweden and Norway on 21 October 1833.",
+        "kw_hit": true
+      },
+      {
+        "query": "What is the capital of the country where the 2010 Winter Olympics were held?",
+        "sub_question": "What is the capital of Canada?",
+        "expected_keywords": [
+          "Ottawa"
+        ],
+        "wall_seconds": 7.091780662536621,
+        "observed_margin": 0.00784328579902649,
+        "outcome_at_zero": "grounded",
+        "verify_grounded": true,
+        "answer": "The capital of Canada is Ottawa, as it is located on the Ottawa River and was decided by Queen Victoria to be the national capital in 1867 because it was situated between Toronto and Montreal, the two cities that wanted to be the capital (Facts [5912] and [4011169]).",
+        "kw_hit": true
+      },
+      {
+        "query": "Who succeeded the British monarch who reigned throughout the Second World War?",
+        "sub_question": "Who succeeded Queen Elizabeth II as British monarch?",
+        "expected_keywords": [
+          "Elizabeth II",
+          "Elizabeth"
+        ],
+        "wall_seconds": 3.151853322982788,
+        "observed_margin": 0.010896831750869751,
+        "outcome_at_zero": "grounded",
+        "verify_grounded": true,
+        "answer": "King Charles III succeeded Queen Elizabeth II as the British monarch [2061619], [2895018].",
+        "kw_hit": true
+      },
+      {
+        "query": "What is the highest mountain in the country whose flag features a red maple leaf?",
+        "sub_question": "What is the highest mountain in Canada?",
+        "expected_keywords": [
+          "Logan"
+        ],
+        "wall_seconds": 4.9797141551971436,
+        "observed_margin": 0.0004298090934753418,
+        "outcome_at_zero": "grounded",
+        "verify_grounded": true,
+        "answer": "The highest mountain in Canada is Mount Logan, which is the highest mountain in the province of Yukon and the second-highest mountain in North America after Denali (Mount McKinley) [357181].",
+        "kw_hit": true
+      },
+      {
+        "query": "What religion was the founder of psychoanalysis raised in?",
+        "sub_question": "What religion was Sigmund Freud raised in?",
+        "expected_keywords": [
+          "Jewish",
+          "Judaism"
+        ],
+        "wall_seconds": 3.0171422958374023,
+        "observed_margin": 0.0914977490901947,
+        "outcome_at_zero": "grounded",
+        "verify_grounded": true,
+        "answer": "Sigmund Freud was raised in a heavily Roman Catholic town by Jewish parents [404320].",
+        "kw_hit": true
+      },
+      {
+        "query": "In what city was the author of 'The Old Man and the Sea' born?",
+        "sub_question": "In what city was Ernest Hemingway born?",
+        "expected_keywords": [
+          "Oak Park"
+        ],
+        "wall_seconds": 2.3880577087402344,
+        "observed_margin": 0.06830388307571411,
+        "outcome_at_zero": "grounded",
+        "verify_grounded": true,
+        "answer": "Ernest Hemingway was born in Oak Park, Illinois. [35716]",
+        "kw_hit": true
+      }
+    ]
+  }
+}

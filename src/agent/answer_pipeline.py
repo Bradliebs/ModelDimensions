@@ -392,11 +392,15 @@ class AnswerPipeline:
             raw_answer, cell_texts, question=question,
             min_coverage=self.min_coverage,
             cell_ids=[c["cell_id"] for c in cells],
+            strict_nonsense=True,
         )
         timings["verify"] = time.time() - t0
 
         if not verdict.grounded:
-            if verdict.coverage < verdict.threshold and verdict.uncited_numerics:
+            if verdict.reason.startswith("query incoherent") or \
+               verdict.reason.startswith("query-evidence mismatch"):
+                reason = f"verify: {verdict.reason}"
+            elif verdict.coverage < verdict.threshold and verdict.uncited_numerics:
                 reason = (
                     f"verify: coverage={verdict.coverage:.2f} "
                     f"< {verdict.threshold:.2f} AND "

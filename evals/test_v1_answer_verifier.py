@@ -156,3 +156,128 @@ def test_bare_cell_id_does_not_mask_real_confabulated_numeric():
     assert v.grounded is False
     assert "1834" in v.uncited_numerics
     assert "51098" not in v.uncited_numerics
+
+
+# ----------------------------------------------------------------------
+# Stage C — query coherence (opt-in via strict_nonsense=True)
+# ----------------------------------------------------------------------
+
+def test_stage_c_off_by_default_preserves_legacy_behaviour():
+    """With strict_nonsense=False (default), nonsense queries that would
+    otherwise be silenced by Stage C still pass through to Stage A/B.
+    This pins the backward-compat contract."""
+    cells = ["Pasta carbonara is a Roman dish."]
+    answer = "Pasta carbonara is a Roman dish."
+    v = verify(answer, cells, question="1234567890 !@#$%^&*()")
+    # No Stage C run -> Stage A coverage decides; this answer covers the
+    # cells perfectly, so it is grounded under legacy semantics.
+    assert v.grounded is True
+
+
+def test_stage_c_rejects_digit_only_query():
+    """A query with no wordlike tokens fires Stage C."""
+    cells = ["Pasta carbonara is a Roman dish."]
+    answer = "Pasta carbonara is a Roman dish."
+    v = verify(
+        answer, cells,
+        question="1234567890 !@#$%^&*()",
+        strict_nonsense=True,
+    )
+    assert v.grounded is False
+    assert "query incoherent" in v.reason
+
+
+def test_stage_c_rejects_repetition():
+    """3+ tokens that are all the same fire Stage C's dominance check."""
+    cells = ["Pasta carbonara is a Roman dish."]
+    answer = "Pasta carbonara is a Roman dish."
+    v = verify(
+        answer, cells,
+        question="blah blah blah blah",
+        strict_nonsense=True,
+    )
+    assert v.grounded is False
+    assert "query incoherent" in v.reason
+    assert "dominated" in v.reason
+
+
+def test_stage_c_allows_single_word_query():
+    """Single-word queries ("zebras?") must not trip the dominance check."""
+    cells = ["Zebras have stripes and live in Africa."]
+    answer = "Zebras have stripes."
+    v = verify(answer, cells, question="zebras?", strict_nonsense=True)
+    assert v.grounded is True
+
+
+def test_stage_c_allows_two_word_query():
+    """Two-token queries are too short to call repetitive."""
+    cells = ["Paris drift cars are popular in France."]
+    answer = "Paris drift cars are popular in France."
+    v = verify(
+        answer, cells,
+        question="paris drift?",
+        strict_nonsense=True,
+    )
+    # Stage C passes (only 2 tokens, dominance skipped); Stage D evaluates
+    # whether the cells contain query content (paris, drift) — they do.
+    assert v.grounded is True
+
+
+# ----------------------------------------------------------------------
+# Stage D — query-evidence overlap (opt-in via strict_nonsense=True)
+# ----------------------------------------------------------------------
+
+def test_stage_d_rejects_unrelated_evidence():
+    """The exp23 noise pattern: 4 wordlike-but-meaningless tokens, cells
+    that have nothing to do with them. Stage A would pass (answer
+    covers cells); Stage D catches the query-evidence mismatch."""
+    cells = [
+        "Mozart composed The Magic Flute in 1791. It premiered in Vienna."
+    ]
+    answer = "Mozart composed The Magic Flute in 1791."
+    v = verify(
+        answer, cells,
+        question="asdf qwerty zxcv hjkl",
+        strict_nonsense=True,
+    )
+    assert v.grounded is False
+    assert "query-evidence mismatch" in v.reason
+
+
+def test_stage_d_passes_when_query_token_appears_in_cells():
+    """A real question whose retrieval brought back relevant cells is
+    NOT silenced by Stage D — at least one query content token shows
+    up in the cited cells."""
+    cells = [
+        "Mozart composed The Magic Flute in 1791. It premiered in Vienna."
+    ]
+    answer = "Mozart composed The Magic Flute in 1791."
+    v = verify(
+        answer, cells,
+        question="Who composed The Magic Flute?",
+        strict_nonsense=True,
+    )
+    assert v.grounded is True
+
+
+def test_stage_d_skipped_for_one_content_token_query():
+    """Single-content-token queries skip Stage D — there isn't enough
+    signal to demand evidence overlap."""
+    cells = ["Zebras have stripes and live in Africa."]
+    answer = "Zebras have stripes."
+    v = verify(answer, cells, question="zebras?", strict_nonsense=True)
+    # Even though the cells DO contain "zebras", the test is that Stage D
+    # is structurally skipped, not that it happens to pass. We assert the
+    # broader contract: legitimate short queries are not silenced.
+    assert v.grounded is True
+
+
+def test_stage_d_off_by_default():
+    """When strict_nonsense=False, query-evidence mismatch does not
+    block grounding."""
+    cells = [
+        "Mozart composed The Magic Flute in 1791. It premiered in Vienna."
+    ]
+    answer = "Mozart composed The Magic Flute in 1791."
+    v = verify(answer, cells, question="asdf qwerty zxcv hjkl")
+    assert v.grounded is True

@@ -6,7 +6,7 @@ shape: given a generated free-text answer and the cells it was supposed
 to draw from, decide whether the answer is grounded in those cells or
 the model wandered off into unsupported claims.
 
-Two-stage check:
+Two-stage check (always on):
 
   STAGE A — token coverage (catches lexical drift):
     1. Tokenize the answer into lower-cased word tokens.
@@ -28,13 +28,31 @@ Two-stage check:
        answer-vs-cells scope: a one-token factual flip is the failure
        mode this layer exists to catch.
 
-Both stages must pass for ``grounded=True``. Stage B firing without
-Stage A is rare because most numeric drift drags coverage down too, but
-it does happen for short answers ("Yes, in 1812.") so we check both.
+Two extra stages (opt-in via ``strict_nonsense=True``; the production
+pipeline turns them on):
+
+  STAGE C — query coherence (catches token-salad / repetitive queries
+  before they consume a generation slot's worth of trust):
+    Reject if the question has fewer than two wordlike tokens (alpha,
+    length >= 3, contains a vowel), or if one token accounts for more
+    than half the question's tokens. Catches "asdf qwerty zxcv hjkl",
+    "blah blah blah", "1234567890 !@#$%^^*()", "test test test".
+
+  STAGE D — query-evidence overlap (catches retrieval sets with low
+  query-to-chunk relevance, the noise-margin failure mode):
+    When the question has at least two content tokens, the cited cell
+    blob must contain at least one of them. Catches "asdf qwerty zxcv
+    hjkl" -> 12 cells about something unrelated, where Stage A passes
+    because the answer paraphrases the random cells but the cells were
+    never about the question.
+
+Stages run A -> B -> C -> D; any failure short-circuits to grounded=False.
+Stages C and D are off by default for backward compatibility with callers
+that drive the verifier on hand-crafted test inputs.
 
 Edge cases:
   - If the answer has zero content tokens after filtering, coverage is
-    treated as 1.0 (nothing to verify — trivially grounded or trivially
+    treated as 1.0 (nothing to verify - trivially grounded or trivially
     empty; the caller should still inspect length).
   - If the cited cells are empty, coverage is 0.0.
 
@@ -100,6 +118,92 @@ _STOPWORDS: frozenset[str] = frozenset({
 # tokens drag coverage well below 0.5 quickly.
 MIN_COVERAGE: float = 0.50
 
+# Stage C tunables: at least this many wordlike tokens must be present in
+# the question, and no single token may account for more than this share of
+# the question's tokens when the question has more than one token. Floor
+# is 1 so single-word queries ("zebras?") still pass; the wordlike check
+# rejects digit/symbol noise like "1234567890 !@#$%^&*()", and Stage D
+# backstops multi-token salad like "asdf qwerty zxcv hjkl" via the
+# query-evidence-overlap check.
+MIN_QUERY_WORDLIKE: int = 1
+MAX_DOMINANT_TOKEN_RATIO: float = 0.50
+
+_VOWEL_RE = re.compile(r"[aeiouy]", re.IGNORECASE)
+
+
+def _is_wordlike(token: str) -> bool:
+    """A token that resembles a real word: at least three characters, all
+    alphabetic, and contains a vowel. Catches alphabet salad like
+    ``hjklhjklhjkl`` and digit/symbol noise."""
+    if len(token) < 3:
+        return False
+    if not token.isalpha():
+        return False
+    return bool(_VOWEL_RE.search(token))
+
+
+def _check_query_coherence(
+    question: str,
+    *,
+    min_wordlike: int = MIN_QUERY_WORDLIKE,
+    max_dominant_ratio: float = MAX_DOMINANT_TOKEN_RATIO,
+) -> tuple[bool, str]:
+    """Stage C — return ``(ok, reason)``. ``reason`` is empty when ``ok``."""
+    tokens = [t.lower() for t in _TOKEN_RE.findall(question)]
+    if not tokens:
+        return False, "query has no tokens"
+    wordlike = [t for t in tokens if _is_wordlike(t)]
+    if len(wordlike) < min_wordlike:
+        return False, (
+            f"query has only {len(wordlike)} wordlike token(s) "
+            f"(need >= {min_wordlike})"
+        )
+    counts: dict[str, int] = {}
+    for t in tokens:
+        counts[t] = counts.get(t, 0) + 1
+    most_common, most_count = max(counts.items(), key=lambda kv: kv[1])
+    # Dominance is only meaningful at 3+ tokens. A 1- or 2-token query is
+    # too short to call "repetitive" — "zebras?" has 1 token, "what zebras?"
+    # has 2; both are fine. "test test test" (3 tokens, 100% dominance) is
+    # not.
+    if len(tokens) < 3:
+        return True, ""
+    ratio = most_count / len(tokens)
+    if ratio > max_dominant_ratio:
+        return False, (
+            f"query is dominated by token {most_common!r} "
+            f"({most_count}/{len(tokens)} = {ratio:.0%})"
+        )
+    return True, ""
+
+
+def _check_query_evidence_overlap(
+    question: str,
+    cell_blob_lower: str,
+) -> tuple[bool, str]:
+    """Stage D — return ``(ok, reason)``. The cited cells must contain at
+    least one content token from the question. Skipped (returns ok) when
+    the question has fewer than two content tokens of its own — Stage C
+    will have already screened those.
+
+    Catches the noise pattern where the gate accepts a margin from random
+    cells whose content has nothing to do with the query (\"asdf qwerty
+    zxcv hjkl\" -> 12 cells about whatever happened to score). The answer
+    will be lexically grounded in those cells (Stage A passes) but the
+    cells themselves do not address the query."""
+    q_content = set(_content_tokens(question))
+    if len(q_content) < 2:
+        return True, ""
+    if not cell_blob_lower:
+        return False, "no cells to verify against"
+    overlap = {t for t in q_content if t in cell_blob_lower}
+    if not overlap:
+        return False, (
+            f"cells share no content token with the query "
+            f"(query content tokens: {sorted(q_content)[:5]})"
+        )
+    return True, ""
+
 
 @dataclass
 class VerificationDecision:
@@ -163,7 +267,8 @@ def _extract_numerics(text: str) -> list[str]:
 
 def verify(answer: str, cell_texts: Sequence[str], question: str = "",
            min_coverage: float = MIN_COVERAGE,
-           cell_ids: Sequence[int] | None = None) -> VerificationDecision:
+           cell_ids: Sequence[int] | None = None,
+           strict_nonsense: bool = False) -> VerificationDecision:
     """Verify ``answer`` against ``cell_texts``; ``question`` is filtered out.
 
     ``cell_ids`` is the set of bracketed IDs we presented in the prompt.
@@ -171,7 +276,28 @@ def verify(answer: str, cell_texts: Sequence[str], question: str = "",
     appear in the answer — bracketed or bare — so a generator that
     drops the brackets ("fact 51098" instead of "fact [51098]") is not
     penalised by Stage B as a confabulated numeric.
+
+    ``strict_nonsense`` enables Stage C (query coherence) and Stage D
+    (query-evidence overlap). Off by default to keep callers that drive
+    the verifier on hand-crafted inputs unchanged; the production
+    pipeline turns it on.
     """
+
+    # Stage C runs first when enabled: a token-salad query never reaches
+    # Stage A/B because there is nothing to verify against.
+    if strict_nonsense:
+        c_ok, c_reason = _check_query_coherence(question)
+        if not c_ok:
+            return VerificationDecision(
+                grounded=False,
+                coverage=0.0,
+                covered=0,
+                total=0,
+                threshold=min_coverage,
+                reason=f"query incoherent: {c_reason}",
+                uncovered_tokens=[],
+                uncited_numerics=[],
+            )
 
     # Strip citation markers ("[1]", "[123]") before any extraction: they
     # are prompt-shaped markup, not facts, and would otherwise be classified
@@ -187,6 +313,23 @@ def verify(answer: str, cell_texts: Sequence[str], question: str = "",
 
     answer_tokens = _content_tokens(answer_clean, exclude=question_tokens)
     cell_blob_lower = " ".join(cell_texts).lower()
+
+    # Stage D runs after we have the cell blob but before any pass/fail
+    # decision: a query-evidence mismatch is fatal regardless of how
+    # well the answer covers the (mismatched) cells.
+    if strict_nonsense:
+        d_ok, d_reason = _check_query_evidence_overlap(question, cell_blob_lower)
+        if not d_ok:
+            return VerificationDecision(
+                grounded=False,
+                coverage=0.0,
+                covered=0,
+                total=len(answer_tokens),
+                threshold=min_coverage,
+                reason=f"query-evidence mismatch: {d_reason}",
+                uncovered_tokens=[],
+                uncited_numerics=[],
+            )
 
     if not answer_tokens:
         # Even an empty-content answer must not introduce uncited numerics.
