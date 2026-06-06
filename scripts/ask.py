@@ -22,6 +22,7 @@ if str(REPO_ROOT) not in sys.path:
 DEFAULT_BANK = os.environ.get(
     "MD_BANK_PATH", r"H:\MiniLM\cc_service\bank.db"
 )
+DEFAULT_OVERLAY = os.environ.get("MD_OVERLAY_PATH", "")
 
 
 def main() -> int:
@@ -30,6 +31,11 @@ def main() -> int:
     parser.add_argument(
         "--bank-path", default=DEFAULT_BANK,
         help=f"SQLite bank path (default: {DEFAULT_BANK!r}).",
+    )
+    parser.add_argument(
+        "--overlay-path", default=DEFAULT_OVERLAY,
+        help="Optional overlay SQLite to merge into the bank "
+             "(default: env MD_OVERLAY_PATH or none).",
     )
     parser.add_argument("--top-k", type=int, default=10)
     parser.add_argument(
@@ -51,12 +57,30 @@ def main() -> int:
         print(f"ERROR: bank not found: {bank_path}", file=sys.stderr)
         return 2
 
+    overlay_path: Path | None = None
+    if args.overlay_path:
+        overlay_path = Path(args.overlay_path)
+        if not overlay_path.exists():
+            print(
+                f"ERROR: overlay not found: {overlay_path}", file=sys.stderr
+            )
+            return 2
+
     # Heavy imports after arg parse so --help is fast.
     print(f"[ask] loading bank: {bank_path}", flush=True)
+    if overlay_path is not None:
+        print(f"[ask] merging overlay: {overlay_path}", flush=True)
     t0 = time.time()
     from src.agent.answer_pipeline import AnswerPipeline
+    bank_arg = None
+    if overlay_path is not None:
+        from src.agent.bank_admin import OverlayStore
+        from src.agent.streaming_bank import StreamingBank
+        overlay = OverlayStore(overlay_path)
+        bank_arg = StreamingBank(str(bank_path), overlay=overlay)
     pipeline = AnswerPipeline(
         bank_path=bank_path,
+        bank=bank_arg,
         top_k=args.top_k,
         margin_threshold=args.margin,
         use_4bit=not args.no_4bit,
