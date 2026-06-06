@@ -1,0 +1,312 @@
+{
+  "produced_by": "experiments/exp20_multihop_probe.py",
+  "bank_path": "H:\\MiniLM\\cc_service\\bank.db",
+  "top_k": 10,
+  "margin_threshold": 0.03,
+  "n_queries": 8,
+  "by_outcome": {
+    "grounded": 0,
+    "grounded_with_kw_hit": 0,
+    "silence_gate": 8,
+    "silence_drift": 0
+  },
+  "latency_seconds": {
+    "n": 8,
+    "p50": 0.3932163715362549,
+    "p95": 3.790956974029541,
+    "mean": 0.8149813115596771
+  },
+  "records": [
+    {
+      "n": 1,
+      "query": "What language is spoken on the island where Napoleon was exiled after Waterloo?",
+      "expected_keywords": [
+        "English"
+      ],
+      "hops": "(Napoleon, 1815 exile after Waterloo) -> Saint Helena;  (Saint Helena, official language) -> English.",
+      "outcome": "silence_gate",
+      "answer": "I have no matching memory for that.",
+      "kw_hit": false,
+      "gate_margin": 0.01039952039718628,
+      "gate_threshold": 0.03,
+      "verifier_coverage": null,
+      "verifier_uncovered": [],
+      "verifier_uncited_numerics": [],
+      "citations": [],
+      "top_cells": [
+        {
+          "cell_id": 1971454,
+          "activation": 0.32600224018096924,
+          "text_snippet": "Plot summary After his defeat at the Battle of Waterloo and surrender to the British Empire, Napoleon Bonaparte is delivered into exile and imprisonment on St. Helena, setting the scene for a psychological character study of the fallen Empe..."
+        },
+        {
+          "cell_id": 139093,
+          "activation": 0.31560271978378296,
+          "text_snippet": "Anything related to Corsica, a Mediterranean island that belongs to France The Corsican language"
+        },
+        {
+          "cell_id": 3949334,
+          "activation": 0.30886274576187134,
+          "text_snippet": "Louis-Napol\u00e9on Bonaparte (later Napoleon III) often visited Londonderry House while exiled in London in 1836-40 and 1846\u201348."
+        }
+      ],
+      "wall_time_sec": 3.790956974029541,
+      "silence_reason": "gate: margin below threshold (retrieval diffuse)"
+    },
+    {
+      "n": 2,
+      "query": "Who composed the music for the film that won the Academy Award for Best Picture in 1972?",
+      "expected_keywords": [
+        "Nino Rota"
+      ],
+      "hops": "(Best Picture, 1972) -> The Godfather;  (The Godfather, composer) -> Nino Rota.",
+      "outcome": "silence_gate",
+      "answer": "I have no matching memory for that.",
+      "kw_hit": false,
+      "gate_margin": 0.007248252630233765,
+      "gate_threshold": 0.03,
+      "verifier_coverage": null,
+      "verifier_uncovered": [],
+      "verifier_uncited_numerics": [],
+      "citations": [],
+      "top_cells": [
+        {
+          "cell_id": 5611913,
+          "activation": 0.38011977076530457,
+          "text_snippet": "Awards D'Antoni won the Academy Award in 1972 for Best Picture and the Golden Globe award for Best Motion Picture Drama for The French Connection."
+        },
+        {
+          "cell_id": 4605466,
+          "activation": 0.3728715181350708,
+          "text_snippet": "Academy Awards Best Achievement in Music Written for Motion Pictures, Original Score and"
+        },
+        {
+          "cell_id": 1307716,
+          "activation": 0.35273343324661255,
+          "text_snippet": "Academy Awards ceremonies 1971 film awards 1972 in Los Angeles 1972 in American cinema April 1972 events in the United States Television shows directed by Marty Pasetta"
+        }
+      ],
+      "wall_time_sec": 0.37799954414367676,
+      "silence_reason": "gate: margin below threshold (retrieval diffuse)"
+    },
+    {
+      "n": 3,
+      "query": "In which country was the inventor of dynamite born?",
+      "expected_keywords": [
+        "Sweden",
+        "Swedish"
+      ],
+      "hops": "(dynamite, inventor) -> Alfred Nobel;  (Alfred Nobel, born) -> Stockholm, Sweden.",
+      "outcome": "silence_gate",
+      "answer": "I have no matching memory for that.",
+      "kw_hit": false,
+      "gate_margin": 0.011394411325454712,
+      "gate_threshold": 0.03,
+      "verifier_coverage": null,
+      "verifier_uncovered": [],
+      "verifier_uncited_numerics": [],
+      "citations": [],
+      "top_cells": [
+        {
+          "cell_id": 46305,
+          "activation": 0.38517963886260986,
+          "text_snippet": "Dynamite is an explosive invented by Alfred Nobel, the creator of the Nobel Prize. Its main explosive component is nitroglycerin. Nitroglycerin is very sensitive to movement. It explodes very easily when it is moved. For this reason, it is ..."
+        },
+        {
+          "cell_id": 782425,
+          "activation": 0.37378522753715515,
+          "text_snippet": "On 3 September 1864, a shed used for preparation of nitroglycerin exploded at the factory in Heleneborg, Stockholm, Sweden, killing five people, including Nobel's younger brother Emil. Fazed by the accident, Nobel founded the company Nitrog..."
+        },
+        {
+          "cell_id": 1131279,
+          "activation": 0.34822362661361694,
+          "text_snippet": "Beginning in the late 19th century, Judson Powder Works manufactured dynamite at the northwest foot of the hill. The company had been forced to move from San Francisco and then nearby Fleming Point in Berkeley because of continuing accident..."
+        }
+      ],
+      "wall_time_sec": 0.3884005546569824,
+      "silence_reason": "gate: margin below threshold (retrieval diffuse)"
+    },
+    {
+      "n": 4,
+      "query": "What is the capital of the country where the 2010 Winter Olympics were held?",
+      "expected_keywords": [
+        "Ottawa"
+      ],
+      "hops": "(2010 Winter Olympics, host city) -> Vancouver, Canada;  (Canada, capital) -> Ottawa.",
+      "outcome": "silence_gate",
+      "answer": "I have no matching memory for that.",
+      "kw_hit": false,
+      "gate_margin": 0.00032591819763183594,
+      "gate_threshold": 0.03,
+      "verifier_coverage": null,
+      "verifier_uncovered": [],
+      "verifier_uncited_numerics": [],
+      "citations": [],
+      "top_cells": [
+        {
+          "cell_id": 113839,
+          "activation": 0.380678653717041,
+          "text_snippet": "The 2010 Winter Olympics is the third Olympics hosted by Canada, and the first by the province of British Columbia. Previously, Canada was home to the 1976 Summer Olympics in Montreal and the 1988 Winter Olympics in Calgary. The villages of..."
+        },
+        {
+          "cell_id": 1308196,
+          "activation": 0.3803527355194092,
+          "text_snippet": "The 2006 Winter Olympics in Turin, Italy marked the Winter Games debut of Ethiopia and Madagascar. The 2010 Winter Olympics in Vancouver, British Columbia, Canada saw the debut of the Cayman Islands, Colombia, Peru, and Ghana. The 2014 Wint..."
+        },
+        {
+          "cell_id": 23351,
+          "activation": 0.378482460975647,
+          "text_snippet": "The 2010 Winter Olympics were held in Vancouver and it was the first time Canada won a gold medal on Canadian soil."
+        }
+      ],
+      "wall_time_sec": 0.39098644256591797,
+      "silence_reason": "gate: margin below threshold (retrieval diffuse)"
+    },
+    {
+      "n": 5,
+      "query": "Who succeeded the British monarch who reigned throughout the Second World War?",
+      "expected_keywords": [
+        "Elizabeth II",
+        "Elizabeth"
+      ],
+      "hops": "(British monarch, WWII) -> George VI;  (George VI, succeeded by) -> Elizabeth II.",
+      "outcome": "silence_gate",
+      "answer": "I have no matching memory for that.",
+      "kw_hit": false,
+      "gate_margin": 0.014524072408676147,
+      "gate_threshold": 0.03,
+      "verifier_coverage": null,
+      "verifier_uncovered": [],
+      "verifier_uncited_numerics": [],
+      "citations": [],
+      "top_cells": [
+        {
+          "cell_id": 2103247,
+          "activation": 0.3431912660598755,
+          "text_snippet": "Government Monarch Head of State \u2013 Her Majesty Elizabeth II, Queen of the United Kingdom (1952\u20132022)"
+        },
+        {
+          "cell_id": 551639,
+          "activation": 0.32866719365119934,
+          "text_snippet": "Monarch (1965\u20131970) The succession to the throne was the same as the succession to the British throne."
+        },
+        {
+          "cell_id": 135922,
+          "activation": 0.32325491309165955,
+          "text_snippet": "Anglicanism History of the United Kingdom British monarchy Protestant Reformation"
+        }
+      ],
+      "wall_time_sec": 0.3961925506591797,
+      "silence_reason": "gate: margin below threshold (retrieval diffuse)"
+    },
+    {
+      "n": 6,
+      "query": "What is the highest mountain in the country whose flag features a red maple leaf?",
+      "expected_keywords": [
+        "Logan"
+      ],
+      "hops": "(red maple leaf flag) -> Canada;  (Canada, highest mountain) -> Mount Logan.",
+      "outcome": "silence_gate",
+      "answer": "I have no matching memory for that.",
+      "kw_hit": false,
+      "gate_margin": 0.0035243332386016846,
+      "gate_threshold": 0.03,
+      "verifier_coverage": null,
+      "verifier_uncovered": [],
+      "verifier_uncited_numerics": [],
+      "citations": [],
+      "top_cells": [
+        {
+          "cell_id": 1327303,
+          "activation": 0.30246368050575256,
+          "text_snippet": "The mountain was supposedly climbed by the Amerindian John Tawjoeram during the 1963 Schultz expedition, however there was no trace of John. On 16 September 2006, an expedition set out to climb the mountain and planted the Surinamese flag o..."
+        },
+        {
+          "cell_id": 548491,
+          "activation": 0.2989393472671509,
+          "text_snippet": "Shishapangma is a mountain in the Himalayas range, in Tibet, China. It is also known as Gosainth\u0101n. It is the 14th highest mountain in the world. The first people to reach the top were X\u01d4 J\u00ecng and his expedition, in 1964."
+        },
+        {
+          "cell_id": 109400,
+          "activation": 0.2985090911388397,
+          "text_snippet": "The Queen of Great Britain, had some say in what the flag was to be. She thought that the maple leaf greatly represents the country of Canada."
+        }
+      ],
+      "wall_time_sec": 0.3850984573364258,
+      "silence_reason": "gate: margin below threshold (retrieval diffuse)"
+    },
+    {
+      "n": 7,
+      "query": "What religion was the founder of psychoanalysis raised in?",
+      "expected_keywords": [
+        "Jewish",
+        "Judaism"
+      ],
+      "hops": "(psychoanalysis, founder) -> Sigmund Freud;  (Freud, religious background) -> Jewish.",
+      "outcome": "silence_gate",
+      "answer": "I have no matching memory for that.",
+      "kw_hit": false,
+      "gate_margin": 0.02872776985168457,
+      "gate_threshold": 0.03,
+      "verifier_coverage": null,
+      "verifier_uncovered": [],
+      "verifier_uncited_numerics": [],
+      "citations": [],
+      "top_cells": [
+        {
+          "cell_id": 5254829,
+          "activation": 0.4589085280895233,
+          "text_snippet": "(1) 1885\u20131900: In this period the majority of the basic ideas of psychoanalysis were born out of Freud's mind and remain at the center of some schools up till the present day."
+        },
+        {
+          "cell_id": 4095035,
+          "activation": 0.43018075823783875,
+          "text_snippet": "Because many American social scientists during the first two-thirds of the 20th century had at least a passing familiarity with psychoanalytic theory, it is hard to determine precisely which ones should be considered primarily as psychoanal..."
+        },
+        {
+          "cell_id": 5610168,
+          "activation": 0.42454394698143005,
+          "text_snippet": "Education B.S., Wheaton College, 1963 M.D., Baylor College of Medicine, 1967 Internship, University of Vermont, 1968 Psychoanalysis graduate training, Houston-Galveston Psychoanalytic Institute, 1981"
+        }
+      ],
+      "wall_time_sec": 0.3969995975494385,
+      "silence_reason": "gate: margin below threshold (retrieval diffuse)"
+    },
+    {
+      "n": 8,
+      "query": "In what city was the author of 'The Old Man and the Sea' born?",
+      "expected_keywords": [
+        "Oak Park"
+      ],
+      "hops": "(The Old Man and the Sea, author) -> Ernest Hemingway;  (Hemingway, birthplace) -> Oak Park, Illinois.",
+      "outcome": "silence_gate",
+      "answer": "I have no matching memory for that.",
+      "kw_hit": false,
+      "gate_margin": 0.0033541619777679443,
+      "gate_threshold": 0.03,
+      "verifier_coverage": null,
+      "verifier_uncovered": [],
+      "verifier_uncited_numerics": [],
+      "citations": [],
+      "top_cells": [
+        {
+          "cell_id": 466750,
+          "activation": 0.41059568524360657,
+          "text_snippet": "The Old Man and the Sea is a novella by Ernest Hemingway that was written in 1951 and then published in 1952. It is Hemingway's most famous work, and also his final work to be published while he was alive. Hemingway was awarded the Nobel Pr..."
+        },
+        {
+          "cell_id": 4446479,
+          "activation": 0.4072415232658386,
+          "text_snippet": "The Old Man and the Sea is a short novel by Ernest Hemingway. It may also refer to:"
+        },
+        {
+          "cell_id": 5637584,
+          "activation": 0.38286110758781433,
+          "text_snippet": "Released in 1986, the film went on to win the Grand Prix at the Ottawa International Animation Festival in 1988 and in Los Angeles. Although the visual style is quite different, the story is mostly the same with the exception of some subtle..."
+        }
+      ],
+      "wall_time_sec": 0.3932163715362549,
+      "silence_reason": "gate: margin below threshold (retrieval diffuse)"
+    }
+  ]
+}
