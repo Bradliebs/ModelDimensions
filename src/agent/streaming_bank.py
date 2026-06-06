@@ -26,9 +26,12 @@ import json
 import sqlite3
 import time
 from pathlib import Path
-from typing import Any, Iterable, List, Optional
+from typing import TYPE_CHECKING, Any, Iterable, List, Optional
 
 import numpy as np
+
+if TYPE_CHECKING:
+    from src.agent.bank_admin import OverlayStore
 
 
 def _decode_meta_value(raw: str) -> Any:
@@ -49,9 +52,18 @@ class StreamingBank:
     """
 
     def __init__(self, db_path: str | Path,
-                 report_every: int = 500_000) -> None:
+                 report_every: int = 500_000,
+                 overlay: Optional["OverlayStore"] = None) -> None:
         self.db_path = str(db_path)
         uri = f"file:{self.db_path}?mode=ro"
+        # Overlay support: an optional editable bank whose cells are merged
+        # into the in-RAM arrays at construction time and whose tombstones
+        # suppress base cells at retrieval time. See ``src/agent/bank_admin.py``.
+        self._overlay = overlay
+        self._overlay_ids: set = set()
+        self._tombstoned_ids: set = set()
+        self._overlay_text_by_id: dict = {}
+        self._overlay_label_by_id: dict = {}
         # ``check_same_thread=False``: the pipeline may be constructed on one
         # thread and used on another (e.g. ``HTTPServer`` runs on its own
         # thread). The bank is read-only and callers serialize access (the
@@ -111,6 +123,36 @@ class StreamingBank:
                 )
         self.load_seconds = time.time() - t0
 
+        if self._overlay is not None:
+            self._merge_overlay()
+
+    def _merge_overlay(self) -> None:
+        """Append the overlay's cells onto the in-RAM arrays and capture
+        the tombstone set. Called once at construction time."""
+        payload = self._overlay.load(dim=self.dim)
+        if payload.weights.shape[0] > 0:
+            collisions = set(int(c) for c in payload.cell_ids) & set(
+                int(c) for c in self.cell_ids
+            )
+            if collisions:
+                raise RuntimeError(
+                    f"overlay cell ids collide with base bank ids: "
+                    f"{sorted(collisions)[:5]}..."
+                )
+            self.weights = np.concatenate([self.weights, payload.weights], axis=0)
+            self.thetas = np.concatenate([self.thetas, payload.thetas], axis=0)
+            self.cell_ids = np.concatenate(
+                [self.cell_ids, payload.cell_ids], axis=0
+            )
+            self.n_cells = int(self.cell_ids.shape[0])
+            for cid, text, label in zip(
+                payload.cell_ids, payload.source_texts, payload.labels
+            ):
+                self._overlay_text_by_id[int(cid)] = text
+                self._overlay_label_by_id[int(cid)] = label
+            self._overlay_ids = {int(c) for c in payload.cell_ids}
+        self._tombstoned_ids = set(payload.tombstoned_base_ids)
+
     # ---- query path ----
 
     def whiten(self, raw_vector: np.ndarray) -> np.ndarray:
@@ -129,7 +171,9 @@ class StreamingBank:
         Returned dict has ``cell_ids``, ``activations``, ``thetas`` as
         parallel arrays of length k, ordered by descending activation.
         Activations are the raw dot product against the whitened query;
-        the silence gate works on these values directly.
+        the silence gate works on these values directly. Cells listed in
+        the overlay's tombstones are excluded from the candidate pool
+        before ranking, so a tombstoned cell never appears in the result.
         """
         if vector.shape != (self.dim,):
             raise ValueError(
@@ -137,9 +181,28 @@ class StreamingBank:
             )
         q = vector.astype(np.float32, copy=False)
         activations = self.weights @ q
-        k = min(k, len(activations))
-        idx = np.argpartition(-activations, k - 1)[:k]
-        order = idx[np.argsort(-activations[idx])]
+        if self._tombstoned_ids:
+            valid_mask = np.fromiter(
+                (int(cid) not in self._tombstoned_ids for cid in self.cell_ids),
+                dtype=bool,
+                count=self.cell_ids.shape[0],
+            )
+            valid_idx = np.where(valid_mask)[0]
+            valid_acts = activations[valid_idx]
+            k_eff = min(k, valid_acts.shape[0])
+            if k_eff == 0:
+                return {
+                    "cell_ids": np.array([], dtype=np.int64),
+                    "activations": np.array([], dtype=np.float32),
+                    "thetas": np.array([], dtype=np.float32),
+                }
+            rel = np.argpartition(-valid_acts, k_eff - 1)[:k_eff]
+            rel = rel[np.argsort(-valid_acts[rel])]
+            order = valid_idx[rel]
+        else:
+            k_eff = min(k, len(activations))
+            idx = np.argpartition(-activations, k_eff - 1)[:k_eff]
+            order = idx[np.argsort(-activations[idx])]
         return {
             "cell_ids": self.cell_ids[order].copy(),
             "activations": activations[order].copy(),
@@ -149,8 +212,11 @@ class StreamingBank:
     # ---- source-text fetch (lazy) ----
 
     def fetch_source_text(self, cell_id: int) -> Optional[str]:
+        cid_int = int(cell_id)
+        if cid_int in self._overlay_ids:
+            return self._overlay_text_by_id.get(cid_int)
         row = self._conn.execute(
-            "SELECT text FROM source_texts WHERE cell_id = ?", (int(cell_id),)
+            "SELECT text FROM source_texts WHERE cell_id = ?", (cid_int,)
         ).fetchone()
         return row[0] if row else None
 
@@ -159,16 +225,23 @@ class StreamingBank:
         ids = [int(c) for c in cell_ids]
         if not ids:
             return []
-        placeholders = ",".join("?" for _ in ids)
-        rows = {
-            cid: text
-            for (cid, text) in self._conn.execute(
-                f"SELECT cell_id, text FROM source_texts "
-                f"WHERE cell_id IN ({placeholders})",
-                ids,
-            )
-        }
-        return [rows.get(cid) for cid in ids]
+        base_ids = [c for c in ids if c not in self._overlay_ids]
+        rows: dict = {}
+        if base_ids:
+            placeholders = ",".join("?" for _ in base_ids)
+            rows = {
+                cid: text
+                for (cid, text) in self._conn.execute(
+                    f"SELECT cell_id, text FROM source_texts "
+                    f"WHERE cell_id IN ({placeholders})",
+                    base_ids,
+                )
+            }
+        return [
+            self._overlay_text_by_id.get(c) if c in self._overlay_ids
+            else rows.get(c)
+            for c in ids
+        ]
 
     def fetch_labels(self, cell_ids: Iterable[int]) -> List[Optional[str]]:
         """Bulk-fetch ``cells.label`` for a small list of ids, preserving order.
@@ -179,15 +252,34 @@ class StreamingBank:
         ids = [int(c) for c in cell_ids]
         if not ids:
             return []
-        placeholders = ",".join("?" for _ in ids)
-        rows = {
-            cid: label
-            for (cid, label) in self._conn.execute(
-                f"SELECT id, label FROM cells WHERE id IN ({placeholders})",
-                ids,
+        base_ids = [c for c in ids if c not in self._overlay_ids]
+        rows: dict = {}
+        if base_ids:
+            placeholders = ",".join("?" for _ in base_ids)
+            rows = {
+                cid: label
+                for (cid, label) in self._conn.execute(
+                    f"SELECT id, label FROM cells WHERE id IN ({placeholders})",
+                    base_ids,
+                )
+            }
+        return [
+            self._overlay_label_by_id.get(c) if c in self._overlay_ids
+            else rows.get(c)
+            for c in ids
+        ]
+
+    def base_max_cell_id(self) -> int:
+        """Largest base-bank cell id (excludes overlay cells). Used by
+        :func:`bank_admin.add_cell_from_text` to allocate non-colliding ids."""
+        if self._overlay_ids:
+            base_only = np.fromiter(
+                (int(c) for c in self.cell_ids if int(c) not in self._overlay_ids),
+                dtype=np.int64,
+                count=self.n_cells - len(self._overlay_ids),
             )
-        }
-        return [rows.get(cid) for cid in ids]
+            return int(base_only.max()) if base_only.size else -1
+        return int(self.cell_ids.max()) if self.cell_ids.size else -1
 
     def close(self) -> None:
         if self._conn is not None:
