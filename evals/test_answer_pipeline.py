@@ -173,6 +173,53 @@ def test_known_question_returns_grounded_answer(tiny_bank: Path):
     assert result.gate["margin"] > 0.05
 
 
+def test_grounded_answer_emits_phases_in_order(tiny_bank: Path):
+    encoder = _StubEncoder(dim=8)
+    encoder.responses["What do zebras look like?"] = np.eye(8, dtype=np.float32)[0]
+
+    pipeline = AnswerPipeline(
+        bank_path=tiny_bank,
+        top_k=3,
+        encoder=encoder,
+        generator=lambda prompt: "Zebras have black and white stripes. [1]",
+    )
+    phases: list[str] = []
+    try:
+        result = pipeline.ask("What do zebras look like?", on_phase=phases.append)
+    finally:
+        pipeline.close()
+
+    assert result.silence is False, result.silence_reason
+    assert phases == [
+        "Searching memory\u2026",
+        "Drafting an answer\u2026",
+        "Checking the answer is grounded\u2026",
+    ]
+
+
+def test_silenced_answer_emits_only_search_phase(tiny_bank: Path):
+    encoder = _StubEncoder(dim=8)
+    encoder.responses["What color is the king of Mars?"] = (
+        np.array([0, 0, 0, 1, 0, 0, 0, 0], dtype=np.float32)
+    )
+
+    pipeline = AnswerPipeline(
+        bank_path=tiny_bank,
+        top_k=3,
+        encoder=encoder,
+        generator=lambda prompt: "should not run",
+    )
+    phases: list[str] = []
+    try:
+        result = pipeline.ask("What color is the king of Mars?", on_phase=phases.append)
+    finally:
+        pipeline.close()
+
+    assert result.silence is True
+    # Generation never ran, so no drafting/checking phases were emitted.
+    assert phases == ["Searching memory\u2026"]
+
+
 def test_unknown_question_triggers_silence(tiny_bank: Path):
     encoder = _StubEncoder(dim=8)
     # Vector orthogonal to every cell axis → all activations ~0.

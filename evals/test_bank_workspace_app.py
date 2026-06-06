@@ -112,6 +112,40 @@ def test_given_unloaded_workspace_when_asked_then_conflict_explains_reload(tmp_p
     assert "Reload bank" in response.json()["detail"]
 
 
+def test_given_unloaded_workspace_when_ask_stream_then_failure_event_then_done(tmp_path: Path):
+    # Arrange
+    bank_path = tmp_path / "bank.db"
+    _make_bank(bank_path)
+    session = WorkspaceSession(bank_path=bank_path, overlay_path=tmp_path / "overlay.db", generator=lambda _: "unused", use_4bit=False)
+    client = TestClient(create_app(session))
+
+    # Act
+    with client.stream("GET", "/api/ask/stream", params={"question": "What is Mars?"}) as response:
+        body = "".join(response.iter_text())
+
+    # Assert: the bank is not loaded, so the stream reports an honest failure
+    # then terminates with a done event (never a fabricated answer).
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/event-stream")
+    assert "event: failure" in body
+    assert "not loaded" in body
+    assert body.rstrip().endswith("event: done\ndata: {}")
+
+
+def test_given_blank_question_when_ask_stream_then_422(tmp_path: Path):
+    # Arrange
+    bank_path = tmp_path / "bank.db"
+    _make_bank(bank_path)
+    session = WorkspaceSession(bank_path=bank_path, overlay_path=tmp_path / "overlay.db", generator=lambda _: "unused", use_4bit=False)
+    client = TestClient(create_app(session))
+
+    # Act
+    response = client.get("/api/ask/stream", params={"question": "   "})
+
+    # Assert
+    assert response.status_code == 422
+
+
 def test_given_reload_request_when_posted_then_background_status_is_reported(tmp_path: Path):
     # Arrange
     bank_path = tmp_path / "bank.db"

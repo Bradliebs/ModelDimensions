@@ -402,8 +402,25 @@ class AnswerPipeline:
             out.append({"topic": topic, "activation": float(act)})
         return out
 
-    def ask(self, question: str) -> PipelineResult:
+    def ask(
+        self,
+        question: str,
+        *,
+        on_phase: Optional[Callable[[str], None]] = None,
+    ) -> PipelineResult:
         timings: dict = {}
+
+        def _emit(phase: str) -> None:
+            # Progress hook for streaming UIs. Never affects the result; a
+            # failing callback must not break answering.
+            if on_phase is None:
+                return
+            try:
+                on_phase(phase)
+            except Exception:
+                pass
+
+        _emit("Searching memory\u2026")
 
         t0 = time.time()
         raw = self.encoder.encode_one(question, is_query=True)
@@ -534,10 +551,12 @@ class AnswerPipeline:
         prompt = self._build_prompt(question, cells)
         timings["build_prompt"] = time.time() - t0
 
+        _emit("Drafting an answer\u2026")
         t0 = time.time()
         raw_answer = self._generate(prompt)
         timings["generate"] = time.time() - t0
 
+        _emit("Checking the answer is grounded\u2026")
         t0 = time.time()
         cell_texts = [c["text"] for c in cells]
         verdict = v1_answer_verifier.verify(

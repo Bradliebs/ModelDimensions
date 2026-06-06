@@ -10,7 +10,9 @@ from __future__ import annotations
 
 import argparse
 import hmac
+import json
 import os
+import queue
 import sys
 import threading
 import time
@@ -24,7 +26,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from fastapi import Depends, FastAPI, HTTPException, Request, status  # noqa: E402
-from fastapi.responses import HTMLResponse, JSONResponse  # noqa: E402
+from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse  # noqa: E402
 from pydantic import BaseModel, Field  # noqa: E402
 
 from src.agent.bank_workspace import (  # noqa: E402
@@ -151,7 +153,8 @@ HTML = """
     .muted { color: #536471; }
     .answer-card { background: #f8fafc; border: 1px solid #d7dce0; border-radius: 6px; padding: 10px; margin-top: 10px; }
     .answer-title { font-weight: 600; margin-bottom: 6px; }
-    .answer-meta { color: #536471; font-size: 13px; }
+    .answer-text { font-size: 15px; line-height: 1.55; white-space: pre-wrap; }
+    .answer-meta { color: #536471; font-size: 13px; margin-top: 8px; }
     .cell { border: 1px solid #e1e5e8; border-radius: 4px; padding: 8px; margin: 8px 0; }
     @media (max-width: 900px) { main { grid-template-columns: 1fr; } .full { grid-column: auto; } }
   </style>
@@ -164,7 +167,7 @@ HTML = """
       <textarea id="question" placeholder="Ask a question"></textarea>
       <button id="askButton" onclick="ask()">Ask</button><button id="reloadButton" class="secondary" onclick="reloadBank()">Reload bank</button>
       <pre id="reloadStatus"></pre>
-      <div id="answer" class="answer-card muted">No question asked yet.</div>
+      <div id="answer" class="answer-card muted">Ask a question to get a grounded answer.</div>
       <details><summary>Advanced details</summary><pre id="advanced"></pre></details>
     </section>
     <section>
@@ -268,45 +271,72 @@ async function refreshStatus() {
     document.getElementById('status').textContent = `Server status unavailable: ${err.message || err}`;
   }
 }
-async function ask() {
+let askSource = null;
+function ask() {
   const q = document.getElementById('question').value;
   if (!q.trim()) {
     document.getElementById('answer').textContent = 'Enter a question first.';
     return;
   }
+  if (askSource) { askSource.close(); askSource = null; }
   setBusy('askButton', true, 'Asking...');
-  document.getElementById('answer').textContent = 'Asking the loaded bank. The first generated answer may initialize the answer model.';
+  const answer = document.getElementById('answer');
+  answer.className = 'answer-card';
+  answer.innerHTML = '<div class="answer-text muted">Thinking\u2026 (the first answer after a restart can take a moment to warm up)</div>';
   document.getElementById('advanced').textContent = '';
-  try {
-    const r = await api('/api/ask', {question: q});
-    renderAnswer(r);
+  let completed = false;
+  const es = new EventSource('/api/ask/stream?question=' + encodeURIComponent(q));
+  askSource = es;
+  function finish() { completed = true; es.close(); if (askSource === es) askSource = null; setBusy('askButton', false); }
+  es.addEventListener('phase', (e) => {
+    const name = JSON.parse(e.data);
+    answer.innerHTML = `<div class="answer-text muted">${escapeHtml(name)}</div>`;
+  });
+  es.addEventListener('result', (e) => {
+    const r = JSON.parse(e.data);
     document.getElementById('advanced').textContent = JSON.stringify({citations: r.citations, retrieval: r.retrieval, gate: r.gate, verification: r.verification, closest_topics: r.closest_topics}, null, 2);
-    await refreshStatus();
-  } catch (err) {
-    showError('answer', err);
-  } finally {
-    setBusy('askButton', false);
-  }
+    typeAnswer(r);
+    refreshStatus();
+  });
+  es.addEventListener('failure', (e) => {
+    let msg = 'request failed';
+    try { msg = JSON.parse(e.data); } catch (_) {}
+    showError('answer', {message: msg});
+    finish();
+  });
+  es.addEventListener('done', finish);
+  es.onerror = () => { if (!completed) { showError('answer', {message: 'connection lost'}); finish(); } };
+}
+function typeAnswer(r) {
+  const answer = document.getElementById('answer');
+  answer.className = 'answer-card';
+  if (r.silence) { renderAnswer(r); return; }
+  const text = String(r.answer ?? '');
+  const count = (r.citations || []).length;
+  const meta = count ? `<div class="answer-meta">Answered from ${count} source${count === 1 ? '' : 's'} in memory.</div>` : '';
+  answer.innerHTML = `<div class="answer-text"></div>${meta}`;
+  const target = answer.querySelector('.answer-text');
+  let i = 0;
+  const step = () => {
+    if (i >= text.length) return;
+    i = Math.min(text.length, i + 2);
+    target.textContent = text.slice(0, i);
+    setTimeout(step, 12);
+  };
+  step();
 }
 function renderAnswer(r) {
   const answer = document.getElementById('answer');
-  const verification = r.verification || {};
-  const threshold = verification.threshold ?? 0.5;
-  const coverage = verification.coverage;
-  const coverageText = coverage === null || coverage === undefined ? 'n/a' : Number(coverage).toFixed(2);
-  const topics = (r.closest_topics || []).map(t => `<li>${escapeHtml(t.topic)} <span class="answer-meta">activation ${Number(t.activation).toFixed(3)}</span></li>`).join('');
+  answer.className = 'answer-card';
   if (!r.silence) {
-    answer.className = 'answer-card';
-    answer.innerHTML = `<div class="answer-title">Grounded answer</div><div>${escapeHtml(r.answer)}</div><div class="answer-meta">Citations: ${escapeHtml((r.citations || []).join(', ') || 'none')}</div>`;
+    const count = (r.citations || []).length;
+    const source = count ? `<div class="answer-meta">Answered from ${count} source${count === 1 ? '' : 's'} in memory.</div>` : '';
+    answer.innerHTML = `<div class="answer-text">${escapeHtml(r.answer)}</div>${source}`;
     return;
   }
-  const verifierRejected = r.silence_reason && r.silence_reason.startsWith('verify:');
-  const title = verifierRejected ? 'Draft rejected by grounding check' : 'No grounded answer';
-  const body = verifierRejected
-    ? `The model drafted an answer, but the verifier only found coverage ${coverageText} against the cited cells. Required coverage is ${Number(threshold).toFixed(2)}.`
-    : r.answer;
-  answer.className = 'answer-card';
-  answer.innerHTML = `<div class="answer-title">${title}</div><div>${escapeHtml(body)}</div><div class="answer-meta">Reason: ${escapeHtml(r.silence_reason || 'not enough matching evidence')}</div>${topics ? `<div class="answer-meta">Closest topics:</div><ul>${topics}</ul>` : ''}`;
+  const topics = (r.closest_topics || []).map(t => escapeHtml(t.topic)).slice(0, 5);
+  const near = topics.length ? `<div class="answer-meta">Closest things I have notes on: ${topics.join(', ')}.</div>` : '';
+  answer.innerHTML = `<div class="answer-text">I don't have a confident answer for that in my memory yet.</div>${near}<div class="answer-meta">Open the Advanced details panel to see the grounding check.</div>`;
 }
 async function filePayload() {
   const file = document.getElementById('fileInput').files[0];
@@ -452,6 +482,48 @@ def create_app(session: WorkspaceSession, security: SecurityConfig | None = None
             raise HTTPException(status_code=409, detail=str(exc)) from exc
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    @app.get("/api/ask/stream")
+    def ask_stream(question: str, _r: None = Depends(require_read), _l: None = Depends(rate_limit)) -> StreamingResponse:
+        # Server-Sent Events variant of /api/ask. It streams honest progress
+        # phases (searching / drafting / checking) followed by the final,
+        # already-verified result. No answer tokens are streamed before the
+        # grounding check runs, so the no-confabulation contract is preserved:
+        # a rejected draft still arrives as silence, never as live text.
+        q = (question or "").strip()
+        if not q:
+            raise HTTPException(status_code=422, detail="question is required")
+
+        def event_stream():
+            events: "queue.Queue[tuple[str, object]]" = queue.Queue()
+
+            def on_phase(phase: str) -> None:
+                events.put(("phase", phase))
+
+            def worker() -> None:
+                try:
+                    payload = session.ask(q, on_phase=on_phase)
+                    events.put(("result", payload))
+                except WorkspaceError as exc:
+                    events.put(("failure", str(exc)))
+                except Exception as exc:  # noqa: BLE001 - surfaced to client
+                    events.put(("failure", str(exc)))
+                finally:
+                    events.put(("done", None))
+
+            threading.Thread(target=worker, daemon=True).start()
+            while True:
+                kind, data = events.get()
+                if kind == "done":
+                    yield "event: done\ndata: {}\n\n"
+                    break
+                yield f"event: {kind}\ndata: {json.dumps(data)}\n\n"
+
+        return StreamingResponse(
+            event_stream(),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
 
     @app.post("/api/preview")
     def preview(req: PreviewRequest, _w: None = Depends(require_write), _l: None = Depends(rate_limit)) -> dict:

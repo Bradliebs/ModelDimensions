@@ -482,12 +482,12 @@ class WorkspaceSession:
         self._reload_thread.start()
         return self.reload_snapshot()
 
-    def ask(self, question: str) -> dict:
+    def ask(self, question: str, on_phase=None) -> dict:
         if self.reload_snapshot().get("state") == "running":
             raise WorkspaceError("bank reload is still running; wait until the status says Bank loaded")
         if self.pipeline is None:
             raise WorkspaceError("bank is not loaded; click Reload bank before asking")
-        result = self.pipeline.ask(question)  # type: ignore[union-attr]
+        result = self.pipeline.ask(question, on_phase=on_phase)  # type: ignore[union-attr]
         payload = result.as_dict()
         record = {"ts": time.time(), "question": question, "result": payload}
         self.history.append(record)
