@@ -63,6 +63,47 @@ a tiny stub bank). Two existing tests in `evals/test_answer_pipeline.py`
 were extended to assert the new `closest_topics` shape and uncited-numeric
 rejection.
 
+### Step 3 follow-on — empirical batch eval (real bank)
+
+`exp17` was then run against the production 5.7M-cell bank with Phi-3-mini-4k-instruct (4-bit). Output: `results/v1_pipeline_eval.json`.
+
+| Class    | n   | Accuracy | Outcome counts                                |
+|----------|----:|---------:|-----------------------------------------------|
+| known    |  20 |   45.0 % | grounded=9, gate-silenced=3, drift-silenced=8 |
+| unknown  |  20 |  100.0 % | all 20 gate-silenced                          |
+| noise    |  10 |   90.0 % | 9 silenced, 1 false-fire ("the the the…")    |
+
+Latency (seconds, n=50):
+
+|                | n   | p50    | p95    | mean   |
+|----------------|----:|-------:|-------:|-------:|
+| total wall     |  50 |  0.502 | 23.613 |  5.930 |
+| retrieve       |  50 |  0.448 |  0.671 |  0.474 |
+| encode         |  50 |  0.015 |  0.026 |  0.116 |
+| generate (when run) | 18 | 12.716 | 23.152 | 14.812 |
+| verify   (when run) | 18 |  0.000 |  0.001 |  0.000 |
+
+What this measures honestly:
+
+- **Precision is high.** 1 false-fire in 30 expected-silence queries. The
+  gate clears 100 % of fabricated-but-plausible "unknown" queries and 9/10
+  noise queries.
+- **Known-class recall is moderate (45 %).** The two failure modes:
+  - Gate (3/20) — `top1 − top2 < 0.05`. These known queries don't separate
+    cleanly from their nearest neighbours.
+  - Verifier drift (8/20) — Phi-3 drafts an answer the lexical verifier
+    rejects. Stage A coverage failures and Stage B novel-numerics both
+    contribute.
+- **Conservative-by-design.** The system errs toward silence; the design
+  decision was that wrong-but-confident is worse than silent.
+- **The pathological case.** The repeated-stop-word query `"the the the
+  the…"` produced gate margin +0.329 and a grounded answer. Documented as
+  a known wart; not load-bearing for V1's value prop.
+
+The `results/v1_pipeline_eval.json` file contains per-query records with
+gate margin, verifier coverage, and per-stage timings, so any of the
+silence_drift cases can be inspected individually.
+
 ### Documented deviations from the original plan body
 
 These are intentional and noted here so the plan body below stays as the
