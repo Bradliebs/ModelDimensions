@@ -78,6 +78,12 @@ def main() -> int:
         else:
             cites = ", ".join(str(c) for c in result.citations)
             print(f"(citations: [{cites}])")
+        if result.closest_topics:
+            topics = "; ".join(
+                f"{t['topic']!r} ({t['activation']:.3f})"
+                for t in result.closest_topics
+            )
+            print(f"(closest topics: {topics})")
         print(
             f"(gate margin={result.gate['margin']:.3f} >= "
             f"{result.gate['threshold']:.2f}, "

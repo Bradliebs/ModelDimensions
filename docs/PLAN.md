@@ -3,6 +3,104 @@
 This document is the working contract. The agent follows it. No drift, no
 scope creep, no "while I'm here" cleanups.
 
+## Status (2026-06-07)
+
+| Step | State    | Commit    | Artefact / proof |
+|------|----------|-----------|------------------|
+| 1    | DONE     | `90e27e0` | `results/paper_headline_reproduce.json` (both checkpoints match) |
+| 2    | DONE     | `0701457` | `results/bank_selectivity_at_5p7m.json` (bank is 5.7M cells, not 1.8M) |
+| 2.5  | DONE     | `2e52bfb` | `results/gate_signals_at_5p7m.json` — silence gate `(top1-top2) >= 0.05` |
+| 3    | DONE     | `a085364` | `scripts/ask.py`, real-bank smoke (see below), 5/5 pipeline tests |
+| 3+   | DONE     | (this commit) | V1-gap closure: numeric verifier, closest-topics silence, batch eval, HTTP service |
+| 4    | NOT DONE | —         | overlay editable bank + provenance |
+| 5    | NOT DONE | —         | `scripts/setup.py` + `docs/RUNBOOK.md` |
+
+`origin/master` is at `a085364` (will advance with this commit). Full
+test suite: **101 passed**.
+
+### Step 3 — real-bank smoke evidence
+
+- Known: `python scripts/ask.py "the double-slit experiment demonstrates wave-particle duality"`
+  → grounded answer, 9 citations, gate margin 0.109, verifier coverage 0.85.
+- Unknown: `python scripts/ask.py "What color is the king of Mars?"`
+  → `"I have no matching memory for that."` (gate margin 0.031 < 0.05).
+- Phi-3-mini-4k-instruct 4-bit on RTX 3070: 9.6 s load, ~1.7 s/answer, ~2.6 GB VRAM.
+
+### Step 3 follow-on — V1-gap closure (this commit)
+
+Five gaps in the V1 pipeline as shipped at `a085364` were closed:
+
+1. **Batch eval over a labelled set.** [experiments/exp17_v1_pipeline_eval.py](../experiments/exp17_v1_pipeline_eval.py)
+   loads the pipeline once, runs the 50 labelled probe queries from
+   `results/bank_selectivity_at_5p7m.json` (20 known / 20 unknown / 10
+   noise), writes per-class accuracy and latency p50/p95/mean to
+   `results/v1_pipeline_eval.json`. Importable for tests.
+2. **Verifier strict-match for numbers and dates.** Stage B in
+   [src/agent/v1_answer_verifier.py](../src/agent/v1_answer_verifier.py)
+   now extracts every numeric run and month-name token from the answer
+   (after stripping `[123]` citation markers and tokens already in the
+   question) and rejects if any of them is absent from the cited cell
+   blob. Catches confabulated years/months while leaving paraphrases
+   that reuse cell vocabulary alone.
+3. **Latency numbers.** Same exp17 harness records per-stage latencies
+   (retrieve, encode, generate, verify) with n/p50/p95/mean.
+4. **Progressive disclosure on silence.** All silence paths in
+   [src/agent/answer_pipeline.py](../src/agent/answer_pipeline.py) now
+   carry `closest_topics: [{topic, activation}, ...]` populated from
+   `cells.label` (or a truncated text snippet when the label is NULL).
+   Default k=3. Surfaced in `scripts/ask.py`.
+5. **Service wrapper.** [src/agent/service.py](../src/agent/service.py)
+   exposes the pipeline over stdlib `http.server`: `GET /health` and
+   `POST /ask {question}`. Started via `python scripts/serve.py`.
+   Single-process, single-threaded — request serialization is the
+   intended concurrency contract.
+
+Test additions: 24 new tests across
+`evals/test_v1_answer_verifier.py` (verifier Stages A and B in isolation),
+`evals/test_service.py` (end-to-end HTTP), and
+`evals/test_v1_pipeline_eval_harness.py` (`run_eval` aggregation against
+a tiny stub bank). Two existing tests in `evals/test_answer_pipeline.py`
+were extended to assert the new `closest_topics` shape and uncited-numeric
+rejection.
+
+### Documented deviations from the original plan body
+
+These are intentional and noted here so the plan body below stays as the
+historical contract.
+
+1. **StreamingBank, not `src/agent/sqlite_bank.py` top-k.** SqliteBank's
+   `fetchall` peaks ~25 GB RAM on the real 5.7M-cell bank. Built
+   [src/agent/streaming_bank.py](../src/agent/streaming_bank.py) (peaks
+   ~8.75 GB) for V1; SqliteBank stays as the fixture/test loader.
+2. **Silence gate replaces the rerank floor.** exp15 showed
+   `rerank_min_score = 0.10` cleared 70% of pure-noise queries — almost no
+   discrimination at the boundary. The single-signal gate
+   `(top1 − top2) >= 0.05` from
+   [src/agent/v1_silence_gate.py](../src/agent/v1_silence_gate.py) replaces
+   it (noise 70% → 10%, unknown 25% → 0%, known stays 85%).
+3. **`v1_answer_verifier.py`, not the existing `verifier.py`.** The existing
+   verifier is cell-vs-cell ACCEPT/AMBIGUOUS/REJECT — the wrong shape for
+   answer-vs-cells entailment. Built
+   [src/agent/v1_answer_verifier.py](../src/agent/v1_answer_verifier.py)
+   (token-coverage ≥ 0.50) side-by-side; the cell-vs-cell verifier is
+   untouched.
+4. **k=10, not k=8.** Cosmetic; matches what exp15/exp16 measured against.
+5. **`trust_remote_code=False` for Phi-3.** The bundled `modeling_phi3.py`
+   raises `KeyError: 'type'` on `rope_scaling` with the current
+   transformers; the native transformers Phi3 path works. Documented in the
+   answer pipeline.
+
+### Stop conditions hit so far
+
+None. No stop condition has fired through Steps 1–3.
+
+### Next
+
+Step 4 (overlay editable bank), then Step 5 (setup + runbook). Order from
+the plan body still holds.
+
+---
+
 ## Two artefacts, one library
 
 This plan delivers two distinct things that share one library (the 1.8M-cell
@@ -125,7 +223,7 @@ it, V1 would be vanilla RAG with a fancy library.
 
 ## Steps
 
-### Step 1 — Reproduce the paper's held-out triple
+### Step 1 — Reproduce the paper's held-out triple — **DONE (`90e27e0`)**
 
 **Purpose:** Validate the bank does real semantic work. This is the research
 contribution. After this step, the bank is trusted as a knowledge source.
@@ -168,7 +266,7 @@ JSON.
 semantic gap is within ±0.05 nats of the paper claim. Skips with explicit
 reason if JSON missing.
 
-### Step 2 — Measure bank selectivity at 1.8M cells
+### Step 2 — Measure bank selectivity at 1.8M cells — **DONE (`0701457`; bank is 5.7M cells, not 1.8M)**
 
 **Purpose:** Confirm the bank discriminates known from unknown queries at
 deployed scale. Addresses paper §9a's open threat-to-validity.
@@ -185,10 +283,13 @@ deployed scale. Addresses paper §9a's open threat-to-validity.
 (known sampled from `source_texts.text` rows, no fabrication) → run → write
 JSON. No assertions — measurement, not regression gate.
 
-### Step 3 — V1 grounded-answer pipeline
+### Step 3 — V1 grounded-answer pipeline — **DONE (`a085364`)**
 
 **Purpose:** Build the working V1 system. End-to-end question → cited
 answer or honest silence.
+
+See the Status section at the top of this document for the substitutions
+actually shipped (StreamingBank, silence gate, `v1_answer_verifier`).
 
 **Deliverables:**
 
@@ -228,7 +329,7 @@ answer or honest silence.
 | "asdf qwerty zxcv" (noise) | `[silence: no matching memory]` |
 | "Who founded Microsoft and what is the capital of Mars?" (mixed) | Cited answer to the known part, silence on the absent part — OR full silence if verifier can't separate. Documented either way. |
 
-### Step 4 — Editable bank with provenance (overlay store)
+### Step 4 — Editable bank with provenance (overlay store) — **NOT STARTED**
 
 **Purpose:** Editability is one of the five named attributes. Add it
 without risking the 13 GB production bank.
@@ -260,7 +361,7 @@ production bank file is never written.
 5. Ask again → assert silence returned.
 6. Inspect `list_provenance(cell_id)` → assert all three events present.
 
-### Step 5 — Long-run usability rail
+### Step 5 — Long-run usability rail — **NOT STARTED**
 
 **Purpose:** Robust over time. The system must still work in 3 months
 without remembering 20 setup steps.

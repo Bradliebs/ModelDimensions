@@ -52,7 +52,12 @@ class StreamingBank:
                  report_every: int = 500_000) -> None:
         self.db_path = str(db_path)
         uri = f"file:{self.db_path}?mode=ro"
-        self._conn = sqlite3.connect(uri, uri=True)
+        # ``check_same_thread=False``: the pipeline may be constructed on one
+        # thread and used on another (e.g. ``HTTPServer`` runs on its own
+        # thread). The bank is read-only and callers serialize access (the
+        # stdlib HTTPServer is single-threaded), so cross-thread reads are
+        # safe.
+        self._conn = sqlite3.connect(uri, uri=True, check_same_thread=False)
         cur = self._conn.cursor()
 
         meta = {
@@ -160,6 +165,25 @@ class StreamingBank:
             for (cid, text) in self._conn.execute(
                 f"SELECT cell_id, text FROM source_texts "
                 f"WHERE cell_id IN ({placeholders})",
+                ids,
+            )
+        }
+        return [rows.get(cid) for cid in ids]
+
+    def fetch_labels(self, cell_ids: Iterable[int]) -> List[Optional[str]]:
+        """Bulk-fetch ``cells.label`` for a small list of ids, preserving order.
+
+        Many cells in the production bank have NULL labels; callers should
+        fall back to a truncated source-text snippet for display.
+        """
+        ids = [int(c) for c in cell_ids]
+        if not ids:
+            return []
+        placeholders = ",".join("?" for _ in ids)
+        rows = {
+            cid: label
+            for (cid, label) in self._conn.execute(
+                f"SELECT id, label FROM cells WHERE id IN ({placeholders})",
                 ids,
             )
         }

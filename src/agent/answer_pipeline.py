@@ -20,7 +20,7 @@ thin shell over it.
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, List, Optional, Sequence
 
@@ -35,6 +35,13 @@ from src.cc_service.encoder import EncoderSingleton
 # system's valid answer for "this is outside the library".
 SILENCE_NO_MATCH = "I have no matching memory for that."
 SILENCE_DRIFT = "I drafted an answer but could not ground it in memory."
+
+# Number of "closest topics" to surface alongside a silence response. Three
+# is enough to signal "the bank knows about X, Y, Z but not your question"
+# without turning the silence path into a covert retrieval channel.
+DEFAULT_CLOSEST_TOPICS_K: int = 3
+# Truncation length for the source-text fallback when a cell's label is NULL.
+_TOPIC_SNIPPET_LEN: int = 60
 
 
 PHI3_MODEL = "microsoft/Phi-3-mini-4k-instruct"
@@ -142,6 +149,10 @@ class PipelineResult:
     gate: dict
     verification: Optional[dict]
     timings: dict
+    # Top-N "closest topics" surfaced alongside silence (and informationally
+    # on grounded answers). Each entry: {"topic": str, "activation": float}.
+    # Topic is `cells.label` when set, else a truncated source-text snippet.
+    closest_topics: list[dict] = field(default_factory=list)
 
     def as_dict(self) -> dict:
         return {
@@ -154,6 +165,7 @@ class PipelineResult:
             "gate": self.gate,
             "verification": self.verification,
             "timings": self.timings,
+            "closest_topics": list(self.closest_topics),
         }
 
 
@@ -167,6 +179,7 @@ class AnswerPipeline:
         top_k: int = 10,
         margin_threshold: float = v1_silence_gate.DEFAULT_MARGIN_THRESHOLD,
         min_coverage: float = v1_answer_verifier.MIN_COVERAGE,
+        closest_topics_k: int = DEFAULT_CLOSEST_TOPICS_K,
         generator: Optional[Callable[[str], str]] = None,
         generator_model: str = PHI3_MODEL,
         use_4bit: bool = True,
@@ -176,6 +189,7 @@ class AnswerPipeline:
         self.top_k = int(top_k)
         self.margin_threshold = float(margin_threshold)
         self.min_coverage = float(min_coverage)
+        self.closest_topics_k = int(closest_topics_k)
 
         t0 = time.time()
         self.bank = bank if bank is not None else StreamingBank(bank_path)
@@ -203,6 +217,42 @@ class AnswerPipeline:
 
     # ---- public API ----
 
+    def _build_closest_topics(self, retrieval: dict) -> list[dict]:
+        """Top-K topic snippets for progressive disclosure on silence.
+
+        Topic is the cell's label when set; falls back to a truncated
+        source-text snippet so a NULL-label cell still names what it is
+        about. Returns an empty list if the bank doesn't expose
+        ``fetch_labels`` (e.g. an injected mock).
+        """
+        if self.closest_topics_k <= 0:
+            return []
+        ids = retrieval["top_k_cell_ids"][: self.closest_topics_k]
+        acts = retrieval["activations"][: self.closest_topics_k]
+        if not ids:
+            return []
+        try:
+            labels = self.bank.fetch_labels(ids)
+        except AttributeError:
+            labels = [None] * len(ids)
+        try:
+            texts = self.bank.fetch_source_texts(ids)
+        except AttributeError:
+            texts = [None] * len(ids)
+        out: list[dict] = []
+        for label, text, act in zip(labels, texts, acts):
+            topic: str
+            if label and str(label).strip():
+                topic = str(label).strip()
+            elif text:
+                snippet = " ".join(str(text).split())[:_TOPIC_SNIPPET_LEN]
+                topic = snippet + ("…" if len(str(text)) > _TOPIC_SNIPPET_LEN
+                                   else "")
+            else:
+                continue  # nothing useful to surface for this cell
+            out.append({"topic": topic, "activation": float(act)})
+        return out
+
     def ask(self, question: str) -> PipelineResult:
         timings: dict = {}
 
@@ -225,6 +275,10 @@ class AnswerPipeline:
             "thetas": [float(t) for t in topk["thetas"]],
         }
 
+        t0 = time.time()
+        closest_topics = self._build_closest_topics(retrieval)
+        timings["closest_topics"] = time.time() - t0
+
         if not gate.fire:
             return PipelineResult(
                 question=question,
@@ -236,6 +290,7 @@ class AnswerPipeline:
                 gate=gate.as_dict(),
                 verification=None,
                 timings=timings,
+                closest_topics=closest_topics,
             )
 
         # Gate fired: fetch source texts only for the cells we'll cite.
@@ -259,6 +314,7 @@ class AnswerPipeline:
                 gate=gate.as_dict(),
                 verification=None,
                 timings=timings,
+                closest_topics=closest_topics,
             )
 
         t0 = time.time()
@@ -285,13 +341,15 @@ class AnswerPipeline:
                 silence_reason=(
                     f"verify: coverage={verdict.coverage:.2f} "
                     f"< {verdict.threshold:.2f}; "
-                    f"uncovered={verdict.uncovered_tokens[:5]}"
+                    f"uncovered={verdict.uncovered_tokens[:5]}; "
+                    f"uncited_numerics={verdict.uncited_numerics[:3]}"
                 ),
                 citations=[c["cell_id"] for c in cells],
                 retrieval=retrieval,
                 gate=gate.as_dict(),
                 verification=verdict.as_dict(),
                 timings=timings,
+                closest_topics=closest_topics,
             )
 
         return PipelineResult(
@@ -304,6 +362,7 @@ class AnswerPipeline:
             gate=gate.as_dict(),
             verification=verdict.as_dict(),
             timings=timings,
+            closest_topics=closest_topics,
         )
 
     def close(self) -> None:
@@ -316,4 +375,5 @@ __all__ = [
     "SILENCE_NO_MATCH",
     "SILENCE_DRIFT",
     "PHI3_MODEL",
+    "DEFAULT_CLOSEST_TOPICS_K",
 ]

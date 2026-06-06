@@ -6,41 +6,63 @@ shape: given a generated free-text answer and the cells it was supposed
 to draw from, decide whether the answer is grounded in those cells or
 the model wandered off into unsupported claims.
 
-This is a deliberately simple first version. The rule:
+Two-stage check:
 
-  1. Tokenize the answer into lower-cased word tokens.
-  2. Drop stopwords, numbers under length 2, and tokens that appear in the
-     question itself (the question's vocabulary doesn't prove grounding).
-  3. The remaining tokens are the *content* tokens. Count how many appear
-     in the concatenation of the cited cell texts (substring containment
-     after the same tokenization).
-  4. coverage = covered / total. Fire if coverage >= MIN_COVERAGE.
+  STAGE A — token coverage (catches lexical drift):
+    1. Tokenize the answer into lower-cased word tokens.
+    2. Drop stopwords, numbers under length 2, and tokens that appear in the
+       question itself (the question's vocabulary doesn't prove grounding).
+    3. The remaining tokens are the *content* tokens. Count how many appear
+       in the concatenation of the cited cell texts.
+    4. coverage = covered / total. Pass iff coverage >= MIN_COVERAGE.
+
+  STAGE B — strict numeric/date match (catches confabulated
+  proper nouns and numbers; this is the harder failure mode):
+    1. Pull every numeric run (regex ``\\d+(\\.\\d+)?``) and every
+       month-name token from the answer.
+    2. Drop any number/month that already appears in the question
+       (the question's numbers/dates don't prove grounding).
+    3. Every remaining number/month must appear in the cited cell texts.
+    4. A single missing numeric/date token is a hard reject. This is the
+       Friday-vs-Monday bet from the v1.0 research baseline applied at
+       answer-vs-cells scope: a one-token factual flip is the failure
+       mode this layer exists to catch.
+
+Both stages must pass for ``grounded=True``. Stage B firing without
+Stage A is rare because most numeric drift drags coverage down too, but
+it does happen for short answers ("Yes, in 1812.") so we check both.
 
 Edge cases:
   - If the answer has zero content tokens after filtering, coverage is
-    treated as 1.0 (nothing to verify — the answer is either trivially
-    grounded or trivially empty; the caller should still inspect length).
+    treated as 1.0 (nothing to verify — trivially grounded or trivially
+    empty; the caller should still inspect length).
   - If the cited cells are empty, coverage is 0.0.
 
 This is intentionally lexical, not semantic. Phi-3 paraphrasing of a
 cited cell will still pass because the substantive nouns survive
-paraphrasing. A confabulated proper noun or number will not appear in
-the cells and will pull coverage down. That's the failure mode this
-verifier exists to catch.
-
-Future upgrades (out of scope for V1):
-  - Per-sentence rather than per-answer coverage.
-  - Entailment via a small NLI model.
-  - Number/date strict-match checks (re-use rules from
-    `src/agent/verifier.py`).
+paraphrasing. A confabulated proper noun will still pull coverage down;
+a confabulated date (e.g. "1969" not in cells) is rejected by Stage B.
 """
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
-from typing import Iterable, Sequence, Set
+from dataclasses import dataclass, field
+from typing import Sequence, Set
 
 _TOKEN_RE = re.compile(r"[A-Za-z0-9']+")
+# Numeric runs: integers, decimals, dates with separators handled by the
+# fact that we test substring-presence in the cell blob.
+_NUMBER_RE = re.compile(r"\d+(?:[.,]\d+)?")
+# Citation markers we ASKED the generator to emit (e.g. "[1]", "[123]"):
+# these are markup, not facts, so strip them before numeric extraction.
+_CITATION_BRACKET_RE = re.compile(r"\[\d+\]")
+
+_MONTHS: frozenset[str] = frozenset({
+    "january", "february", "march", "april", "may", "june",
+    "july", "august", "september", "october", "november", "december",
+    "jan", "feb", "mar", "apr", "jun", "jul", "aug", "sep", "sept",
+    "oct", "nov", "dec",
+})
 
 _STOPWORDS: frozenset[str] = frozenset({
     "a", "an", "the", "is", "are", "was", "were", "be", "been", "being",
@@ -79,6 +101,9 @@ class VerificationDecision:
     threshold: float
     reason: str
     uncovered_tokens: list[str]
+    # Stage B: numbers/dates in the answer that did not appear in the cells.
+    # Empty list when stage B passed (or had nothing to check).
+    uncited_numerics: list[str] = field(default_factory=list)
 
     def as_dict(self) -> dict:
         return {
@@ -89,6 +114,7 @@ class VerificationDecision:
             "threshold": self.threshold,
             "reason": self.reason,
             "uncovered_tokens": self.uncovered_tokens,
+            "uncited_numerics": self.uncited_numerics,
         }
 
 
@@ -107,14 +133,54 @@ def _content_tokens(text: str, exclude: Set[str] | None = None) -> list[str]:
     return out
 
 
+def _extract_numerics(text: str) -> list[str]:
+    """Return numbers and month-name tokens found in ``text`` (deduplicated,
+    insertion order preserved). Numbers keep their original form so a year
+    "1969" matches "1969" but not "69"."""
+    seen: set[str] = set()
+    out: list[str] = []
+    for m in _NUMBER_RE.findall(text):
+        if m not in seen:
+            seen.add(m)
+            out.append(m)
+    for raw in _TOKEN_RE.findall(text.lower()):
+        if raw in _MONTHS and raw not in seen:
+            seen.add(raw)
+            out.append(raw)
+    return out
+
+
 def verify(answer: str, cell_texts: Sequence[str], question: str = "",
            min_coverage: float = MIN_COVERAGE) -> VerificationDecision:
     """Verify ``answer`` against ``cell_texts``; ``question`` is filtered out."""
 
-    question_tokens = set(_content_tokens(question)) if question else set()
+    # Strip citation markers ("[1]", "[123]") before any extraction: they
+    # are prompt-shaped markup, not facts, and would otherwise be classified
+    # as uncited numerics.
+    answer_clean = _CITATION_BRACKET_RE.sub(" ", answer)
 
-    answer_tokens = _content_tokens(answer, exclude=question_tokens)
+    question_tokens = set(_content_tokens(question)) if question else set()
+    question_numerics = set(_extract_numerics(question)) if question else set()
+
+    answer_tokens = _content_tokens(answer_clean, exclude=question_tokens)
+    cell_blob_lower = " ".join(cell_texts).lower()
+
     if not answer_tokens:
+        # Even an empty-content answer must not introduce uncited numerics.
+        ans_nums = [n for n in _extract_numerics(answer_clean)
+                    if n not in question_numerics]
+        uncited = [n for n in ans_nums if n.lower() not in cell_blob_lower]
+        if uncited:
+            return VerificationDecision(
+                grounded=False,
+                coverage=1.0,
+                covered=0,
+                total=0,
+                threshold=min_coverage,
+                reason=f"uncited numeric/date in answer: {uncited[:3]}",
+                uncovered_tokens=[],
+                uncited_numerics=uncited[:10],
+            )
         return VerificationDecision(
             grounded=True,
             coverage=1.0,
@@ -123,10 +189,10 @@ def verify(answer: str, cell_texts: Sequence[str], question: str = "",
             threshold=min_coverage,
             reason="answer has no content tokens to verify",
             uncovered_tokens=[],
+            uncited_numerics=[],
         )
 
-    cell_blob = " ".join(cell_texts).lower()
-    cell_token_set = set(_TOKEN_RE.findall(cell_blob))
+    cell_token_set = set(_TOKEN_RE.findall(cell_blob_lower))
 
     covered: list[str] = []
     uncovered: list[str] = []
@@ -138,7 +204,25 @@ def verify(answer: str, cell_texts: Sequence[str], question: str = "",
 
     total = len(answer_tokens)
     coverage = len(covered) / total
-    grounded = coverage >= min_coverage
+    coverage_ok = coverage >= min_coverage
+
+    # Stage B: every number/month in the answer (minus those already in the
+    # question) must appear in the cell text blob.
+    answer_numerics = _extract_numerics(answer_clean)
+    novel_numerics = [n for n in answer_numerics if n not in question_numerics]
+    uncited = [n for n in novel_numerics if n.lower() not in cell_blob_lower]
+    numerics_ok = len(uncited) == 0
+
+    grounded = coverage_ok and numerics_ok
+    if grounded:
+        reason = "coverage above threshold; all numerics cited"
+    elif not coverage_ok and not numerics_ok:
+        reason = (f"coverage below threshold AND uncited numerics "
+                  f"({uncited[:3]})")
+    elif not coverage_ok:
+        reason = "coverage below threshold (answer drifted from cells)"
+    else:
+        reason = f"uncited numeric/date in answer: {uncited[:3]}"
 
     return VerificationDecision(
         grounded=grounded,
@@ -146,10 +230,9 @@ def verify(answer: str, cell_texts: Sequence[str], question: str = "",
         covered=len(covered),
         total=total,
         threshold=min_coverage,
-        reason=("coverage above threshold"
-                if grounded
-                else "coverage below threshold (answer drifted from cells)"),
+        reason=reason,
         uncovered_tokens=uncovered[:25],
+        uncited_numerics=uncited[:10],
     )
 
 

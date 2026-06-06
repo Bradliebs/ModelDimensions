@@ -249,12 +249,76 @@ def test_pipeline_result_shape(tiny_bank: Path):
 
     d = result.as_dict()
     for key in ("question", "answer", "silence", "silence_reason",
-                "citations", "retrieval", "gate", "verification", "timings"):
+                "citations", "retrieval", "gate", "verification", "timings",
+                "closest_topics"):
         assert key in d, f"missing key: {key}"
     assert set(d["retrieval"]) >= {"top_k_cell_ids", "activations", "thetas"}
     assert set(d["gate"]) >= {"fire", "top1_activation", "top2_activation",
                               "margin", "threshold", "reason"}
     assert all(t >= 0 for t in d["timings"].values())
+    # closest_topics is informationally populated even on grounded answers.
+    assert isinstance(d["closest_topics"], list)
+    assert len(d["closest_topics"]) >= 1
+    for topic in d["closest_topics"]:
+        assert "topic" in topic and "activation" in topic
+
+
+def test_silence_includes_closest_topics(tiny_bank: Path):
+    """Progressive disclosure: silence response surfaces top-3 topic snippets."""
+    encoder = _StubEncoder(dim=8)
+    # Vector orthogonal to every cell axis -> diffuse activations -> silence.
+    encoder.responses["What color is the king of Mars?"] = (
+        np.array([0, 0, 0, 1, 0, 0, 0, 0], dtype=np.float32)
+    )
+
+    pipeline = AnswerPipeline(
+        bank_path=tiny_bank,
+        top_k=3,
+        encoder=encoder,
+        generator=lambda p: "should not run",
+    )
+    try:
+        result = pipeline.ask("What color is the king of Mars?")
+    finally:
+        pipeline.close()
+
+    assert result.silence is True
+    assert result.gate["fire"] is False
+    # Top-3 topics surfaced; topic strings are the cell labels we stored.
+    assert len(result.closest_topics) == 3
+    topics = {t["topic"] for t in result.closest_topics}
+    assert topics == {"cell_zebra", "cell_paris", "cell_chess"}
+    # Activations sorted descending.
+    acts = [t["activation"] for t in result.closest_topics]
+    assert acts == sorted(acts, reverse=True)
+
+
+def test_drift_with_uncited_year_rejected(tiny_bank: Path):
+    """Stage B: an answer that introduces a year not in the cited cells fails."""
+    encoder = _StubEncoder(dim=8)
+    encoder.responses["When was Paris founded?"] = np.eye(8, dtype=np.float32)[1]
+
+    def confab_year(prompt: str) -> str:
+        # Token coverage with the Paris cell is fine, but "1872" is fabricated.
+        return "Paris is the capital of France and was founded in 1872. [2]"
+
+    pipeline = AnswerPipeline(
+        bank_path=tiny_bank,
+        top_k=3,
+        encoder=encoder,
+        generator=confab_year,
+    )
+    try:
+        result = pipeline.ask("When was Paris founded?")
+    finally:
+        pipeline.close()
+
+    assert result.silence is True
+    assert result.answer == SILENCE_DRIFT
+    assert result.verification is not None
+    assert result.verification["grounded"] is False
+    # "1872" should be reported as the uncited numeric.
+    assert "1872" in result.verification["uncited_numerics"]
 
 
 def test_encoder_mismatch_rejected(tiny_bank: Path):
