@@ -484,6 +484,9 @@ class VerificationDecision:
     # was found anywhere in the cells and whether it co-located with a
     # question anchor. Empty when Stage E was not run.
     stage_e_log: list[dict] = field(default_factory=list)
+    # Stage F: per-claim cross-cell-splice check report. Empty dict when
+    # Stage F was not enabled.
+    claim_verifier_report: dict = field(default_factory=dict)
 
     def as_dict(self) -> dict:
         return {
@@ -497,6 +500,7 @@ class VerificationDecision:
             "uncited_numerics": self.uncited_numerics,
             "unanchored_proper_nouns": self.unanchored_proper_nouns,
             "stage_e_log": self.stage_e_log,
+            "claim_verifier_report": self.claim_verifier_report,
         }
 
 
@@ -535,7 +539,8 @@ def _extract_numerics(text: str) -> list[str]:
 def verify(answer: str, cell_texts: Sequence[str], question: str = "",
            min_coverage: float = MIN_COVERAGE,
            cell_ids: Sequence[int] | None = None,
-           strict_nonsense: bool = False) -> VerificationDecision:
+           strict_nonsense: bool = False,
+           enable_claim_verification: bool = False) -> VerificationDecision:
     """Verify ``answer`` against ``cell_texts``; ``question`` is filtered out.
 
     ``cell_ids`` is the set of bracketed IDs we presented in the prompt.
@@ -548,6 +553,13 @@ def verify(answer: str, cell_texts: Sequence[str], question: str = "",
     (query-evidence overlap). Off by default to keep callers that drive
     the verifier on hand-crafted inputs unchanged; the production
     pipeline turns it on.
+
+    ``enable_claim_verification`` enables Stage F (Phase 2): every
+    atomic claim's distinctive signals (numerics, proper-noun runs)
+    must co-occur in a single cited cell. Off by default; opt-in via
+    the answer pipeline. Requires ``cell_ids`` to be supplied so the
+    failing claim's supporting cell can be reported. A Stage F
+    rejection overrides Stages A/B/E to silence.
     """
 
     # Stage C runs first when enabled: a token-salad query never reaches
@@ -685,6 +697,38 @@ def verify(answer: str, cell_texts: Sequence[str], question: str = "",
             f"{unanchored[:3]}"
         )
 
+    # Stage F (opt-in): claim-level cross-cell-splice check. Runs only
+    # when Stages A/B/E have all passed; an earlier-stage rejection has
+    # higher diagnostic priority and there is nothing to splice if the
+    # answer already failed coverage.
+    claim_report: dict = {}
+    if enable_claim_verification and grounded:
+        # Imported lazily so the verifier module remains importable in
+        # environments that don't ship the Stage F dependencies.
+        from src.agent.claim_verifier import verify_claims as _verify_claims
+
+        pairs: list[tuple[int, str]]
+        if cell_ids is not None and len(cell_ids) == len(cell_texts):
+            pairs = [(int(cid), txt) for cid, txt in zip(cell_ids, cell_texts)]
+        else:
+            pairs = [(idx, txt) for idx, txt in enumerate(cell_texts)]
+        f_report = _verify_claims(answer_clean, pairs, question=question)
+        claim_report = f_report.as_dict()
+        if not f_report.grounded:
+            grounded = False
+            failed_preview = [
+                {
+                    "claim": fc.claim_text[:120],
+                    "missing": fc.missing_in_best[:3],
+                }
+                for fc in f_report.failed[:3]
+            ]
+            reason = (
+                f"claim verification failed: "
+                f"{f_report.n_rejected}/{f_report.n_claims} claim(s) "
+                f"unsupported; {failed_preview}"
+            )
+
     return VerificationDecision(
         grounded=grounded,
         coverage=coverage,
@@ -696,6 +740,7 @@ def verify(answer: str, cell_texts: Sequence[str], question: str = "",
         uncited_numerics=uncited[:10],
         unanchored_proper_nouns=unanchored[:10],
         stage_e_log=stage_e_audit,
+        claim_verifier_report=claim_report,
     )
 
 

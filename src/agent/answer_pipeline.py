@@ -327,11 +327,13 @@ class AnswerPipeline:
         lexical_index: Optional[LexicalIndex] = None,
         lexical_k: int = 200,
         hybrid_mode: str = "fallback",
+        enable_claim_verification: bool = False,
     ) -> None:
         self.top_k = int(top_k)
         self.margin_threshold = float(margin_threshold)
         self.min_coverage = float(min_coverage)
         self.closest_topics_k = int(closest_topics_k)
+        self.enable_claim_verification = bool(enable_claim_verification)
         self.reranker = reranker
         # Hybrid retrieval is opt-in. When absent, behaviour is byte-
         # identical to V1 single-stage cosine retrieval (the
@@ -667,6 +669,7 @@ class AnswerPipeline:
             min_coverage=self.min_coverage,
             cell_ids=[c["cell_id"] for c in cells],
             strict_nonsense=True,
+            enable_claim_verification=self.enable_claim_verification,
         )
         timings["verify"] = time.time() - t0
 

@@ -330,3 +330,55 @@ The default margin (0.015) was calibrated for cosine activations. The reranker u
 ### Stale-index protection
 
 When the underlying bank's source texts change, the lexical index's manifest hash no longer matches. `LexicalIndex.load(..., expected_corpus_hash=...)` raises `LexicalIndexStale` rather than returning silently bad rankings. Rebuild the index after bulk overlay edits or any base-bank rewrite.
+
+## 12. Stage F claim verifier (off-by-default)
+
+Stage F is a post-generation **cell-conjunction grounding check** that catches cross-cell splices Stage E v2 can let through (e.g. an answer that sentence-fuses a name from cell 1 with a fact from cell 2 and cites both). It is **off by default** in V1; enabling it is a strict-mode opt-in.
+
+### Cardinal rule
+
+Stage F MUST NOT change production behaviour unless the caller explicitly enables it. Every entry point gates Stage F behind a default-`False` flag:
+
+- `v1_answer_verifier.verify(..., enable_claim_verification=False)` — kwarg.
+- `AnswerPipeline(..., enable_claim_verification=False)` — constructor kwarg, stored on instance, forwarded to every internal `verify()` call (including the hybrid fallback rescue path).
+
+When `enable_claim_verification=False`, `VerificationDecision.claim_verifier_report` is `{}` and the decision is byte-equivalent to pre-Phase-2 behaviour.
+
+### What Stage F checks
+
+For each atomic claim in the cleaned answer:
+
+1. **Decompose**: split on sentence terminators `[.!?;]`, then on dashes and on `, and|but|while|whereas|however|though|although`. Drop spans shorter than 8 chars and drop refusal/self-silence boilerplate. Each `ClaimSpan` carries its original-answer offsets.
+2. **Signal extraction**: numerics (digit runs, including comma-grouped like `658,000`) and capitalised proper-noun runs. Question numerics and question proper-noun anchors (substring match against question text, normalised) are **never** treated as novel — they are background, not new information.
+3. **Skip rule**: if a claim has zero distinctive signals after filtering, it is **skipped** (counted in `n_skipped`, not in `n_verified` or `n_rejected`). This avoids false positives on glue sentences ("Here is what I found").
+4. **Cell conjunction**: a claim is **verified** iff every one of its signals appears (as a normalised substring) in a **single** cited cell. The first satisfying cell wins. If no single cell carries all signals, the claim is **rejected** and Stage F overrides the verdict to silence.
+
+Stage F only runs when Stages A/B/E have all passed; earlier rejections retain diagnostic priority.
+
+### Enable for diagnostic runs
+
+```python
+from src.agent.answer_pipeline import AnswerPipeline
+pipe = AnswerPipeline(..., enable_claim_verification=True)
+result = pipe.ask("...")
+report = result.verification.get("claim_verifier_report", {})
+# report keys: grounded, n_claims, n_skipped, n_verified, n_rejected, failed, per_claim
+```
+
+### Gating proof: exp29
+
+```pwsh
+python experiments/exp29_claim_verifier.py `
+    --lexical-index results/v1_bank/bm25_tantivy
+```
+
+Writes `results/v1_claim_verifier.{json,md}`. Runs the 8 exp28 multi-hop queries through the production `hybrid_rerank_fallback` cascade twice — once with Stage F off, once on — and asserts:
+
+- **0 wrong** in both configs.
+- **0 grounded→silence regressions** when Stage F flips on.
+
+**Run 1 on this codebase passed**: 7g/1s/0w both configs, 0 regressions, 0 wrong→silence catches (the multihop set has no wrong baselines for Stage F to catch in this run — Stage E v2 already rejects them). Stage F is therefore safe to enable as a strict-mode option without disturbing the default cascade.
+
+### When to enable
+
+Turn Stage F on for: bank-promotion audits, regression sweeps after Stage E changes, and any deployment that values silence-over-splice more strongly than recall. Leave it off for: latency-sensitive interactive use (Stage F adds ~0–1s per call on grounded answers, more if the decomposer tokenizer is cold).

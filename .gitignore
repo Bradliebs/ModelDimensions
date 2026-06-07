@@ -27,6 +27,13 @@ results/v1_bank/overlay.db-shm
 results/v1_bank/overlay.db-wal
 results/v1_bank/qa_history.jsonl
 
+# Lexical-retrieval indexes (built from the live bank; ~800 MB; reproducible)
+results/v1_bank/bm25_index/
+results/v1_bank/bm25_tantivy/
+
+# Local load-test scratch outputs
+results/loadtest*.json
+
 # RetroGPT training checkpoints and run artefacts (large binary state)
 out-retro-*/
 src/retro/data/**/*.bin
