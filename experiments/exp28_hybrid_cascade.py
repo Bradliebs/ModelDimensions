@@ -42,6 +42,10 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from experiments.exp20_multihop_probe import MULTIHOP_QUERIES  # noqa: E402
+from experiments.exp22_decomposer_multihop import (  # noqa: E402
+    _build_decompose_prompt,
+    _clean_subquestion,
+)
 
 
 DEFAULT_BANK = os.environ.get("MD_BANK_PATH", r"H:\MiniLM\cc_service\bank.db")
@@ -203,6 +207,16 @@ def main() -> int:
     parser.add_argument("--no-4bit", action="store_true")
     parser.add_argument("--output", default=str(DEFAULT_OUTPUT))
     parser.add_argument("--markdown", default=str(DEFAULT_MD))
+    parser.add_argument(
+        "--n-passages-for-decompose", type=int, default=3,
+        help="Number of pass-1 cosine cells fed to the decomposer prompt. "
+             "Mirrors exp22/exp27.",
+    )
+    parser.add_argument(
+        "--no-decompose", action="store_true",
+        help="Skip decomposition; ask each mode on the raw query. Use only "
+             "to reproduce the original (defective) exp28 harness.",
+    )
     args = parser.parse_args()
 
     bank_path = Path(args.bank_path)
@@ -242,9 +256,19 @@ def main() -> int:
     hybrid = HybridRetriever(lex, pipeline.bank)
     print(f"[exp28] pipeline ready in {time.time() - t0:.1f}s", flush=True)
 
+    decompose_tok = None
+    if not args.no_decompose:
+        from transformers import AutoTokenizer
+        from src.agent.answer_pipeline import PHI3_MODEL
+        print(f"[exp28] loading decomposer tokenizer ({PHI3_MODEL})...",
+              flush=True)
+        decompose_tok = AutoTokenizer.from_pretrained(PHI3_MODEL)
+
     print(f"\n[exp28] running {len(MULTIHOP_QUERIES)} queries x "
           f"{len(MODES)} modes = "
-          f"{len(MULTIHOP_QUERIES) * len(MODES)} pipeline calls", flush=True)
+          f"{len(MULTIHOP_QUERIES) * len(MODES)} pipeline calls"
+          f"  (decompose={'off' if args.no_decompose else 'on'})",
+          flush=True)
 
     queries: list[dict] = []
     counts_per_mode: dict[str, dict[str, int]] = {
@@ -258,18 +282,70 @@ def main() -> int:
             "hops": item["hops"],
             "modes": [],
         }
+
+        # Decomposition: one pass-1 cosine retrieval + one Phi-3 generation
+        # per query (NOT per mode). All four modes ask the pipeline on the
+        # SAME sub_question so the only variable being measured is the
+        # retrieval mode of the answer-bearing pass-2 call. This mirrors
+        # the exp22 / exp27 flow that V1's documented 6/8 baseline
+        # depends on.
+        ask_query = item["query"]
+        sub_question_used: str | None = None
+        if decompose_tok is not None:
+            # Pass-1 cosine retrieval with no rerank/hybrid to seed the
+            # decomposer. Temporarily clear both attributes so this call
+            # is byte-identical to the baseline V1 retrieval used in
+            # exp22 / exp27.
+            saved_rerank = pipeline.reranker
+            saved_hybrid = pipeline._hybrid
+            pipeline.reranker = None
+            pipeline._hybrid = None
+            try:
+                raw1 = pipeline.encoder.encode_one(item["query"], is_query=True)
+                whitened1 = pipeline.bank.whiten(raw1)
+                topk1 = pipeline.bank.topk(whitened1, k=pipeline.top_k)
+                fb_ids = [int(c) for c in topk1["cell_ids"][:int(args.n_passages_for_decompose)]]
+                try:
+                    fb_texts = pipeline.bank.fetch_source_texts(fb_ids)
+                except Exception:  # noqa: BLE001
+                    fb_texts = [None] * len(fb_ids)
+                cells_for_prompt = [
+                    {"cell_id": cid, "text": txt or ""}
+                    for cid, txt in zip(fb_ids, fb_texts)
+                ]
+                decompose_prompt = _build_decompose_prompt(
+                    decompose_tok, item["query"], cells_for_prompt,
+                )
+                try:
+                    raw_subq = pipeline._generate(decompose_prompt)
+                except Exception:  # noqa: BLE001
+                    raw_subq = ""
+                sub_question_used = _clean_subquestion(raw_subq, item["query"])
+                ask_query = sub_question_used
+            finally:
+                pipeline.reranker = saved_rerank
+                pipeline._hybrid = saved_hybrid
+
+        q_record["sub_question"] = sub_question_used
+        print(
+            f"  [{i}/{len(MULTIHOP_QUERIES)}] q={item['query'][:50]!r}"
+            f"  ->  sub_q={(sub_question_used or '(no-decompose)')[:60]!r}",
+            flush=True,
+        )
+
         for mode_name, use_rerank, use_hybrid in MODES:
             rec = _run_mode(
-                pipeline, item["query"], item["expected_keywords"],
+                pipeline, ask_query, item["expected_keywords"],
                 mode=mode_name,
                 use_rerank=use_rerank, use_hybrid=use_hybrid,
                 reranker=reranker, hybrid=hybrid,
                 rerank_margin=args.rerank_margin,
             )
+            rec["asked_query"] = ask_query
             q_record["modes"].append(rec)
             counts_per_mode[mode_name][rec["verdict"]] += 1
             print(
-                f"  [{i}/{len(MULTIHOP_QUERIES)}] {mode_name:<14} "
+                f"    {mode_name:<14} "
                 f"verdict={rec['verdict']:<8} "
                 f"kw_rank={rec['keyword_rank']!s:<4} "
                 f"gate_fire={int(rec['gate']['fire'])} "

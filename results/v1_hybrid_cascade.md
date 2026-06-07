@@ -1,7 +1,7 @@
 # exp28 — hybrid cascade gating proof
 
 - bank: `H:\MiniLM\cc_service\bank.db`
-- lexical index: `H:\ModelDimensions_SLM\ModelDimensions\results\v1_bank\bm25_index`
+- lexical index: `results\v1_bank\bm25_index`
 - reranker: `cross-encoder/ms-marco-MiniLM-L-6-v2`
 - rerank margin: 0.5
 
@@ -9,85 +9,66 @@
 
 | Mode | grounded | silence | wrong |
 |------|---------:|--------:|------:|
-| cosine_only | 0 | 7 | 1 |
-| cosine_rerank | 1 | 6 | 1 |
-| hybrid_cosine | 0 | 6 | 2 |
-| hybrid_rerank | 0 | 7 | 1 |
+| cosine_only | 6 | 2 | 0 |
+| cosine_rerank | 4 | 4 | 0 |
+| hybrid_cosine | 2 | 6 | 0 |
+| hybrid_rerank | 2 | 6 | 0 |
 
 ## Per-query verdicts
 
 | # | Query | cosine_only | cosine_rerank | hybrid_cosine | hybrid_rerank |
 |---|-------|:---:|:---:|:---:|:---:|
-| 1 | What language is spoken on the island where Napoleon was exi | silence | silence | silence | silence |
-| 2 | Who composed the music for the film that won the Academy Awa | silence | silence | wrong | silence |
-| 3 | In which country was the inventor of dynamite born? | silence | silence | silence | silence |
-| 4 | What is the capital of the country where the 2010 Winter Oly | silence | wrong | wrong | wrong |
-| 5 | Who succeeded the British monarch who reigned throughout the | silence | silence | silence | silence |
-| 6 | What is the highest mountain in the country whose flag featu | silence | silence | silence | silence |
-| 7 | What religion was the founder of psychoanalysis raised in? | wrong | grounded | silence | silence |
-| 8 | In what city was the author of 'The Old Man and the Sea' bor | silence | silence | silence | silence |
+| 1 | What language is spoken on the island where Napoleon was exi | grounded | grounded | silence | silence |
+| 2 | Who composed the music for the film that won the Academy Awa | silence | silence | silence | silence |
+| 3 | In which country was the inventor of dynamite born? | grounded | silence | silence | silence |
+| 4 | What is the capital of the country where the 2010 Winter Oly | grounded | silence | grounded | silence |
+| 5 | Who succeeded the British monarch who reigned throughout the | silence | grounded | silence | grounded |
+| 6 | What is the highest mountain in the country whose flag featu | grounded | grounded | silence | silence |
+| 7 | What religion was the founder of psychoanalysis raised in? | grounded | silence | silence | silence |
+| 8 | In what city was the author of 'The Old Man and the Sea' bor | grounded | grounded | grounded | grounded |
 
 **PASS**: False
-## Failure analysis
+## Failure analysis (run 2 — decomposer wired in)
 
 **Status: FAILED. Phase 1 cascade must not be enabled by default.**
 
-The hybrid_rerank mode produced 1 wrong answer (Q4: "Vancouver" instead of "Ottawa") and the hybrid_cosine mode produced 2 wrong answers (Q2 hallucinated composer, Q4 "Vancouver"). The cardinal V1 constraint is that wrong-answer count never increases; this run regresses on that constraint.
+Different failure mode than run 1. Run 1 with no decomposer produced 1-2 wrong answers per mode; this run with the decomposer produces 0 wrong answers across all modes (cardinal rule PASSES). The cascade's failure mode is now **silencing cells that pure cosine grounds**, not generating false answers.
 
-### Methodological caveats
+### What changed between runs
 
-The baseline cosine_only column also shows 0 grounded / 7 silence / 1 wrong, while V1's documented baseline on the same 8 queries is 6 grounded / 2 silence / 0 wrong. The difference is the **decomposer**: V1's documented baseline runs each multi-hop query through Phi-3 to generate a single-hop sub-question (exp22 pattern, replicated in exp27 `_capture`), then retrieves on that sub-question. exp28 in its current form calls `pipeline.ask(raw_query)` directly with no decomposition.
+The `exp28` harness now mirrors the `exp22` / `exp27` flow: one cosine pass-1 retrieval per query feeds a Phi-3 decomposition prompt, all four modes then `pipeline.ask` on the SAME sub-question. This holds the decomposition step constant and isolates the retrieval-mode variable. `cosine_only` now scores 6 grounded / 2 silence / 0 wrong, which exactly matches V1's documented baseline (exp22 / exp24). The harness is fixed.
 
-Without decomposition no mode has a fair shot at the multi-hop queries — the raw question text spans two facts, the encoder produces a diffuse query vector, and the top-k retrieval lands on cells that mention some surface tokens of the question without containing the answer. This is why cosine_only also collapses to silence/wrong.
+### What this proves
 
-### What this proves and does not prove
+With decomposition, no mode produces wrong answers. The cascade does not break the V1 wrong-count guarantee.
 
-**Proven:**
+The cascade does, however, strictly REDUCE recall:
 
-- The cascade plumbing works end-to-end (40/40 unit tests green).
-- BM25 retrieval can promote topically-related-but-factually-wrong cells with margins above the silence-gate threshold. Q2 hybrid_cosine: top-3 cells all contained "Academy Award" tokens but none was the French Connection paragraph, gate margin 0.033 > 0.015, Phi-3 hallucinated "Arthur" as the composer. Q4 (all 3 fired modes): top retrieval surfaces "2010 Winter Olympics held in Vancouver" with strong matches, Phi-3 answers "Vancouver" as the capital because that's what the cell says.
-- The current cascade has no mechanism to detect the keyword-match-but-wrong-paragraph failure mode the cross-encoder reranker is supposed to mitigate. The reranker is operating on the BM25-restricted candidate set, which excludes the right paragraph entirely when the right paragraph contains the answer entity but not the question's surface tokens.
+- `cosine_only` 6 grounded
+- `cosine_rerank` 4 grounded (rerank drops 2)
+- `hybrid_cosine` 2 grounded (hybrid drops 4)
+- `hybrid_rerank` 2 grounded (no recovery from rerank when hybrid is on)
 
-**Not proven (requires re-run with decomposition):**
+Per-query diagnostic (cells silenced under `hybrid_rerank` that `cosine_only` grounded):
 
-- Whether Phase 1 cascade lifts the V1 documented baseline from 6/8 to >=7/8 grounded.
-- Whether Q2 (the original target — Don Ellis recall fault) is actually recoverable.
+- **Q1** "What language is spoken on St. Helena?" — cosine_only top-2 found the Saint Helena page (English). hybrid_rerank top-1 was a Sao Tome page (Portuguese, Forro creole) at gate margin 1.904. Verifier rejected: answer entity ['English', 'Portuguese', 'Greek'] not colocated with question anchor.
+- **Q3** "In which country was Alfred Nobel born?" — both modes retrieved the Alfred Nobel page at rank 1. cosine_only verifier accepted "Sweden"; hybrid_rerank verifier rejected (same top-1 text, different supporting cells in citation set apparently). Diagnostic: top-1 text identical between modes — `'Alfred Nobel ... was a Swedish scientist...'`. Suggests the cascade corrupts the verifier's wider citation context, not just top-1.
+- **Q6** "What is the highest mountain in Canada?" — cosine_only top-1 was "Mount Logan is the highest mountain in Canada" (perfect). hybrid_rerank top-1 was a Mauna Loa / Hawaii page at margin 0.519. Verifier rejected Mount McKinley/Alaska answer.
+- **Q7** "What religion was Sigmund Freud raised in?" — cosine_only top-1 "Sigmund Freud was born to Jewish parents in a heavily Roman Catholic town". hybrid_rerank top-1 "Sigmund Freud ... was an Austrian neurologist" (no religion). Verifier rejected.
 
-### Next steps (recommended)
+### Root cause
 
-1. **Do not enable the cascade in production** (no env-var default, no documentation promoting it for daily use). Keep it as an opt-in research path until re-validated.
-2. **Rewrite exp28 to use the decomposer** the same way exp22 / exp27 do (Phi-3 generates a single-hop sub-question first, then `pipeline.ask(sub_question)`). Re-run all 4 modes.
-3. **Investigate the Q4 "Vancouver" failure under decomposition** — even with decomposition, the sub-question "What is the capital of Canada?" should land on the Ottawa cell. If the cell exists in the first 100k bank ids and the dense encoder can find it, then the wrong answer in the current exp28 is purely a decomposition-missing artifact. If it persists with decomposition, the cascade has a real defect.
-4. **Consider a 2-hop pre-gate**: only allow BM25-restricted top-1 to surface to the gate if its BM25-restricted cosine activation also clears a minimum dense-similarity floor. Cells that BM25 promotes purely on surface tokens without dense semantic alignment to the query should be filtered.
+BM25 in the cascade is promoting cells that match more **surface tokens** of the sub-question but do not contain the answer entity. The cross-encoder rerank does not correct this; it re-ranks an already-corrupted candidate pool. The silence-gate margin fires very confidently (margins 0.5 to 5.4 — much higher than cosine_only's typical 0.02-0.09) because the BM25-promoted cells are strong lexical matches to the query. The verifier, doing its job correctly, rejects because the answer entity is not colocated with the question anchor in those cells.
 
-## Failure analysis
+This is a fundamental design flaw in the current cascade: **BM25 → cosine → rerank is the wrong fusion order for a memory bank where the encoder is already pretty good.** The cosine baseline is already retrieving the right cells on 6 of 8 queries; using BM25 to narrow the candidate set throws away that retrieval quality before the cosine step ever sees it.
 
-**Status: FAILED. Phase 1 cascade must not be enabled by default.**
+### Recommended redesigns (for next session)
 
-The hybrid_rerank mode produced 1 wrong answer (Q4: "Vancouver" instead of "Ottawa") and the hybrid_cosine mode produced 2 wrong answers (Q2 hallucinated composer, Q4 "Vancouver"). The cardinal V1 constraint is that wrong-answer count never increases; this run regresses on that constraint.
+1. **Fallback-only cascade** (lowest risk, surgical). Run cosine first. Only invoke the BM25 + rerank cascade when cosine's top-2 margin is below threshold (i.e. cosine has already silenced). This preserves V1's 6/8 grounded baseline unchanged and only adds rescue capacity on the 2 queries where cosine fails. Target: Q2 (French Connection) and Q5 (Elizabeth II succession), the two queries V1 currently silences.
+2. **Reciprocal Rank Fusion** (medium risk). Replace the "BM25 narrows, cosine ranks" pipeline with RRF over BM25 and cosine top-k lists independently, then rerank the union. This avoids the candidate-narrowing problem but adds complexity.
+3. **Dense-similarity floor on BM25 promotions** (mitigation only, does not fix root cause). Require BM25-promoted candidates to also clear a minimum cosine activation before they reach the gate. Likely necessary even under option 1 to prevent regression on edge cases.
+4. **Wider lexical_k** — currently 200. Probably not the issue; the failures are not at the edge of the candidate pool but in the top-1.
 
-### Methodological caveats
+### Recommended next concrete step
 
-The baseline cosine_only column also shows 0 grounded / 7 silence / 1 wrong, while V1's documented baseline on the same 8 queries is 6 grounded / 2 silence / 0 wrong. The difference is the **decomposer**: V1's documented baseline runs each multi-hop query through Phi-3 to generate a single-hop sub-question (exp22 pattern, replicated in exp27 `_capture`), then retrieves on that sub-question. exp28 in its current form calls `pipeline.ask(raw_query)` directly with no decomposition.
-
-Without decomposition no mode has a fair shot at the multi-hop queries — the raw question text spans two facts, the encoder produces a diffuse query vector, and the top-k retrieval lands on cells that mention some surface tokens of the question without containing the answer. This is why cosine_only also collapses to silence/wrong.
-
-### What this proves and does not prove
-
-**Proven:**
-
-- The cascade plumbing works end-to-end (40/40 unit tests green).
-- BM25 retrieval can promote topically-related-but-factually-wrong cells with margins above the silence-gate threshold. Q2 hybrid_cosine: top-3 cells all contained "Academy Award" tokens but none was the French Connection paragraph, gate margin 0.033 > 0.015, Phi-3 hallucinated "Arthur" as the composer. Q4 (all 3 fired modes): top retrieval surfaces "2010 Winter Olympics held in Vancouver" with strong matches, Phi-3 answers "Vancouver" as the capital because that's what the cell says.
-- The current cascade has no mechanism to detect the keyword-match-but-wrong-paragraph failure mode the cross-encoder reranker is supposed to mitigate. The reranker is operating on the BM25-restricted candidate set, which excludes the right paragraph entirely when the right paragraph contains the answer entity but not the question's surface tokens.
-
-**Not proven (requires re-run with decomposition):**
-
-- Whether Phase 1 cascade lifts the V1 documented baseline from 6/8 to >=7/8 grounded.
-- Whether Q2 (the original target — Don Ellis recall fault) is actually recoverable.
-
-### Next steps (recommended)
-
-1. **Do not enable the cascade in production** (no env-var default, no documentation promoting it for daily use). Keep it as an opt-in research path until re-validated.
-2. **Rewrite exp28 to use the decomposer** the same way exp22 / exp27 do (Phi-3 generates a single-hop sub-question first, then `pipeline.ask(sub_question)`). Re-run all 4 modes.
-3. **Investigate the Q4 "Vancouver" failure under decomposition** — even with decomposition, the sub-question "What is the capital of Canada?" should land on the Ottawa cell. If the cell exists in the first 100k bank ids and the dense encoder can find it, then the wrong answer in the current exp28 is purely a decomposition-missing artifact. If it persists with decomposition, the cascade has a real defect.
-4. **Consider a 2-hop pre-gate**: only allow BM25-restricted top-1 to surface to the gate if its BM25-restricted cosine activation also clears a minimum dense-similarity floor. Cells that BM25 promotes purely on surface tokens without dense semantic alignment to the query should be filtered.
+Implement option 1 (fallback-only cascade) as a config-flag mode in `HybridRetriever`. Re-run exp28 with that mode. If it preserves 6/8 cosine_only baseline AND lifts Q2 or Q5 to grounded, Phase 1 is salvaged.
