@@ -841,6 +841,7 @@ def test_cascade_on_surfaces_lexical_diagnostics(hybrid_bank: Path):
         ),
         lexical_index=idx,
         lexical_k=10,
+        hybrid_mode="always",
     )
     try:
         result = pipeline.ask("Who composed The French Connection?")
@@ -890,6 +891,7 @@ def test_cascade_falls_back_to_dense_on_stopword_query(hybrid_bank: Path):
         generator=lambda p: "placeholder",
         lexical_index=idx,
         lexical_k=10,
+        hybrid_mode="always",
     )
     try:
         result = pipeline.ask("the of an")
@@ -900,3 +902,70 @@ def test_cascade_falls_back_to_dense_on_stopword_query(hybrid_bank: Path):
     # All lexical_scores are zero; ranks are all None.
     assert all(s == 0.0 for s in result.retrieval["lexical_scores"])
     assert all(r is None for r in result.retrieval["lexical_ranks"])
+
+
+def test_hybrid_mode_fallback_only_runs_cascade_on_silence(hybrid_bank: Path):
+    """In fallback mode the cascade only fires when the cosine pass
+    silences. When cosine grounds the answer, the result must be
+    byte-identical to V1 (no lexical_* keys in retrieval)."""
+    encoder = _StubEncoder(dim=8)
+    # Encode the query along axis 0 so the keyword cell (which has
+    # high mass on axis 1) is rank 1 by cosine -- cosine alone
+    # answers this. Same fixture as the always-on test.
+    encoder.responses["Who composed The French Connection?"] = (
+        np.array([0.1, 0.9, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], dtype=np.float32)
+    )
+
+    from src.agent.streaming_bank import StreamingBank
+    bank = StreamingBank(hybrid_bank)
+    try:
+        cell_ids = [int(c) for c in bank.cell_ids]
+        idx = LexicalIndex()
+        idx.build_from_texts(
+            cell_ids,
+            bank.fetch_source_texts(cell_ids),
+        )
+    finally:
+        bank.close()
+
+    pipeline = AnswerPipeline(
+        bank_path=hybrid_bank,
+        top_k=3,
+        encoder=encoder,
+        generator=lambda p: (
+            "Don Ellis composed the score for The French Connection. [1]"
+        ),
+        lexical_index=idx,
+        lexical_k=10,
+        hybrid_mode="fallback",  # default, but explicit for the test
+    )
+    try:
+        result = pipeline.ask("Who composed The French Connection?")
+    finally:
+        pipeline.close()
+
+    assert result.silence is False, result.silence_reason
+    # Pass 1 (pure cosine) grounded -- cascade did NOT fire. No lexical
+    # diagnostics should appear in the retrieval dict.
+    assert "lexical_scores" not in result.retrieval
+    assert "lexical_ranks" not in result.retrieval
+    assert "retrieval_stage" not in result.retrieval
+    # No rescue provenance either (cascade was not attempted at all).
+    assert result.rescue is None
+
+
+def test_hybrid_mode_rejects_unknown_value(tmp_path: Path):
+    """Constructor must reject hybrid_mode values outside {fallback, always}."""
+    db = tmp_path / "tiny.db"
+    dim = 8
+    cells = [("a", np.eye(dim, dtype=np.float32)[0], 0.3, "text a")]
+    _make_bank(db, dim, cells)
+    encoder = _StubEncoder(dim=8)
+    with pytest.raises(ValueError, match="hybrid_mode"):
+        AnswerPipeline(
+            bank_path=db,
+            top_k=1,
+            encoder=encoder,
+            generator=lambda p: "answer",
+            hybrid_mode="nonsense",
+        )

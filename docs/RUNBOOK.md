@@ -253,14 +253,18 @@ pointing at a new endpoint.
 | CLI                           | `scripts/ask.py`, `scripts/setup.py`      |
 | Tests                         | `evals/`                                  |
 
-## 11. Hybrid retrieval cascade (research-only, FAILED prove-out)
+## 11. Hybrid retrieval cascade (fallback-only — gating proof PASSED on run 3)
 
-**Status: FAILED twice; cascade needs redesign before production. Do not enable in production.**
+**Status: PASSED on run 3. The cascade is wired as fallback-only and is safe to enable. It lifts the V1 baseline from 6/8 to 7/8 grounded on the multi-hop eval set with zero new wrong answers.**
 
-- *Run 1* (harness defective — no decomposer): produced 1-2 wrong answers per mode (cardinal rule broken).
-- *Run 2* (harness fixed — decomposer wired in to mirror `exp22`/`exp27`): 0 wrong across all modes (cardinal rule preserved), but cascade **strictly reduces grounded recall** vs cosine_only baseline (cosine_only 6/8 → hybrid_rerank 2/8). Root cause: BM25 promotes lexically-matching-but-semantically-wrong cells with high gate margins; the cross-encoder rerank cannot fix an already-corrupted candidate pool. See `results/v1_hybrid_cascade.md` for the verdict table, per-query diagnostic, and recommended redesigns.
+- *Run 1* (harness defective — no decomposer): produced 1-2 wrong answers per mode. Cardinal rule broken. Halt and fix harness.
+- *Run 2* (harness fixed — decomposer wired in to mirror `exp22`/`exp27`): 0 wrong across all modes (cardinal rule preserved), but the always-on cascade strictly reduces grounded recall vs cosine_only baseline (6/8 → 2/8). Root cause: BM25 promotes lexically-matching-but-semantically-wrong cells with high gate margins; the cross-encoder rerank cannot fix an already-corrupted candidate pool.
+- *Run 3* (orchestrator redesigned — fallback-only): **PASS.** `hybrid_rerank_fallback` mode scored 7 grounded / 1 silence / 0 wrong. The cosine path is preserved byte-identically on the 6 queries cosine can answer; hybrid+rerank runs as a rescue *only* on cosine silences. Q5 (Elizabeth II → Charles III succession) was the rescue. Q2 (Don Ellis / The French Connection) remains silent because the supporting cell sits above the 100k-cell index cap; resolving it requires Phase 1.5 (full-bank index). See `results/v1_hybrid_cascade.md` for the verdict table and per-query diagnostic.
 
-Phase 1 of the V1 upgrade adds a BM25 → cosine → (optional) cross-encoder rerank cascade in front of the silence gate. The cascade is **opt-in**: with no lexical index supplied, the pipeline is byte-identical to the V1 baseline above. The cascade was designed to recover recall faults like Q2 (Section 9) without weakening the gate or the verifier; the current design does not yet meet that bar. Likely next step: rewire the cascade as **fallback-only** (cosine first; BM25+rerank only when cosine top-2 margin is below threshold).
+Phase 1 of the V1 upgrade adds a BM25 → cosine → (optional) cross-encoder rerank cascade behind the silence gate. The cascade is **opt-in**: with no lexical index supplied, the pipeline is byte-identical to the V1 baseline above. The cascade is wired in two orchestration modes on `AnswerPipeline`:
+
+- `hybrid_mode="fallback"` (default, production-safe): pass-1 runs the pure V1 cosine path; only if pass-1 silences does pass-2 run with hybrid+rerank enabled. Successful rescues attach `result.rescue = {"hybrid_rescue": True, "first_pass_silence_reason": ...}` for audit. Failed rescues return the pass-1 silence with `{"hybrid_rescue_attempted": True, "hybrid_rescue_outcome": "silence", "hybrid_silence_reason": ...}`.
+- `hybrid_mode="always"` (research only): pass-1 runs hybrid+rerank for every query. Used by `exp28` to confirm the always-on path is strictly worse than fallback on this bank. Do not use in production.
 
 **Cardinal constraints (must hold across all phases):**
 
@@ -302,7 +306,7 @@ python experiments/exp28_hybrid_cascade.py `
     --lexical-index results/v1_bank/bm25_index
 ```
 
-Writes `results/v1_hybrid_cascade.json` and `results/v1_hybrid_cascade.md`. **Pass criterion:** mode `hybrid_rerank` must achieve ≥ 7/8 grounded and exactly 0/8 wrong. The script exits non-zero on failure; treat that as a HALT. The harness runs the Phi-3 decomposer once per query (mirroring `exp22` / `exp27`) so all four modes ask the pipeline on the same sub-question and only the retrieval mode varies. The first two runs on this codebase **failed** — see `results/v1_hybrid_cascade.md` for the verdict tables and failure analysis. Pass `--no-decompose` to reproduce the original (defective) harness for audit; do not use it for evaluation.
+Writes `results/v1_hybrid_cascade.json` and `results/v1_hybrid_cascade.md`. **Pass criterion:** mode `hybrid_rerank_fallback` must achieve ≥ 7/8 grounded and exactly 0/8 wrong. The script exits non-zero on failure; treat that as a HALT. The harness runs the Phi-3 decomposer once per query (mirroring `exp22` / `exp27`) so all five modes ask the pipeline on the same sub-question and only the retrieval mode varies. Run 3 on this codebase **passed** (7/1/0) — see `results/v1_hybrid_cascade.md` for the verdict table and run-history analysis. Pass `--no-decompose` to reproduce the original (defective) harness for audit; do not use it for evaluation.
 
 ### Recalibrating the gate margin
 

@@ -58,10 +58,12 @@ DEFAULT_MD = REPO_ROOT / "results" / "v1_hybrid_cascade.md"
 
 
 MODES = (
-    ("cosine_only",     False, False),
-    ("cosine_rerank",   True,  False),
-    ("hybrid_cosine",   False, True),
-    ("hybrid_rerank",   True,  True),
+    # (name, use_rerank, use_hybrid, hybrid_mode_when_hybrid_on)
+    ("cosine_only",             False, False, "fallback"),
+    ("cosine_rerank",           True,  False, "fallback"),
+    ("hybrid_cosine_always",    False, True,  "always"),
+    ("hybrid_rerank_always",    True,  True,  "always"),
+    ("hybrid_rerank_fallback",  True,  True,  "fallback"),
 )
 
 
@@ -87,6 +89,7 @@ def _verdict(answer: str, silence: bool, keywords: list[str]) -> str:
 
 def _run_mode(pipeline, query: str, expected_keywords: list[str],
               *, mode: str, use_rerank: bool, use_hybrid: bool,
+              hybrid_mode: str,
               reranker, hybrid, rerank_margin: float) -> dict:
     # Toggle pipeline attributes for this mode. All four pipeline
     # branches gate on these attributes and capture nothing closure-bound
@@ -94,6 +97,7 @@ def _run_mode(pipeline, query: str, expected_keywords: list[str],
     pipeline.reranker = reranker if use_rerank else None
     pipeline.rerank_margin_threshold = rerank_margin if use_rerank else None
     pipeline._hybrid = hybrid if use_hybrid else None
+    pipeline.hybrid_mode = hybrid_mode
 
     t0 = time.time()
     result = pipeline.ask(query)
@@ -133,6 +137,7 @@ def _run_mode(pipeline, query: str, expected_keywords: list[str],
             "top2_activation": float(result.gate.get("top2_activation", 0.0)),
         },
         "retrieval_stage": result.retrieval.get("retrieval_stage"),
+        "rescue": result.rescue,
         "verification": (
             None if result.verification is None
             else {
@@ -159,7 +164,8 @@ def _write_markdown(out_path: Path, payload: dict) -> None:
     lines.append("| Mode | grounded | silence | wrong |")
     lines.append("|------|---------:|--------:|------:|")
     for mode in ("cosine_only", "cosine_rerank",
-                 "hybrid_cosine", "hybrid_rerank"):
+                 "hybrid_cosine_always", "hybrid_rerank_always",
+                 "hybrid_rerank_fallback"):
         c = payload["counts_per_mode"][mode]
         lines.append(
             f"| {mode} | {c.get('grounded', 0)} | "
@@ -169,9 +175,9 @@ def _write_markdown(out_path: Path, payload: dict) -> None:
     lines.append("## Per-query verdicts\n")
     lines.append(
         "| # | Query | cosine_only | cosine_rerank | "
-        "hybrid_cosine | hybrid_rerank |"
+        "hyb_cos_alw | hyb_rer_alw | hyb_rer_fb |"
     )
-    lines.append("|---|-------|:---:|:---:|:---:|:---:|")
+    lines.append("|---|-------|:---:|:---:|:---:|:---:|:---:|")
     for i, q in enumerate(payload["queries"], 1):
         verdicts = {m["mode"]: m["verdict"] for m in q["modes"]}
         q_short = q["query"][:60].replace("|", "\\|")
@@ -179,8 +185,9 @@ def _write_markdown(out_path: Path, payload: dict) -> None:
             f"| {i} | {q_short} | "
             f"{verdicts.get('cosine_only', '?')} | "
             f"{verdicts.get('cosine_rerank', '?')} | "
-            f"{verdicts.get('hybrid_cosine', '?')} | "
-            f"{verdicts.get('hybrid_rerank', '?')} |"
+            f"{verdicts.get('hybrid_cosine_always', '?')} | "
+            f"{verdicts.get('hybrid_rerank_always', '?')} | "
+            f"{verdicts.get('hybrid_rerank_fallback', '?')} |"
         )
     lines.append("")
     lines.append(f"**PASS**: {payload['pass']}")
@@ -333,11 +340,12 @@ def main() -> int:
             flush=True,
         )
 
-        for mode_name, use_rerank, use_hybrid in MODES:
+        for mode_name, use_rerank, use_hybrid, hybrid_mode in MODES:
             rec = _run_mode(
                 pipeline, ask_query, item["expected_keywords"],
                 mode=mode_name,
                 use_rerank=use_rerank, use_hybrid=use_hybrid,
+                hybrid_mode=hybrid_mode,
                 reranker=reranker, hybrid=hybrid,
                 rerank_margin=args.rerank_margin,
             )
@@ -345,7 +353,7 @@ def main() -> int:
             q_record["modes"].append(rec)
             counts_per_mode[mode_name][rec["verdict"]] += 1
             print(
-                f"    {mode_name:<14} "
+                f"    {mode_name:<26} "
                 f"verdict={rec['verdict']:<8} "
                 f"kw_rank={rec['keyword_rank']!s:<4} "
                 f"gate_fire={int(rec['gate']['fire'])} "
@@ -354,9 +362,12 @@ def main() -> int:
             )
         queries.append(q_record)
 
-    # Pass criterion: hybrid_rerank >= 7/8 grounded AND 0/8 wrong.
-    m4 = counts_per_mode["hybrid_rerank"]
-    passed = (m4["grounded"] >= 7) and (m4["wrong"] == 0)
+    # Pass criterion: hybrid_rerank_fallback >= 7/8 grounded AND 0/8 wrong.
+    # The fallback orchestration is the production-recommended mode -- it
+    # preserves V1 cosine baseline on queries cosine grounds and only
+    # attempts the BM25+rerank cascade as rescue on cosine silences.
+    m_target = counts_per_mode["hybrid_rerank_fallback"]
+    passed = (m_target["grounded"] >= 7) and (m_target["wrong"] == 0)
 
     payload = {
         "produced_by": "experiments/exp28_hybrid_cascade.py",
@@ -385,10 +396,11 @@ def main() -> int:
     print("Verdict counts per mode:")
     for mode_name in (m[0] for m in MODES):
         c = counts_per_mode[mode_name]
-        print(f"  {mode_name:<16} grounded={c['grounded']}  "
+        print(f"  {mode_name:<26} grounded={c['grounded']}  "
               f"silence={c['silence']}  wrong={c['wrong']}")
     print("=" * 78)
-    print(f"PASS criterion (mode hybrid_rerank: >=7 grounded, 0 wrong): "
+    print(f"PASS criterion (mode hybrid_rerank_fallback: "
+          f">=7 grounded, 0 wrong): "
           f"{'PASS' if passed else 'FAIL'}")
     if not passed:
         print("  -> HALT: do not proceed to scale-up until Phase 1 passes.")

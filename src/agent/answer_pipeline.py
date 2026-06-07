@@ -326,6 +326,7 @@ class AnswerPipeline:
         rerank_margin_threshold: Optional[float] = None,
         lexical_index: Optional[LexicalIndex] = None,
         lexical_k: int = 200,
+        hybrid_mode: str = "fallback",
     ) -> None:
         self.top_k = int(top_k)
         self.margin_threshold = float(margin_threshold)
@@ -337,6 +338,22 @@ class AnswerPipeline:
         # v1-grounded-answer-pipeline release tag).
         self.lexical_index = lexical_index
         self.lexical_k = int(lexical_k)
+        # Two cascade orchestration modes:
+        #   "fallback"  - V1 cosine path runs first; the BM25+rerank
+        #                 cascade only fires as a rescue when cosine
+        #                 silences. Preserves V1 grounded baseline
+        #                 byte-identically on queries cosine can answer.
+        #                 This is the production-recommended mode.
+        #   "always"    - hybrid (and reranker, if set) replace cosine
+        #                 retrieval on every query. exp28 run 2 showed
+        #                 this strictly reduces recall vs cosine_only;
+        #                 retained for research / A-B comparison only.
+        if hybrid_mode not in ("fallback", "always"):
+            raise ValueError(
+                f"hybrid_mode must be 'fallback' or 'always', got "
+                f"{hybrid_mode!r}"
+            )
+        self.hybrid_mode = hybrid_mode
         # Reranker score scale differs from cosine activation scale, so the
         # threshold has to be supplied explicitly when reranker is on. No
         # safe default exists across cross-encoders.
@@ -420,6 +437,60 @@ class AnswerPipeline:
         return out
 
     def ask(
+        self,
+        question: str,
+        *,
+        on_phase: Optional[Callable[[str], None]] = None,
+    ) -> PipelineResult:
+        # No hybrid configured, or caller asked for always-on hybrid:
+        # single pass through the answer pipeline using whatever
+        # retrieval is wired up at the moment.
+        if self._hybrid is None or self.hybrid_mode == "always":
+            return self._ask_one_pass(question, on_phase=on_phase)
+
+        # Fallback mode: pass 1 is pure V1 cosine (no hybrid, no
+        # reranker). Only when pass 1 silences do we re-run pass 2 with
+        # the hybrid + rerank cascade as a rescue. exp28 run 2 showed
+        # that running the cascade on every query strictly reduces
+        # recall vs cosine_only; this orchestration preserves the V1
+        # baseline on queries cosine can answer and only attempts
+        # cascade rescue on the queries cosine cannot.
+        saved_hybrid = self._hybrid
+        saved_rerank = self.reranker
+        saved_margin = self.rerank_margin_threshold
+
+        self._hybrid = None
+        self.reranker = None
+        self.rerank_margin_threshold = None
+        try:
+            first = self._ask_one_pass(question, on_phase=on_phase)
+        finally:
+            self._hybrid = saved_hybrid
+            self.reranker = saved_rerank
+            self.rerank_margin_threshold = saved_margin
+
+        if not first.silence:
+            return first
+
+        second = self._ask_one_pass(question, on_phase=on_phase)
+
+        if not second.silence:
+            second.rescue = {
+                **(second.rescue or {}),
+                "hybrid_rescue": True,
+                "first_pass_silence_reason": first.silence_reason,
+            }
+            return second
+
+        first.rescue = {
+            **(first.rescue or {}),
+            "hybrid_rescue_attempted": True,
+            "hybrid_rescue_outcome": "silence",
+            "hybrid_silence_reason": second.silence_reason,
+        }
+        return first
+
+    def _ask_one_pass(
         self,
         question: str,
         *,
