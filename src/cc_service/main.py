@@ -71,9 +71,9 @@ def root():
     return RedirectResponse(url="/ui/index.html")
 
 
-app.mount("/ui", StaticFiles(
-    directory=str(Path(__file__).parent / "static"),
-), name="ui")
+_static_dir = Path(__file__).parent / "static"
+if _static_dir.is_dir():
+    app.mount("/ui", StaticFiles(directory=str(_static_dir)), name="ui")
 
 
 # ---------- Health & info ----------
