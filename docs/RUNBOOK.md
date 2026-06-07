@@ -382,3 +382,66 @@ Writes `results/v1_claim_verifier.{json,md}`. Runs the 8 exp28 multi-hop queries
 ### When to enable
 
 Turn Stage F on for: bank-promotion audits, regression sweeps after Stage E changes, and any deployment that values silence-over-splice more strongly than recall. Leave it off for: latency-sensitive interactive use (Stage F adds ~0–1s per call on grounded answers, more if the decomposer tokenizer is cold).
+
+## 13. Governed memory mutations (`scripts/memory.py`)
+
+Phase 3 replaces the `python -c "from src.agent...; ov.add_cell(...)"` one-liners in sections 4–6 with a typed **plan → confirm → apply** flow that refuses to mutate the overlay on an instruction it could not parse.
+
+### Cardinal rule
+
+The CLI mutates the overlay **only** when all three hold: `mode == apply`, `--confirm` is passed, and the planner produced a non-blocked `MemoryPlan`. `mode == plan` is read-only end-to-end and is the default.
+
+### Recognised instructions (lexical, not LLM)
+
+`src/agent/memory_intent_classifier.py` parses short imperatives with regexes. The closed kind set is `add | remove | inspect | unknown`. Unknown is *honest* — the orchestrator refuses to act on it rather than guessing.
+
+| Instruction example | Kind | Fields parsed |
+| --- | --- | --- |
+| `remember that Mars has two moons` | `add` | `text="Mars has two moons"` |
+| `add "Phobos is the larger moon"` | `add` | `text="Phobos is the larger moon"` |
+| `tombstone 123456: wrong attribution` | `remove` | `cell_id=123456, reason="wrong attribution"` |
+| `delete cell 42 because outdated source` | `remove` | `cell_id=42, reason="outdated source"` |
+| `show provenance` | `inspect` | — |
+| `the speed of light is 299792458 m/s` | `unknown` | — (refused) |
+
+Loading Phi-3 to classify a six-word imperative is over-engineering; the lexical parser is deterministic, testable, and consistent with the Phase 2 Stage F decomposer.
+
+### Plan (dry-run, default)
+
+```pwsh
+python scripts/memory.py plan "remember that Mars has two moons" `
+    --overlay-path results/v1_bank/overlay.db `
+    --bank-path H:\MiniLM\cc_service\bank.db
+```
+
+Exit 0 on a non-blocked plan, exit 2 if the planner blocked (unknown intent, empty reason, allocation guard tripped, etc.). Nothing is written.
+
+### Apply (mutates the overlay)
+
+```pwsh
+# Add a cell — requires the base bank for allocation + encoder.
+python scripts/memory.py apply "remember that Mars has two moons" `
+    --overlay-path results/v1_bank/overlay.db `
+    --bank-path H:\MiniLM\cc_service\bank.db `
+    --source manual --label cell_mars_moons --confirm
+
+# Tombstone — does NOT need the base bank.
+python scripts/memory.py apply "tombstone 123456: wrong attribution" `
+    --overlay-path results/v1_bank/overlay.db --confirm
+```
+
+Apply without `--confirm` is a deliberate no-op that returns exit 2, so a fat-fingered command never mutates state. Exit 3 indicates the apply itself failed or the post-mutation validator caught a regression.
+
+### Post-mutation validator
+
+After every apply, `src/agent/post_mutation_validator.py` reads the overlay back and confirms:
+
+- **add**: the new `overlay_cells` row exists at the returned id, its `source_text` matches the intent verbatim, and a `provenance_log` `op=add` entry is present.
+- **remove**: a `tombstones` row exists for `cell_id` with the intent's reason, plus the `op=remove` provenance entry.
+- **inspect**: `provenance()` is callable.
+
+The validator does **not** load the answer pipeline (no ~40 s Phi-3 cold load). A smoke ask through `scripts/ask.py` is the separate, optional next step.
+
+### When to use
+
+Use `scripts/memory.py` for any overlay edit performed by hand. The legacy `python -c` recipes in sections 4–6 remain for headless automation that needs to skip argparse, but every interactive operator action should go through the planner so an unparseable instruction can never silently mutate state.
