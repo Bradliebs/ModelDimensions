@@ -252,3 +252,59 @@ pointing at a new endpoint.
 | Overlay admin API             | `src/agent/bank_admin.py`                 |
 | CLI                           | `scripts/ask.py`, `scripts/setup.py`      |
 | Tests                         | `evals/`                                  |
+
+## 11. Hybrid retrieval cascade (research-only, FAILED prove-out)
+
+**Status as of the first exp28 run: FAILED. Do not enable in production.** See `results/v1_hybrid_cascade.md` for the verdict table and the failure analysis. `hybrid_rerank` produced 1 wrong answer (Q4 → "Vancouver" instead of "Ottawa") and `hybrid_cosine` produced 2 wrong answers (Q2 hallucinated composer, Q4 Vancouver). Wrong-answer count must never increase, so the cascade is gated off pending a re-run with the decomposer wired into the harness and a likely architectural fix (a dense-similarity floor on BM25-promoted candidates so that surface-token matches without semantic alignment are filtered before the silence gate).
+
+Phase 1 of the V1 upgrade adds a BM25 → cosine → (optional) cross-encoder rerank cascade in front of the silence gate. The cascade is **opt-in**: with no lexical index supplied, the pipeline is byte-identical to the V1 baseline above. The cascade was designed to recover recall faults like Q2 (Section 9) without weakening the gate or the verifier; the first prove-out showed it does not yet meet that bar.
+
+**Cardinal constraints (must hold across all phases):**
+
+- The silence gate is never replaced by the reranker.
+- The verifier is never weakened for recall.
+- No margin change ships without an eval harness proving it.
+- All mutations go to the overlay, not the base bank.
+- The V1 wrong-answer count never increases. A single wrong answer in `exp28` mode 4 halts the rollout.
+
+### Build the BM25 index
+
+The Phase 1 prove-out uses a capped corpus to validate the cascade end-to-end before scaling to the full 5.7M-cell bank:
+
+```pwsh
+# Phase 1: prove the cascade on the 8-question eval set first.
+python scripts/build_lexical_index.py `
+    --bank-path H:\MiniLM\cc_service\bank.db `
+    --out-dir results/v1_bank/bm25_index `
+    --limit 100000
+```
+
+Drop `--limit` once the prove-out passes to index the full bank. The index lives in `results/v1_bank/bm25_index/` and contains `index.pkl` and `manifest.json` (corpus hash + tokenizer version for staleness checks). The full 5.7M-cell build was attempted and held off — `rank_bm25.BM25Okapi` is pure Python and peaked at ~23 GB of working set without finishing on a 48 GB workstation; the 100k subset finishes in seconds. Phase 1.5 needs an alternative BM25 implementation (`pyserini`, `tantivy-py`, or a custom `numpy`/`scipy.sparse` index) before scaling.
+
+### Ask with the cascade on
+
+```pwsh
+python scripts/ask.py "Who composed The French Connection?" `
+    --lexical-index results/v1_bank/bm25_index
+```
+
+Or set the environment variable once: `$env:MD_LEXICAL_INDEX = "results/v1_bank/bm25_index"` and call `ask.py` normally.
+
+### Gating proof: exp28
+
+Before promoting the cascade to default, run the 4-mode comparison:
+
+```pwsh
+python experiments/exp28_hybrid_cascade.py `
+    --lexical-index results/v1_bank/bm25_index
+```
+
+Writes `results/v1_hybrid_cascade.json` and `results/v1_hybrid_cascade.md`. **Pass criterion:** mode `hybrid_rerank` must achieve ≥ 7/8 grounded and exactly 0/8 wrong. The script exits non-zero on failure; treat that as a HALT. The first run on this codebase **failed** — see `results/v1_hybrid_cascade.md` for verdict table and failure analysis. The harness in its current form does not run the decomposer that the V1 documented baseline depends on; before drawing conclusions about the cascade, exp28 needs a decomposer pass added (mirror the `_capture` pattern in `experiments/exp27_rerank_diagnostic.py`).
+
+### Recalibrating the gate margin
+
+The default margin (0.015) was calibrated for cosine activations. The reranker uses a different score scale; `--rerank-margin` in `exp28` defaults to 0.5 (conservative for `ms-marco-MiniLM-L-6-v2`). Only change `DEFAULT_MARGIN_THRESHOLD` in `src/agent/v1_silence_gate.py` if exp28 proves drift across ≥ 2 of the 8 questions, and only after re-running the full eval suite to confirm no regression.
+
+### Stale-index protection
+
+When the underlying bank's source texts change, the lexical index's manifest hash no longer matches. `LexicalIndex.load(..., expected_corpus_hash=...)` raises `LexicalIndexStale` rather than returning silently bad rankings. Rebuild the index after bulk overlay edits or any base-bank rewrite.

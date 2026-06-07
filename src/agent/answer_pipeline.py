@@ -27,6 +27,8 @@ from typing import Callable, List, Optional, Sequence
 import numpy as np
 
 from src.agent import v1_answer_verifier, v1_silence_gate
+from src.agent.hybrid_retriever import HybridRetriever
+from src.agent.lexical_index import LexicalIndex
 from src.agent.reranker import CrossEncoderReranker
 from src.agent.streaming_bank import StreamingBank
 from src.cc_service.encoder import EncoderSingleton
@@ -322,12 +324,19 @@ class AnswerPipeline:
         bank: Optional[StreamingBank] = None,
         reranker: Optional[CrossEncoderReranker] = None,
         rerank_margin_threshold: Optional[float] = None,
+        lexical_index: Optional[LexicalIndex] = None,
+        lexical_k: int = 200,
     ) -> None:
         self.top_k = int(top_k)
         self.margin_threshold = float(margin_threshold)
         self.min_coverage = float(min_coverage)
         self.closest_topics_k = int(closest_topics_k)
         self.reranker = reranker
+        # Hybrid retrieval is opt-in. When absent, behaviour is byte-
+        # identical to V1 single-stage cosine retrieval (the
+        # v1-grounded-answer-pipeline release tag).
+        self.lexical_index = lexical_index
+        self.lexical_k = int(lexical_k)
         # Reranker score scale differs from cosine activation scale, so the
         # threshold has to be supplied explicitly when reranker is on. No
         # safe default exists across cross-encoders.
@@ -363,6 +372,14 @@ class AnswerPipeline:
                 generator_model, use_4bit
             )
             self._generator_model_name = generator_model
+
+        # Construct the hybrid retriever once. None when the caller did
+        # not supply a lexical index, in which case ``ask`` uses the
+        # bank's ``topk`` directly.
+        self._hybrid = (
+            HybridRetriever(self.lexical_index, self.bank)
+            if self.lexical_index is not None else None
+        )
 
     # ---- public API ----
 
@@ -428,7 +445,13 @@ class AnswerPipeline:
         timings["encode"] = time.time() - t0
 
         t0 = time.time()
-        topk = self.bank.topk(whitened, k=self.top_k)
+        if self._hybrid is not None:
+            topk = self._hybrid.topk(
+                question, whitened,
+                k_lexical=self.lexical_k, k_final=self.top_k,
+            )
+        else:
+            topk = self.bank.topk(whitened, k=self.top_k)
         timings["retrieve"] = time.time() - t0
 
         activations = topk["activations"]
@@ -437,6 +460,15 @@ class AnswerPipeline:
             "activations": [float(a) for a in activations],
             "thetas": [float(t) for t in topk["thetas"]],
         }
+        # Carry the lexical-stage diagnostics through to PipelineResult
+        # when the hybrid path produced them. Pure-cosine retrieval
+        # omits these keys, preserving the V1 retrieval dict shape.
+        if "lexical_scores" in topk:
+            retrieval["lexical_scores"] = [
+                float(s) for s in topk["lexical_scores"]
+            ]
+            retrieval["lexical_ranks"] = list(topk["lexical_ranks"])
+            retrieval["retrieval_stage"] = topk.get("stage", "hybrid")
 
         # Reranker path: fetch texts now so the cross-encoder can score
         # (query, text) pairs, then reorder cells by rerank score and gate

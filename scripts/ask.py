@@ -23,6 +23,7 @@ DEFAULT_BANK = os.environ.get(
     "MD_BANK_PATH", r"H:\MiniLM\cc_service\bank.db"
 )
 DEFAULT_OVERLAY = os.environ.get("MD_OVERLAY_PATH", "")
+DEFAULT_LEXICAL_INDEX = os.environ.get("MD_LEXICAL_INDEX", "")
 
 
 def main() -> int:
@@ -47,6 +48,16 @@ def main() -> int:
         help="Load Phi-3 in bfloat16 instead of 4-bit NF4.",
     )
     parser.add_argument(
+        "--lexical-index", default=DEFAULT_LEXICAL_INDEX,
+        help="Directory containing a saved LexicalIndex. If set, enables "
+             "the BM25 → cosine hybrid retrieval cascade (default: env "
+             "MD_LEXICAL_INDEX or none).",
+    )
+    parser.add_argument(
+        "--lexical-k", type=int, default=200,
+        help="BM25 candidate pool size before cosine re-rank (default: 200).",
+    )
+    parser.add_argument(
         "--json", action="store_true",
         help="Print the full PipelineResult as JSON.",
     )
@@ -66,10 +77,22 @@ def main() -> int:
             )
             return 2
 
+    lexical_path: Path | None = None
+    if args.lexical_index:
+        lexical_path = Path(args.lexical_index)
+        if not lexical_path.exists():
+            print(
+                f"ERROR: lexical index not found: {lexical_path}",
+                file=sys.stderr,
+            )
+            return 2
+
     # Heavy imports after arg parse so --help is fast.
     print(f"[ask] loading bank: {bank_path}", flush=True)
     if overlay_path is not None:
         print(f"[ask] merging overlay: {overlay_path}", flush=True)
+    if lexical_path is not None:
+        print(f"[ask] loading lexical index: {lexical_path}", flush=True)
     t0 = time.time()
     from src.agent.answer_pipeline import AnswerPipeline
     bank_arg = None
@@ -78,12 +101,18 @@ def main() -> int:
         from src.agent.streaming_bank import StreamingBank
         overlay = OverlayStore(overlay_path)
         bank_arg = StreamingBank(str(bank_path), overlay=overlay)
+    lexical_index = None
+    if lexical_path is not None:
+        from src.agent.lexical_index import LexicalIndex
+        lexical_index = LexicalIndex.load(lexical_path)
     pipeline = AnswerPipeline(
         bank_path=bank_path,
         bank=bank_arg,
         top_k=args.top_k,
         margin_threshold=args.margin,
         use_4bit=not args.no_4bit,
+        lexical_index=lexical_index,
+        lexical_k=args.lexical_k,
     )
     print(f"[ask] pipeline ready in {time.time() - t0:.1f}s", flush=True)
 

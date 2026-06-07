@@ -754,3 +754,149 @@ def test_decide_rescue_rejects_when_no_primary_entity():
     )
     assert outcome == "reject_no_primary"
     assert audit["rescue_rejection_reason"] == "no_primary_entity"
+
+
+# ---------- hybrid retrieval cascade ----------
+
+
+from src.agent.lexical_index import LexicalIndex  # noqa: E402
+
+
+@pytest.fixture
+def hybrid_bank(tmp_path: Path) -> Path:
+    """4-cell bank engineered so the keyword cell is dense-second but
+    lexically unique. The cosine top-1 leans toward an unrelated cell;
+    BM25 surfaces the right one, cosine re-rank confirms it."""
+    db = tmp_path / "hybrid_bank.db"
+    dim = 8
+    eye = np.eye(dim, dtype=np.float32)
+    cells = [
+        ("keyword_cell", 0.1 * eye[0] + 0.9 * eye[1], 0.3,
+         "Don Ellis composed the score for The French Connection in 1971."),
+        ("decoy_cell", eye[1], 0.3,
+         "Generic film history with no relevant proper nouns mentioned here."),
+        ("unrelated_zebra", eye[2], 0.3,
+         "Zebras have black and white stripes and live in Africa."),
+        ("unrelated_chess", eye[3], 0.3,
+         "Chess is a two-player strategy game played on 64 squares."),
+    ]
+    _make_bank(db, dim, cells)
+    return db
+
+
+def test_cascade_off_is_byte_identical_to_v1(tiny_bank: Path):
+    """Without a lexical index, the pipeline must behave exactly as V1.
+    The retrieval dict shape stays minimal (no lexical_* keys) and the
+    same answer is produced as without the cascade."""
+    encoder = _StubEncoder(dim=8)
+    encoder.responses["What do zebras look like?"] = np.eye(8, dtype=np.float32)[0]
+
+    pipeline = AnswerPipeline(
+        bank_path=tiny_bank,
+        top_k=3,
+        encoder=encoder,
+        generator=lambda p: "Zebras have black and white stripes. [1]",
+    )
+    try:
+        result = pipeline.ask("What do zebras look like?")
+    finally:
+        pipeline.close()
+
+    assert result.silence is False, result.silence_reason
+    assert "lexical_scores" not in result.retrieval
+    assert "lexical_ranks" not in result.retrieval
+    assert "retrieval_stage" not in result.retrieval
+
+
+def test_cascade_on_surfaces_lexical_diagnostics(hybrid_bank: Path):
+    """With a lexical index, the retrieval dict carries lexical_scores,
+    lexical_ranks, and retrieval_stage. The cascade picks the keyword
+    cell even when dense alone would prefer the decoy."""
+    encoder = _StubEncoder(dim=8)
+    # Query encoded to lean toward the decoy (axis 1) — dense alone
+    # would put the decoy first.
+    encoder.responses["Who composed The French Connection?"] = (
+        np.array([0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], dtype=np.float32)
+    )
+
+    # Build a lexical index over the bank's source texts.
+    from src.agent.streaming_bank import StreamingBank
+    bank = StreamingBank(hybrid_bank)
+    try:
+        cell_ids = [int(c) for c in bank.cell_ids]
+        idx = LexicalIndex()
+        idx.build_from_texts(
+            cell_ids,
+            bank.fetch_source_texts(cell_ids),
+        )
+    finally:
+        bank.close()
+
+    pipeline = AnswerPipeline(
+        bank_path=hybrid_bank,
+        top_k=3,
+        encoder=encoder,
+        generator=lambda p: (
+            "Don Ellis composed the score for The French Connection. [1]"
+        ),
+        lexical_index=idx,
+        lexical_k=10,
+    )
+    try:
+        result = pipeline.ask("Who composed The French Connection?")
+    finally:
+        pipeline.close()
+
+    # Cascade diagnostics present.
+    assert "lexical_scores" in result.retrieval
+    assert "lexical_ranks" in result.retrieval
+    assert result.retrieval["retrieval_stage"] == "hybrid"
+    # Keyword cell is at the head of the retrieval — that is the
+    # whole point of the cascade.
+    assert result.retrieval["top_k_cell_ids"][0] == 1
+    # And lexical_scores for that cell is non-zero (it had matching
+    # terms in BM25).
+    assert result.retrieval["lexical_scores"][0] > 0.0
+    # Answer grounds normally.
+    assert result.silence is False, result.silence_reason
+    assert 1 in result.citations
+
+
+def test_cascade_falls_back_to_dense_on_stopword_query(hybrid_bank: Path):
+    """A query with no lexical signal must still produce a result via
+    the dense fallback path. The retrieval dict carries
+    retrieval_stage='dense_fallback' so the cascade is auditable."""
+    encoder = _StubEncoder(dim=8)
+    encoder.responses["the of an"] = (
+        np.array([0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], dtype=np.float32)
+    )
+
+    from src.agent.streaming_bank import StreamingBank
+    bank = StreamingBank(hybrid_bank)
+    try:
+        cell_ids = [int(c) for c in bank.cell_ids]
+        idx = LexicalIndex()
+        idx.build_from_texts(
+            cell_ids,
+            bank.fetch_source_texts(cell_ids),
+        )
+    finally:
+        bank.close()
+
+    pipeline = AnswerPipeline(
+        bank_path=hybrid_bank,
+        top_k=3,
+        encoder=encoder,
+        generator=lambda p: "placeholder",
+        lexical_index=idx,
+        lexical_k=10,
+    )
+    try:
+        result = pipeline.ask("the of an")
+    finally:
+        pipeline.close()
+
+    assert result.retrieval["retrieval_stage"] == "dense_fallback"
+    # All lexical_scores are zero; ranks are all None.
+    assert all(s == 0.0 for s in result.retrieval["lexical_scores"])
+    assert all(r is None for r in result.retrieval["lexical_ranks"])

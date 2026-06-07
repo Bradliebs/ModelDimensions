@@ -295,6 +295,42 @@ class StreamingBank:
             for c in ids
         ]
 
+    def weights_for(self, cell_ids: Sequence[int]) -> np.ndarray:
+        """Return whitened weight rows for ``cell_ids`` in caller order.
+
+        Shape ``(len(cell_ids), self.dim)``, dtype float32. Unknown ids raise
+        ``KeyError`` rather than silently returning zeros — a downstream
+        caller scoring a missing cell against the query would produce a
+        spurious 0.0 activation, which is the silent-failure failure mode
+        the hybrid retriever exists to avoid.
+
+        Used by :mod:`src.agent.hybrid_retriever` to score a BM25-restricted
+        candidate set against the encoded query without re-running the full
+        ``topk`` over the 5.7M-cell array.
+        """
+        if not hasattr(self, "_id_to_row"):
+            # Build once on first call; the cell_ids array is fixed after
+            # construction (including the overlay merge), so this is safe to
+            # cache.
+            self._id_to_row = {
+                int(cid): int(row) for row, cid in enumerate(self.cell_ids)
+            }
+        ids = [int(c) for c in cell_ids]
+        if not ids:
+            return np.empty((0, self.dim), dtype=np.float32)
+        try:
+            rows = np.fromiter(
+                (self._id_to_row[c] for c in ids),
+                dtype=np.int64,
+                count=len(ids),
+            )
+        except KeyError as e:
+            raise KeyError(
+                f"cell id {e.args[0]} not in bank (overlay merged: "
+                f"{len(self._overlay_ids)} overlay cells)"
+            ) from e
+        return self.weights[rows]
+
     def base_max_cell_id(self) -> int:
         """Largest base-bank cell id (excludes overlay cells). Used by
         :func:`bank_admin.add_cell_from_text` to allocate non-colliding ids."""

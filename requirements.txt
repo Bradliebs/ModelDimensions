@@ -24,6 +24,9 @@ tqdm>=4.65
 # SLM controller layer (typed, validated decision schemas)
 pydantic>=2.0
 
+# Hybrid retrieval cascade (Phase 1 of the V1 upgrade)
+rank-bm25>=0.2.2
+
 # cc_service runtime (FastAPI bank service + CLI clients)
 fastapi>=0.104
 uvicorn>=0.24
