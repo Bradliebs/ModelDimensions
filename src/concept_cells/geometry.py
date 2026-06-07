@@ -264,3 +264,31 @@ def scale_to_unit_ball(emb: np.ndarray) -> np.ndarray:
     """
     max_norm = float(np.linalg.norm(emb, axis=1).max())
     return (emb / (max_norm + 1e-8)).astype(np.float32)
+
+
+def abtt_transform(emb: np.ndarray, k: Optional[int] = None) -> np.ndarray:
+    """All-But-The-Top isotropy correction (Mu & Viswanath, ICLR 2018).
+
+    Subtract the global mean, then project out the top-k principal components.
+    Robust to small-sample / ill-conditioned covariance because it never
+    inverts the covariance matrix — only its top-k eigenspace is touched.
+
+    Default k = max(1, D // 100), matching the paper's heuristic.
+
+    Returns the transformed embeddings, same shape as input.
+    """
+    if emb.ndim != 2:
+        raise ValueError(f"emb must be 2D, got shape {emb.shape}")
+    n, d = emb.shape
+    if k is None:
+        k = max(1, d // 100)
+    k = min(k, d, max(1, n - 1))
+
+    mu = emb.mean(axis=0, keepdims=True)
+    centered = emb - mu
+    # Top-k right singular vectors of centered (= top-k eigenvectors of cov).
+    # full_matrices=False: economy SVD; Vt is (min(n,d), d).
+    _, _, vt = np.linalg.svd(centered, full_matrices=False)
+    top = vt[:k]                                   # (k, d)
+    projection = centered @ top.T @ top            # (n, d) component on top-k
+    return (centered - projection).astype(np.float32)

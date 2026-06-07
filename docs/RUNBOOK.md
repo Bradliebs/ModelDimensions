@@ -445,3 +445,45 @@ The validator does **not** load the answer pipeline (no ~40 s Phi-3 cold load). 
 ### When to use
 
 Use `scripts/memory.py` for any overlay edit performed by hand. The legacy `python -c` recipes in sections 4–6 remain for headless automation that needs to skip argparse, but every interactive operator action should go through the planner so an unparseable instruction can never silently mutate state.
+
+## 14. Isotropy correction: ABTT alternative to ZCA whitening (opt-in at fit time)
+
+The production bank was fitted with ZCA whitening. ZCA is mathematically fragile when the reference sample count `N` is small relative to the embedding dimension `D` — the covariance estimate is rank-deficient and the resulting `cov^(-1/2)` over-sharpens out-of-reference directions. This is the textbook small-sample whitening failure documented in `results/exp08_summary.json`: config `minilm_whiten_scale` produced `paraphrase_recall: 0.0` (vs `0.8` for raw embeddings).
+
+Phase 6 ships an alternative isotropy corrector — **All-But-The-Top (ABTT)** from Mu & Viswanath (ICLR 2018) — selectable via a new `method=` parameter to `cc_service.memory.fit_whitening`. ABTT subtracts the global mean and projects out the top-k principal components without ever inverting the covariance, so it is robust to small `N`.
+
+### Selecting at fit time
+
+```python
+from cc_service.memory import fit_whitening
+
+# Legacy default — ZCA. Unchanged.
+params = fit_whitening(raw_embeddings, reference_n=len(refs))
+
+# Opt in to ABTT for the next bank build.
+params = fit_whitening(raw_embeddings, reference_n=len(refs), method="abtt")
+
+# Custom k for ABTT (default is max(1, D // 100), the paper's heuristic).
+params = fit_whitening(raw_embeddings, reference_n=len(refs),
+                       method="abtt", abtt_k=5)
+```
+
+The returned `WhiteningParams` has the same `(mu, w_matrix, max_norm)` shape regardless of method, so persistence (`save_whitening` / `load_whitening`) and `apply_whitening` work unchanged. The on-disk schema is unaffected — both `tests/cc_service/test_smoke.py` and `src/agent/sqlite_bank.py` continue to load either kind of fitted matrix.
+
+### What this does NOT do
+
+- The live 5.7M-cell bank at `H:\MiniLM\cc_service\bank.db` was built with ZCA. **It is not modified.** Swapping its `whitening` row in place would invalidate every stored cell's geometry. Adoption requires a deliberate full bank rebuild (re-encode + re-fit + re-calibrate thresholds), which is a Stage 2 / "expensive" decision and is not part of Phase 6.
+- The geometry-layer `concept_cells.geometry.zca_whiten` is unchanged; a parallel `abtt_transform` is added so future experiments can A/B the two.
+
+### Regression evidence
+
+`evals/test_abtt_no_collapse.py` covers:
+
+- `test_zca_collapses_paraphrase_separation_at_small_n` — reproduces the exp08 collapse on a synthetic anisotropic regime (N=200, D=384) and asserts the paraphrase / unrelated cosine gap goes below 0.05 (ZCA destroys it).
+- `test_abtt_removes_top_k_variance_and_preserves_bulk` — structural contract: ABTT removes ~all variance in the top-k reference axes and preserves ≥ 90% of bulk variance.
+- `test_abtt_robust_to_small_n_no_warnings` — ABTT at the textbook bad case (N=20, D=384) emits no warning and produces finite output.
+- `test_fit_whitening_abtt_returns_compatible_params` — shape and persistence-compatibility of the ABTT `WhiteningParams`.
+- `test_fit_whitening_zca_default_unchanged` — backward compat: `method='zca'` (the default) is byte-identical to the no-argument call.
+
+Whether ABTT *recovers retrieval recall on real MiniLM* is an empirical question owned by `exp09` / `exp12`; that depends on where the paraphrase signal lives in real sentence embeddings (which is encoder-specific) and is out of scope for an isolated unit test. Section 14 ships the option; an evaluation run on a freshly rebuilt small-scale bank would be the natural next step before considering full-bank adoption.
+

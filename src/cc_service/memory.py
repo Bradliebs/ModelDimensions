@@ -55,45 +55,71 @@ def _bind_items(w0: np.ndarray, items: List[np.ndarray], theta: float,
 
 def fit_whitening(raw_embeddings: np.ndarray,
                    reference_n: int,
-                   eps: float = 1e-5) -> WhiteningParams:
-    """Fit ZCA whitening + ball scaling parameters from a reference corpus.
+                   eps: float = 1e-5,
+                   method: str = "zca",
+                   abtt_k: Optional[int] = None) -> WhiteningParams:
+    """Fit an isotropy-correction transform from a reference corpus.
 
-    Returns parameters that, when applied, produce embeddings suitable for
-    the concept-cell bank (isotropic, contained in the unit ball).
+    The returned ``WhiteningParams`` always has shape ``(mu, w_matrix, max_norm)``
+    so the existing :func:`apply_whitening` and persistence layer do not need
+    to know which method was used.
+
+    method:
+      - ``"zca"`` (default, legacy): ZCA whitening. ``w_matrix = cov^(-1/2)``.
+        Requires a well-conditioned covariance estimate; if ``N < ~3*D`` it
+        over-sharpens (textbook small-sample failure, observed in exp08 as
+        ``paraphrase_recall = 0.0``).
+      - ``"abtt"``: All-But-The-Top (Mu & Viswanath, ICLR 2018). Subtract
+        global mean, project out the top ``abtt_k`` principal components.
+        Default ``abtt_k = max(1, D // 100)``. Robust to small ``N`` because
+        it never inverts the covariance — only its top-k eigenspace is used.
 
     The reference set must be large enough to give a well-conditioned
-    covariance estimate. As a rule of thumb, you want N >= 3 * D samples;
-    below that the rank-deficient directions get whitening factors that
-    explode for out-of-reference vectors. We warn but don't refuse below
-    that threshold.
+    covariance estimate for ZCA. As a rule of thumb, you want N >= 3 * D
+    samples; below that the rank-deficient directions get whitening factors
+    that explode for out-of-reference vectors. We warn but don't refuse below
+    that threshold. ABTT does not suffer this issue.
     """
     N, D = raw_embeddings.shape
-    if N < D:
-        import warnings
-        warnings.warn(
-            f"Whitening fitted on {N} samples in {D} dims; covariance is "
-            f"rank-deficient. New vectors with components along null "
-            f"directions will be amplified ~{1/np.sqrt(eps):.0f}x. "
-            f"Recommend at least {3*D} samples for stable whitening.",
-            stacklevel=2,
-        )
     mu = raw_embeddings.mean(axis=0)
     centered = raw_embeddings - mu
-    cov = (centered.T @ centered) / max(centered.shape[0] - 1, 1)
-    eigvals, eigvecs = np.linalg.eigh(cov)
-    # Adaptive eps: clamp to a meaningful fraction of the largest eigenvalue,
-    # not an absolute number. This prevents null directions from getting
-    # whitening factors that explode for out-of-distribution components.
-    eps_effective = max(eps, float(eigvals.max()) * 1e-3)
-    eigvals = np.maximum(eigvals, eps_effective)
-    w_matrix = eigvecs @ np.diag(1.0 / np.sqrt(eigvals)) @ eigvecs.T
+
+    if method == "zca":
+        if N < D:
+            import warnings
+            warnings.warn(
+                f"Whitening fitted on {N} samples in {D} dims; covariance is "
+                f"rank-deficient. New vectors with components along null "
+                f"directions will be amplified ~{1/np.sqrt(eps):.0f}x. "
+                f"Recommend at least {3*D} samples for stable whitening, "
+                f"or use method='abtt' which is robust to small N.",
+                stacklevel=2,
+            )
+        cov = (centered.T @ centered) / max(centered.shape[0] - 1, 1)
+        eigvals, eigvecs = np.linalg.eigh(cov)
+        # Adaptive eps: clamp to a meaningful fraction of the largest eigenvalue,
+        # not an absolute number. This prevents null directions from getting
+        # whitening factors that explode for out-of-distribution components.
+        eps_effective = max(eps, float(eigvals.max()) * 1e-3)
+        eigvals = np.maximum(eigvals, eps_effective)
+        w_matrix = eigvecs @ np.diag(1.0 / np.sqrt(eigvals)) @ eigvecs.T
+    elif method == "abtt":
+        k = abtt_k if abtt_k is not None else max(1, D // 100)
+        k = min(k, D, max(1, N - 1))
+        # Top-k right singular vectors of centered = top-k eigenvectors of cov.
+        _, _, vt = np.linalg.svd(centered, full_matrices=False)
+        top = vt[:k]                                   # (k, D)
+        w_matrix = np.eye(D, dtype=np.float64) - top.T @ top
+    else:
+        raise ValueError(f"unknown whitening method: {method!r} (use 'zca' or 'abtt')")
+
     w_matrix = w_matrix.astype(np.float32)
 
-    # Compute max_norm after whitening so we can scale into the unit ball.
+    # Compute max_norm after transform so we can scale into the unit ball.
     # We include a small safety margin so that out-of-reference vectors are
     # unlikely to exceed unit norm catastrophically.
-    whitened = centered @ w_matrix
-    max_norm_observed = float(np.linalg.norm(whitened, axis=1).max())
+    transformed = centered @ w_matrix
+    max_norm_observed = float(np.linalg.norm(transformed, axis=1).max())
     max_norm = max_norm_observed * 1.5  # 50% headroom for OOD samples
 
     return WhiteningParams(
