@@ -1,5 +1,12 @@
 # Concept Cells Service (ccmem)
 
+> **Historical document — superseded.** This describes the original
+> `ccmem` CLI/FastAPI prototype (v0.1, single-machine, single-bank, no
+> auth). The current system uses a 5.7M-cell bank served via the V1
+> grounded-answer pipeline (`scripts/ask.py`) and the Bank Management
+> Workspace (`run_bank_workspace.bat`). See [RUNBOOK.md](RUNBOOK.md) for
+> the operator guide and [PLAN.md](PLAN.md) for the frozen V1 contract.
+
 A research-notebook memory service built on the Concept Cells architecture
 (see the parent `concept_cells/ARCHITECTURE.md` for the underlying mechanism).
 

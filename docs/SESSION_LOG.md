@@ -1,5 +1,9 @@
 # Session Log — May 23, 2026
 
+> **Historical document — frozen snapshot.** This is a single-session log
+> from the early cc_service build (May 2026). It does not reflect current
+> state. For current operations see [RUNBOOK.md](RUNBOOK.md).
+
 End-to-end build of the cc_service memory bank: scaffolding → tests → web UI →
 bulk loaders → GPU → data load → diagnostic tests → bug fix.
 

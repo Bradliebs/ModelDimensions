@@ -1,5 +1,12 @@
 # Concept Cells Service (ccmem)
 
+> **Historical document — frozen research-context narrative.** This is the
+> original ccmem framing tying the concept-cell bank to the knowledge-free
+> RETRO research arc. It does not track current state (V1 grounded-answer
+> pipeline, governed knowledge-pack lifecycle, Consultant Workbench). For
+> current operations see [RUNBOOK.md](RUNBOOK.md); for the frozen V1 baseline
+> see [v1_release_report.md](v1_release_report.md).
+
 A research-notebook memory service built on the Concept Cells architecture
 (see the parent `concept_cells/ARCHITECTURE.md` for the underlying mechanism).
 

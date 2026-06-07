@@ -1,5 +1,11 @@
 # Project Log: Retrieval-Augmented Language Model (RETRO)
 
+> **Historical document — frozen narrative.** This is the RETRO research
+> arc (bank + nanogpt + held-out evaluation). It does not track post-RETRO
+> product work (V1 grounded-answer pipeline, workspace UI, governed
+> knowledge-pack lifecycle). For current state see [PLAN.md](PLAN.md),
+> [RUNBOOK.md](RUNBOOK.md), and [v1_release_report.md](v1_release_report.md).
+
 ## What This Project Is
 
 We built a language model that can look things up in an external memory bank while it writes, and proved that the lookup mechanism does genuine intellectual work — finding semantically relevant information and using it to make better predictions on text it has never seen before.

@@ -1,5 +1,17 @@
 # V1 Runbook
 
+> **Scope: V1 grounded-answer pipeline only.** This document covers the
+> V1 pipeline (`scripts/ask.py`, `scripts/setup.py`), overlay editing,
+> the Bank Management Workspace (`run_bank_workspace.bat`), the V1.1
+> verification audit, and optional deployment hardening. It does **not**
+> cover the post-V1 surfaces shipped later — Consultant Workbench UI,
+> governed knowledge-pack lifecycle (`hf-lifecycle`, `pdf-pack`,
+> `knowledge-packs`, `active-pack-monitor`, `regression-review`,
+> `lifecycle-executor`), source registry, memory-proposal queues, chat
+> orchestrator, or document ingest. Those CLI surfaces are documented in
+> the top-level [README.md](../README.md) and commit history. An operator
+> guide for them is not yet written.
+
 A single-page operator's guide for the V1 cited-answer pipeline.
 
 > Audience: the researcher running this on their own workstation. No

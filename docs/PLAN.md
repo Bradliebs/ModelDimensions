@@ -13,12 +13,16 @@ scope creep, no "while I'm here" cleanups.
 | 3    | DONE     | `a085364` | `scripts/ask.py`, real-bank smoke (see below), 5/5 pipeline tests |
 | 3+   | DONE     | `778ecd8` | V1-gap closure: numeric verifier, closest-topics silence, batch eval, HTTP service |
 | 3++  | DONE     | `a25736d` | Empirical batch eval on real 5.7M-cell bank (`results/v1_pipeline_eval.json`) |
-| 3+++ | DONE     | (this commit) | Recall-gap close: question-shaped probes + tuned default margin 0.03 |
-| 4    | NOT DONE | —         | overlay editable bank + provenance |
-| 5    | NOT DONE | —         | `scripts/setup.py` + `docs/RUNBOOK.md` |
+| 3+++ | DONE     | `b9de87c` | Recall-gap close: question-shaped probes + tuned default margin 0.03; cross-encoder rerank diagnostic |
+| 4    | DONE     | `c4ece3a` | Overlay editable bank + provenance (`src/agent/bank_admin.py`, `OverlayStore` at `results/v1_bank/overlay.db`) |
+| 5    | DONE     | `c6b6a15` | `scripts/setup.py` + `docs/RUNBOOK.md` (operator guide) |
+| V1 release lock | DONE | `9269b6a` (tag `v1-grounded-answer-pipeline`) | RUNBOOK §9 documents the two parked Q2/Q5 limitations; contract holds: 6/8 grounded, 0/8 wrong, 2/8 honestly silenced |
 
-`origin/master` is at `a25736d` (will advance with this commit). Full
-test suite: **101 passed**.
+All V1 plan steps are closed. `origin/master` has since advanced well
+beyond this plan (workspace UI, V1.1 verification audit, governed
+knowledge-pack lifecycle, etc.) — those are tracked in commit history
+and `/memories/repo/build-facts.md`, not here. This plan stays as the
+frozen V1 contract.
 
 ### Step 3 — real-bank smoke evidence
 
@@ -258,12 +262,14 @@ historical contract.
 
 ### Stop conditions hit so far
 
-None. No stop condition has fired through Steps 1–3.
+None. No stop condition fired across Steps 1–5.
 
 ### Next
 
-Step 4 (overlay editable bank), then Step 5 (setup + runbook). Order from
-the plan body still holds.
+All V1 plan steps shipped and V1 was tagged `v1-grounded-answer-pipeline`
+at `9269b6a`. This plan is closed. Post-V1 work (workspace UI, V1.1
+verification audit, governed knowledge-pack lifecycle v6.x–v7.x) is
+tracked in commit history.
 
 ---
 
