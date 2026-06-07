@@ -1,0 +1,84 @@
+{
+  "experiment": "exp30_abtt_minilm_validation",
+  "description": "Real-MiniLM head-to-head of ZCA and ABTT on the exp08 corpus. Closes the loop the Phase 6 structural tests left open: does ABTT actually rescue paraphrase recall on real embeddings, not just synthetic anisotropic data?",
+  "epsilon": 0.25,
+  "radius": 0.9,
+  "n_memories": 5,
+  "n_queries": 20,
+  "configs": [
+    {
+      "config": "minilm_raw",
+      "epsilon": 0.25,
+      "cosine_fire_threshold": 0.7222,
+      "exact_recall": 1.0,
+      "paraphrase_recall": 0.8,
+      "false_fire_rate": 0.5,
+      "silent_refusal_rate": 1.0,
+      "margin_distribution": {
+        "count": 14,
+        "mean": 0.1757,
+        "std": 0.0755,
+        "min": 0.0258,
+        "max": 0.25,
+        "per_kind_mean": {
+          "exact": 0.25,
+          "paraphrase": 0.1099,
+          "near_miss": 0.1539,
+          "unrelated": null
+        }
+      },
+      "n_queries": 20
+    },
+    {
+      "config": "minilm_zca_scale",
+      "epsilon": 0.25,
+      "cosine_fire_threshold": 0.7222,
+      "exact_recall": 1.0,
+      "paraphrase_recall": 0.0,
+      "false_fire_rate": 0.0,
+      "silent_refusal_rate": 1.0,
+      "margin_distribution": {
+        "count": 5,
+        "mean": 0.25,
+        "std": 0.0,
+        "min": 0.25,
+        "max": 0.25,
+        "per_kind_mean": {
+          "exact": 0.25,
+          "paraphrase": null,
+          "near_miss": null,
+          "unrelated": null
+        }
+      },
+      "n_queries": 20
+    },
+    {
+      "config": "minilm_abtt_scale",
+      "epsilon": 0.25,
+      "cosine_fire_threshold": 0.7222,
+      "exact_recall": 1.0,
+      "paraphrase_recall": 0.2,
+      "false_fire_rate": 0.2,
+      "silent_refusal_rate": 1.0,
+      "margin_distribution": {
+        "count": 21,
+        "mean": 0.1718,
+        "std": 0.101,
+        "min": 0.0222,
+        "max": 0.25,
+        "per_kind_mean": {
+          "exact": 0.25,
+          "paraphrase": 0.0222,
+          "near_miss": 0.0582,
+          "unrelated": null
+        }
+      },
+      "n_queries": 20
+    }
+  ],
+  "headline_delta": {
+    "paraphrase_recall_abtt_minus_zca": 0.2,
+    "false_fire_rate_abtt_minus_zca": 0.2
+  },
+  "verdict": "ABTT improves paraphrase recall but raises false fires"
+}

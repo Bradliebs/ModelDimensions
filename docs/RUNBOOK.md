@@ -487,3 +487,22 @@ The returned `WhiteningParams` has the same `(mu, w_matrix, max_norm)` shape reg
 
 Whether ABTT *recovers retrieval recall on real MiniLM* is an empirical question owned by `exp09` / `exp12`; that depends on where the paraphrase signal lives in real sentence embeddings (which is encoder-specific) and is out of scope for an isolated unit test. Section 14 ships the option; an evaluation run on a freshly rebuilt small-scale bank would be the natural next step before considering full-bank adoption.
 
+### Real-MiniLM head-to-head (exp30)
+
+`experiments/exp30_abtt_minilm_validation.py` closes that loop on the exp08 corpus (5 memories, 20 queries, real all-MiniLM-L6-v2 vectors, epsilon=0.25). Direct results from `results/exp30_abtt_minilm_validation.json`:
+
+| Config | exact_recall | paraphrase_recall | false_fire_rate |
+| --- | --- | --- | --- |
+| `minilm_raw` | 1.00 | 0.80 | 0.50 |
+| `minilm_zca_scale` | 1.00 | 0.00 | 0.00 |
+| `minilm_abtt_scale` | 1.00 | 0.20 | 0.20 |
+
+**Honest read.** ABTT does recover paraphrase recall vs ZCA at this fit-regime (0.00 → 0.20) — the Phase 6 claim survives empirical contact rather than only synthetic contact. But the recovery is **not** free: false-fire rate moves by an equal amount (0.00 → 0.20). At N=5 the ABTT fit is too noisy to discriminate paraphrase signal from near-miss / unrelated noise; it moves the operating point roughly one-fifth of the way back toward `minilm_raw` on both axes simultaneously rather than picking up a Pareto improvement.
+
+**What this means for adoption.**
+
+- ABTT is not a drop-in upgrade at small `N`. At the exp08 regime (N=5) the tradeoff is one-for-one.
+- The original Phase 6 motivation (small-N fit doesn't crash) holds. The stronger claim (small-N fit recovers recall *without* paying false fires) does not hold here.
+- Production bank decisions should be made on a fit fitted with `N >> D` (the 5.7M-cell bank fits ~6M memories into 384 dims, so the small-N pathology does not apply at all). Whether ABTT helps or hurts at that scale is a separate experiment that would require a deliberate rebuild — not justified by current measured failure modes.
+- Rerun exp30 with a larger reference corpus (e.g. a 5k-memory subsample of the production bank) before any further claim about ABTT's behaviour in the live regime.
+
