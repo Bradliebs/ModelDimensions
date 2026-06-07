@@ -48,6 +48,16 @@ def main() -> int:
     )
     parser.add_argument("--k1", type=float, default=1.5)
     parser.add_argument("--b", type=float, default=0.75)
+    parser.add_argument(
+        "--backend", choices=("rank_bm25", "tantivy"), default="rank_bm25",
+        help=("BM25 backend. rank_bm25 (pure Python) is the Phase 1 default "
+              "but OOMs at ~23 GB on the full 5.7M-cell bank. Use tantivy "
+              "(Rust, on-disk segments) for any build that won't fit in RAM."),
+    )
+    parser.add_argument(
+        "--writer-heap-mb", type=int, default=256,
+        help="Tantivy writer heap size in MB (ignored for rank_bm25).",
+    )
     args = parser.parse_args()
 
     bank_path = Path(args.bank_path)
@@ -81,8 +91,11 @@ def main() -> int:
         flush=True,
     )
 
-    from src.agent.lexical_index import LexicalIndex
-    idx = LexicalIndex()
+    from src.agent.lexical_index import LexicalIndex, TantivyLexicalIndex
+    if args.backend == "tantivy":
+        idx = TantivyLexicalIndex()
+    else:
+        idx = LexicalIndex()
 
     last_print = [time.time()]
 
@@ -101,12 +114,21 @@ def main() -> int:
         )
 
     t0 = time.time()
-    idx.build_from_bank(
-        bank, limit=args.limit, k1=args.k1, b=args.b,
-        progress_callback=progress,
-    )
+    if args.backend == "tantivy":
+        idx.build_from_bank(
+            bank, out_dir=out_dir, limit=args.limit,
+            k1=args.k1, b=args.b,
+            progress_callback=progress,
+            writer_heap_mb=args.writer_heap_mb,
+        )
+    else:
+        idx.build_from_bank(
+            bank, limit=args.limit, k1=args.k1, b=args.b,
+            progress_callback=progress,
+        )
     print(
-        f"[build] indexed {idx.n_docs} docs in {time.time() - t0:.1f}s",
+        f"[build] indexed {idx.n_docs} docs in {time.time() - t0:.1f}s "
+        f"(backend={args.backend})",
         flush=True,
     )
 

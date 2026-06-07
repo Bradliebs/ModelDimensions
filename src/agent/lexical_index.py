@@ -42,12 +42,19 @@ on matches what the verifier checks. Stopwords are dropped at index
 time *and* query time for consistency. The tokenizer version string is
 embedded in the manifest so a future tokenizer change forces a rebuild.
 
-Out of scope (Phase 1):
+Phase 1.5 adds :class:`TantivyLexicalIndex`, an on-disk Rust-backed
+sibling that scales to the full 5.7M-cell bank without the OOM that
+``rank_bm25``'s pure-Python BM25Okapi hits at ~23 GB working set on
+that corpus. Both classes expose the same ``topk(query, k,
+excluded_ids) -> (cell_ids, scores)`` contract that
+:class:`src.agent.hybrid_retriever.HybridRetriever` consumes; the
+:func:`load_lexical_index` factory dispatches by manifest ``backend``
+field, defaulting to ``rank_bm25`` for back-compat with the Phase 1
+100k-cell index built before this field existed.
+
+Out of scope:
   - Live overlay updates. The index is a snapshot. Mutating the overlay
     after build requires a rebuild; the manifest hash will detect it.
-  - Tantivy / Lucene backends. ``rank_bm25`` is pure Python; it's slow
-    to build on the full 5.7M-cell bank (Phase 1.5 will measure that),
-    but its query latency is fine for the cascade.
 """
 from __future__ import annotations
 
@@ -139,7 +146,8 @@ def _corpus_hash(cell_ids: Sequence[int],
 
 @dataclass(frozen=True)
 class LexicalIndexManifest:
-    """On-disk metadata; serialized as JSON next to ``index.pkl``."""
+    """On-disk metadata; serialized as JSON next to ``index.pkl`` (rank_bm25)
+    or next to the tantivy index directory."""
     corpus_hash: str
     tokenizer_version: str
     n_docs: int
@@ -147,6 +155,7 @@ class LexicalIndexManifest:
     b: float
     created_at: float
     source: str  # human-readable provenance hint (e.g. bank path + limit)
+    backend: str = "rank_bm25"  # "rank_bm25" or "tantivy"
 
     def as_dict(self) -> dict:
         return {
@@ -157,6 +166,7 @@ class LexicalIndexManifest:
             "b": float(self.b),
             "created_at": float(self.created_at),
             "source": str(self.source),
+            "backend": str(self.backend),
         }
 
     @classmethod
@@ -169,6 +179,7 @@ class LexicalIndexManifest:
             b=float(d["b"]),
             created_at=float(d["created_at"]),
             source=str(d.get("source", "")),
+            backend=str(d.get("backend", "rank_bm25")),
         )
 
 
@@ -414,12 +425,454 @@ class LexicalIndex:
         return obj
 
 
+class TantivyLexicalIndex:
+    """On-disk BM25 backed by tantivy (Rust). API-compatible with
+    :class:`LexicalIndex` for the surface
+    :class:`src.agent.hybrid_retriever.HybridRetriever` consumes.
+
+    Why this exists: ``rank_bm25.BM25Okapi`` is pure Python and OOMs at
+    ~23 GB working set on the production 5.7M-cell bank. Tantivy
+    streams segments to disk during build (writer heap default ~50 MB)
+    and merges in background threads, so peak RAM stays bounded.
+
+    Tokenizer alignment with :func:`tokenize` is preserved by
+    pre-tokenizing documents in Python before handing the joined
+    token-string to tantivy under its ``raw`` tokenizer; the query path
+    does the same. Tantivy's BM25 constants (k1=1.2, b=0.75) are baked
+    into the Rust scorer and differ slightly from this module's
+    rank_bm25 defaults (k1=1.5, b=0.75), so absolute scores between the
+    two backends are not directly comparable. The cascade caller only
+    consumes rank order plus the silence-gate margin (which is computed
+    on cosine activations, not BM25), so this divergence is safe.
+
+    Persistence layout (under ``directory/``)::
+
+        manifest.json       # backend="tantivy" + corpus hash + tokenizer ver
+        tantivy/            # tantivy index directory (segments + meta)
+
+    The ``tantivy/`` subdirectory keeps tantivy's many files isolated
+    from our manifest. The class never opens or writes anything outside
+    its directory.
+    """
+
+    MANIFEST_NAME = "manifest.json"
+    INDEX_SUBDIR = "tantivy"
+    BACKEND = "tantivy"
+
+    # Sentinel token injected when a doc has no real tokens after
+    # tokenization. Mirrors the rank_bm25 branch's behaviour: keep the
+    # doc id reachable in the index but make it un-retrievable for any
+    # real query.
+    _EMPTY_DOC_SENTINEL = "__lex_empty_sentinel__"
+
+    def __init__(self) -> None:
+        self._index = None  # tantivy.Index
+        self._schema = None  # tantivy.Schema
+        self._cell_id_field = None  # tantivy.Field
+        self._tokens_field = None  # tantivy.Field
+        self._manifest: Optional[LexicalIndexManifest] = None
+
+    # ---- introspection ----
+
+    @property
+    def n_docs(self) -> int:
+        if self._manifest is None:
+            return 0
+        return int(self._manifest.n_docs)
+
+    @property
+    def manifest(self) -> Optional[LexicalIndexManifest]:
+        return self._manifest
+
+    # ---- build ----
+
+    @staticmethod
+    def _build_schema():
+        import tantivy
+        sb = tantivy.SchemaBuilder()
+        # cell_id: stored so we can retrieve it from search hits; not
+        # tokenized; fast (column-store) for cheap retrieval.
+        sb.add_unsigned_field(
+            "cell_id", stored=True, indexed=True, fast=True,
+        )
+        # tokens: indexed text. We pre-tokenize in Python (lowercase
+        # alphanumeric runs minus stopwords) and feed the space-joined
+        # token string. The ``default`` tantivy tokenizer then splits on
+        # whitespace + lowercases (no-op here) + drops >40-char tokens,
+        # which round-trips our Python tokens unchanged. Using ``raw``
+        # here would index the whole field as a single token and break
+        # all queries.
+        sb.add_text_field("tokens", stored=False, tokenizer_name="default")
+        return sb.build()
+
+    def build_from_texts(
+        self,
+        cell_ids: Sequence[int],
+        texts: Sequence[Optional[str]],
+        *,
+        k1: float = DEFAULT_K1,
+        b: float = DEFAULT_B,
+        source: str = "",
+        out_dir: Path,
+        writer_heap_mb: int = 256,
+    ) -> None:
+        """Build a fresh tantivy index under ``out_dir / 'tantivy'``.
+
+        Unlike :class:`LexicalIndex`, this method writes to disk during
+        build (tantivy streams segments), so ``out_dir`` is required
+        and is the target of the build (no separate ``save()`` step is
+        needed). The ``k1``/``b`` args are stored in the manifest but
+        do NOT change tantivy's scoring (which uses its own constants).
+        They are accepted for API parity with :class:`LexicalIndex`.
+        """
+        import tantivy
+
+        if len(cell_ids) != len(texts):
+            raise ValueError(
+                f"cell_ids ({len(cell_ids)}) and texts ({len(texts)}) "
+                f"must be parallel"
+            )
+        if not cell_ids:
+            raise ValueError("cannot build lexical index over empty corpus")
+
+        out_dir = Path(out_dir)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        index_path = out_dir / self.INDEX_SUBDIR
+        # Tantivy rejects opening over an existing index. Fresh build
+        # means fresh directory; the builder script is responsible for
+        # not overwriting an in-use index unless the user opted in.
+        if index_path.exists():
+            raise FileExistsError(
+                f"tantivy index already exists at {index_path}; refusing "
+                f"to overwrite. Delete the directory and rebuild."
+            )
+        index_path.mkdir(parents=True, exist_ok=False)
+
+        schema = self._build_schema()
+        index = tantivy.Index(schema, path=str(index_path))
+        writer = index.writer(heap_size=int(writer_heap_mb) * 1024 * 1024)
+
+        for cid, text in zip(cell_ids, texts):
+            toks = tokenize(text)
+            if not toks:
+                toks = [self._EMPTY_DOC_SENTINEL]
+            doc = tantivy.Document()
+            doc.add_unsigned("cell_id", int(cid))
+            doc.add_text("tokens", " ".join(toks))
+            writer.add_document(doc)
+
+        writer.commit()
+        writer.wait_merging_threads()
+        index.reload()
+
+        self._index = index
+        self._schema = schema
+        self._cell_id_field = "cell_id"
+        self._tokens_field = "tokens"
+        self._manifest = LexicalIndexManifest(
+            corpus_hash=_corpus_hash(cell_ids, texts),
+            tokenizer_version=TOKENIZER_VERSION,
+            n_docs=int(len(cell_ids)),
+            k1=float(k1),
+            b=float(b),
+            created_at=time.time(),
+            source=str(source),
+            backend=self.BACKEND,
+        )
+        # Persist manifest immediately so a crash before save() still
+        # leaves a queryable, self-describing index.
+        (out_dir / self.MANIFEST_NAME).write_text(
+            json.dumps(self._manifest.as_dict(), indent=2),
+            encoding="utf-8",
+        )
+
+    def build_from_bank(
+        self,
+        bank: "StreamingBank",
+        *,
+        out_dir: Path,
+        limit: Optional[int] = None,
+        k1: float = DEFAULT_K1,
+        b: float = DEFAULT_B,
+        progress_callback=None,
+        writer_heap_mb: int = 256,
+        chunk: int = 900,
+    ) -> None:
+        """Stream the bank's source texts into a fresh tantivy index.
+
+        Unlike :meth:`LexicalIndex.build_from_bank` which holds all
+        texts in memory before indexing, this method commits documents
+        in chunks of ``chunk`` so peak RAM stays bounded even on the
+        full 5.7M-cell bank.
+        """
+        import tantivy
+
+        out_dir = Path(out_dir)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        index_path = out_dir / self.INDEX_SUBDIR
+        if index_path.exists():
+            raise FileExistsError(
+                f"tantivy index already exists at {index_path}; refusing "
+                f"to overwrite. Delete the directory and rebuild."
+            )
+        index_path.mkdir(parents=True, exist_ok=False)
+
+        ids_all = [int(c) for c in bank.cell_ids
+                   if int(c) not in bank._tombstoned_ids]
+        if limit is not None:
+            ids_all = ids_all[: int(limit)]
+        if not ids_all:
+            raise ValueError("bank has no indexable cells")
+
+        schema = self._build_schema()
+        index = tantivy.Index(schema, path=str(index_path))
+        writer = index.writer(heap_size=int(writer_heap_mb) * 1024 * 1024)
+
+        # Streaming SHA-256 of (id, text-length) — same shape as
+        # :func:`_corpus_hash` for cross-backend hash compatibility.
+        h = hashlib.sha256()
+        n_emitted = 0
+        for i in range(0, len(ids_all), int(chunk)):
+            slab = ids_all[i: i + int(chunk)]
+            texts = bank.fetch_source_texts(slab)
+            for cid, text in zip(slab, texts):
+                toks = tokenize(text)
+                if not toks:
+                    toks = [self._EMPTY_DOC_SENTINEL]
+                doc = tantivy.Document()
+                doc.add_unsigned("cell_id", int(cid))
+                doc.add_text("tokens", " ".join(toks))
+                writer.add_document(doc)
+                h.update(str(int(cid)).encode("ascii"))
+                h.update(b"\x00")
+                h.update(str(len(text) if text else 0).encode("ascii"))
+                h.update(b"\x00")
+                n_emitted += 1
+            if progress_callback is not None:
+                try:
+                    progress_callback({
+                        "loaded": min(i + int(chunk), len(ids_all)),
+                        "total": len(ids_all),
+                    })
+                except Exception:
+                    pass
+
+        writer.commit()
+        writer.wait_merging_threads()
+        index.reload()
+
+        self._index = index
+        self._schema = schema
+        self._cell_id_field = "cell_id"
+        self._tokens_field = "tokens"
+        self._manifest = LexicalIndexManifest(
+            corpus_hash=h.hexdigest(),
+            tokenizer_version=TOKENIZER_VERSION,
+            n_docs=int(n_emitted),
+            k1=float(k1),
+            b=float(b),
+            created_at=time.time(),
+            source=(
+                f"streaming_bank:{bank.db_path}"
+                f"{f' limit={limit}' if limit is not None else ''}"
+            ),
+            backend=self.BACKEND,
+        )
+        (out_dir / self.MANIFEST_NAME).write_text(
+            json.dumps(self._manifest.as_dict(), indent=2),
+            encoding="utf-8",
+        )
+
+    # ---- query ----
+
+    def topk(
+        self,
+        query: str,
+        k: int = 200,
+        *,
+        excluded_ids: Optional[Iterable[int]] = None,
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        """Return ``(cell_ids, scores)`` for the top ``k`` BM25 docs.
+
+        Same contract as :meth:`LexicalIndex.topk`:
+          - empty or all-stopword query yields empty arrays;
+          - results are ordered by descending score;
+          - excluded_ids are filtered out before truncation.
+
+        Implementation detail: tantivy doesn't expose a cheap
+        "negative-list filter at query parse time" for arbitrary id
+        sets, so we over-fetch when ``excluded_ids`` is non-empty (by
+        the size of the exclusion set, capped at +500) and filter in
+        Python. For typical tombstone counts (zero to low-hundreds)
+        this is cheap.
+        """
+        import tantivy
+
+        if self._index is None:
+            raise RuntimeError("tantivy index not built/loaded")
+        tokens = tokenize(query)
+        if not tokens:
+            return (
+                np.empty(0, dtype=np.int64),
+                np.empty(0, dtype=np.float32),
+            )
+
+        ex_set: set[int] = (
+            {int(c) for c in excluded_ids} if excluded_ids else set()
+        )
+        # Build an OR-of-terms query against the "tokens" field.
+        # parse_query handles tokenization on its side (raw tokenizer,
+        # space-split), and disjoining terms with OR matches BM25's
+        # "any term contributes" semantics.
+        query_str = " OR ".join(tokens)
+        try:
+            parsed = self._index.parse_query(query_str, ["tokens"])
+        except ValueError:
+            # parse_query raises if every token gets filtered (e.g. all
+            # punctuation). Treat as empty result rather than crashing.
+            return (
+                np.empty(0, dtype=np.int64),
+                np.empty(0, dtype=np.float32),
+            )
+
+        searcher = self._index.searcher()
+        fetch_n = int(k) + min(len(ex_set), 500)
+        if fetch_n <= 0:
+            return (
+                np.empty(0, dtype=np.int64),
+                np.empty(0, dtype=np.float32),
+            )
+        result = searcher.search(parsed, fetch_n)
+        hits = result.hits  # List[(score, doc_address)]
+
+        out_ids: list[int] = []
+        out_scores: list[float] = []
+        for score, address in hits:
+            doc = searcher.doc(address)
+            cid_values = doc.get_first("cell_id")
+            if cid_values is None:
+                # Defensive: a stored cell_id should always exist; skip
+                # if not rather than raising on a single malformed doc.
+                continue
+            cid = int(cid_values)
+            if cid in ex_set:
+                continue
+            out_ids.append(cid)
+            out_scores.append(float(score))
+            if len(out_ids) >= int(k):
+                break
+
+        return (
+            np.asarray(out_ids, dtype=np.int64),
+            np.asarray(out_scores, dtype=np.float32),
+        )
+
+    # ---- persistence ----
+
+    def save(self, directory: str | Path) -> None:
+        """No-op for tantivy: build_from_* already wrote everything.
+
+        Exists for API parity with :class:`LexicalIndex`. Re-writes the
+        manifest if ``directory`` differs from the build target only as
+        a safety net; raises if no manifest exists yet.
+        """
+        if self._manifest is None:
+            raise RuntimeError("nothing to save: index not built")
+        d = Path(directory)
+        d.mkdir(parents=True, exist_ok=True)
+        (d / self.MANIFEST_NAME).write_text(
+            json.dumps(self._manifest.as_dict(), indent=2),
+            encoding="utf-8",
+        )
+
+    @classmethod
+    def load(
+        cls,
+        directory: str | Path,
+        *,
+        expected_corpus_hash: Optional[str] = None,
+    ) -> "TantivyLexicalIndex":
+        """Open a persisted tantivy index. Raises :class:`LexicalIndexStale`
+        if the manifest's tokenizer version or (optionally) corpus hash
+        does not match."""
+        import tantivy
+
+        d = Path(directory)
+        manifest = LexicalIndexManifest.from_dict(
+            json.loads((d / cls.MANIFEST_NAME).read_text(encoding="utf-8"))
+        )
+        if manifest.backend != cls.BACKEND:
+            raise LexicalIndexStale(
+                f"backend mismatch: manifest says {manifest.backend!r}, "
+                f"loader is {cls.BACKEND!r}. Use load_lexical_index() "
+                f"to dispatch by backend automatically."
+            )
+        if manifest.tokenizer_version != TOKENIZER_VERSION:
+            raise LexicalIndexStale(
+                f"tokenizer version mismatch: index built with "
+                f"{manifest.tokenizer_version!r}, current is "
+                f"{TOKENIZER_VERSION!r}"
+            )
+        if (expected_corpus_hash is not None
+                and manifest.corpus_hash != expected_corpus_hash):
+            raise LexicalIndexStale(
+                f"corpus hash mismatch: index built over a different "
+                f"snapshot (manifest {manifest.corpus_hash[:12]}…, "
+                f"expected {expected_corpus_hash[:12]}…)"
+            )
+        index_path = d / cls.INDEX_SUBDIR
+        if not index_path.exists():
+            raise FileNotFoundError(
+                f"tantivy index subdir missing: {index_path}"
+            )
+        # Tantivy opens the index from its on-disk directory. The
+        # schema is recovered from the meta.json tantivy itself wrote.
+        index = tantivy.Index.open(str(index_path))
+        index.reload()
+        obj = cls()
+        obj._index = index
+        obj._schema = index.schema
+        obj._cell_id_field = "cell_id"
+        obj._tokens_field = "tokens"
+        obj._manifest = manifest
+        return obj
+
+
+def load_lexical_index(
+    directory: str | Path,
+    *,
+    expected_corpus_hash: Optional[str] = None,
+):
+    """Open whichever backend the manifest at ``directory`` declares.
+
+    Returns a :class:`LexicalIndex` or :class:`TantivyLexicalIndex`
+    depending on the manifest's ``backend`` field; both satisfy the
+    duck-typed surface :class:`HybridRetriever` consumes. Existing
+    Phase 1 indices without a ``backend`` field default to
+    ``rank_bm25`` for back-compat.
+    """
+    d = Path(directory)
+    manifest_path = d / "manifest.json"
+    manifest = LexicalIndexManifest.from_dict(
+        json.loads(manifest_path.read_text(encoding="utf-8"))
+    )
+    if manifest.backend == TantivyLexicalIndex.BACKEND:
+        return TantivyLexicalIndex.load(
+            d, expected_corpus_hash=expected_corpus_hash,
+        )
+    return LexicalIndex.load(
+        d, expected_corpus_hash=expected_corpus_hash,
+    )
+
+
 __all__ = [
     "LexicalIndex",
+    "TantivyLexicalIndex",
     "LexicalIndexManifest",
     "LexicalIndexStale",
     "TOKENIZER_VERSION",
     "DEFAULT_K1",
     "DEFAULT_B",
     "tokenize",
+    "load_lexical_index",
 ]

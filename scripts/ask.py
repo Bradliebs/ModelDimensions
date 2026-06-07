@@ -103,8 +103,8 @@ def main() -> int:
         bank_arg = StreamingBank(str(bank_path), overlay=overlay)
     lexical_index = None
     if lexical_path is not None:
-        from src.agent.lexical_index import LexicalIndex
-        lexical_index = LexicalIndex.load(lexical_path)
+        from src.agent.lexical_index import load_lexical_index
+        lexical_index = load_lexical_index(lexical_path)
     pipeline = AnswerPipeline(
         bank_path=bank_path,
         bank=bank_arg,

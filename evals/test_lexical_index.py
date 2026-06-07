@@ -187,3 +187,122 @@ def test_load_rejects_stale_tokenizer_version(tmp_path: Path, tiny_corpus):
     mpath.write_text(json.dumps(m))
     with pytest.raises(LexicalIndexStale, match="tokenizer version"):
         LexicalIndex.load(tmp_path / "lex")
+
+
+# ---- TantivyLexicalIndex (tantivy backend, Phase 1.5) ----
+
+from src.agent.lexical_index import TantivyLexicalIndex, load_lexical_index
+
+
+def test_tantivy_build_and_topk_matches_rank_bm25_top1(tiny_corpus, tmp_path: Path):
+    """On the same corpus + same queries, tantivy's top-1 must agree
+    with rank_bm25's top-1. Score scales differ (different k1) but rank
+    order on a small corpus is stable across both backends."""
+    cell_ids, texts = tiny_corpus
+    rb = LexicalIndex(); rb.build_from_texts(cell_ids, texts)
+    tv = TantivyLexicalIndex(); tv.build_from_texts(cell_ids, texts, out_dir=tmp_path / "tv")
+    for q in [
+        "Don Ellis French Connection",
+        "zebras stripes Africa",
+        "capital France Seine",
+        "chess strategy squares",
+    ]:
+        rb_ids, _ = rb.topk(q, k=3)
+        tv_ids, _ = tv.topk(q, k=3)
+        assert rb_ids.size > 0 and tv_ids.size > 0, q
+        assert int(rb_ids[0]) == int(tv_ids[0]), (q, rb_ids, tv_ids)
+
+
+def test_tantivy_empty_query_returns_empty(tiny_corpus, tmp_path: Path):
+    cell_ids, texts = tiny_corpus
+    idx = TantivyLexicalIndex()
+    idx.build_from_texts(cell_ids, texts, out_dir=tmp_path / "tv")
+    ids, scores = idx.topk("", k=3)
+    assert ids.shape == (0,) and scores.shape == (0,)
+    ids, scores = idx.topk("the a an of", k=3)
+    assert ids.shape == (0,) and scores.shape == (0,)
+
+
+def test_tantivy_excluded_ids_are_masked(tiny_corpus, tmp_path: Path):
+    cell_ids, texts = tiny_corpus
+    idx = TantivyLexicalIndex()
+    idx.build_from_texts(cell_ids, texts, out_dir=tmp_path / "tv")
+    ids, _ = idx.topk("Don Ellis French Connection", k=3)
+    assert int(ids[0]) == 100
+    ids, _ = idx.topk("Don Ellis French Connection", k=3, excluded_ids={100})
+    assert 100 not in ids.tolist()
+
+
+def test_tantivy_rejects_existing_index_dir(tiny_corpus, tmp_path: Path):
+    """Re-running build into a populated directory must fail closed."""
+    cell_ids, texts = tiny_corpus
+    idx = TantivyLexicalIndex()
+    idx.build_from_texts(cell_ids, texts, out_dir=tmp_path / "tv")
+    idx2 = TantivyLexicalIndex()
+    with pytest.raises(FileExistsError):
+        idx2.build_from_texts(cell_ids, texts, out_dir=tmp_path / "tv")
+
+
+def test_tantivy_save_and_load_roundtrip(tiny_corpus, tmp_path: Path):
+    cell_ids, texts = tiny_corpus
+    idx = TantivyLexicalIndex()
+    idx.build_from_texts(cell_ids, texts, out_dir=tmp_path / "tv", source="test")
+    manifest = json.loads((tmp_path / "tv" / "manifest.json").read_text())
+    assert manifest["backend"] == "tantivy"
+    assert manifest["n_docs"] == 5
+    assert manifest["tokenizer_version"] == TOKENIZER_VERSION
+    reloaded = TantivyLexicalIndex.load(tmp_path / "tv")
+    ids_a, _ = idx.topk("Don Ellis French Connection", k=3)
+    ids_b, _ = reloaded.topk("Don Ellis French Connection", k=3)
+    np.testing.assert_array_equal(ids_a, ids_b)
+
+
+def test_tantivy_load_rejects_stale_corpus_hash(tiny_corpus, tmp_path: Path):
+    cell_ids, texts = tiny_corpus
+    idx = TantivyLexicalIndex()
+    idx.build_from_texts(cell_ids, texts, out_dir=tmp_path / "tv")
+    with pytest.raises(LexicalIndexStale, match="corpus hash"):
+        TantivyLexicalIndex.load(tmp_path / "tv", expected_corpus_hash="0" * 64)
+
+
+def test_tantivy_load_rejects_stale_tokenizer_version(tiny_corpus, tmp_path: Path):
+    cell_ids, texts = tiny_corpus
+    idx = TantivyLexicalIndex()
+    idx.build_from_texts(cell_ids, texts, out_dir=tmp_path / "tv")
+    mpath = tmp_path / "tv" / "manifest.json"
+    m = json.loads(mpath.read_text())
+    m["tokenizer_version"] = "v0.fake"
+    mpath.write_text(json.dumps(m))
+    with pytest.raises(LexicalIndexStale, match="tokenizer version"):
+        TantivyLexicalIndex.load(tmp_path / "tv")
+
+
+def test_load_factory_dispatches_by_manifest_backend(tiny_corpus, tmp_path: Path):
+    """load_lexical_index() picks rank_bm25 or tantivy by manifest field."""
+    cell_ids, texts = tiny_corpus
+    # rank_bm25 path
+    rb_path = tmp_path / "rb"
+    LexicalIndex().build_from_texts(cell_ids, texts)
+    rb = LexicalIndex(); rb.build_from_texts(cell_ids, texts); rb.save(rb_path)
+    loaded_rb = load_lexical_index(rb_path)
+    assert isinstance(loaded_rb, LexicalIndex) and not isinstance(loaded_rb, TantivyLexicalIndex)
+    # tantivy path
+    tv_path = tmp_path / "tv"
+    TantivyLexicalIndex().build_from_texts(cell_ids, texts, out_dir=tv_path)
+    loaded_tv = load_lexical_index(tv_path)
+    assert isinstance(loaded_tv, TantivyLexicalIndex)
+
+
+def test_load_factory_back_compat_default_to_rank_bm25(tiny_corpus, tmp_path: Path):
+    """Phase 1 indices on disk have no `backend` field. Factory must
+    treat absence as rank_bm25 for back-compat."""
+    cell_ids, texts = tiny_corpus
+    idx = LexicalIndex()
+    idx.build_from_texts(cell_ids, texts)
+    idx.save(tmp_path / "old")
+    mpath = tmp_path / "old" / "manifest.json"
+    m = json.loads(mpath.read_text())
+    m.pop("backend", None)
+    mpath.write_text(json.dumps(m))
+    loaded = load_lexical_index(tmp_path / "old")
+    assert isinstance(loaded, LexicalIndex) and not isinstance(loaded, TantivyLexicalIndex)

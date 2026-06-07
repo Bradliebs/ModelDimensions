@@ -236,9 +236,12 @@ def main() -> int:
         return 2
 
     print(f"[exp28] loading lexical index: {lex_path}", flush=True)
-    from src.agent.lexical_index import LexicalIndex
-    lex = LexicalIndex.load(lex_path)
-    print(f"[exp28]   n_docs={lex.n_docs}", flush=True)
+    from src.agent.lexical_index import load_lexical_index
+    lex = load_lexical_index(lex_path)
+    print(
+        f"[exp28]   n_docs={lex.n_docs} backend={lex.manifest.backend}",
+        flush=True,
+    )
 
     print(f"[exp28] loading reranker {args.reranker_model}...", flush=True)
     from src.agent.reranker import CrossEncoderReranker

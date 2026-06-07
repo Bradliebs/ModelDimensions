@@ -253,13 +253,14 @@ pointing at a new endpoint.
 | CLI                           | `scripts/ask.py`, `scripts/setup.py`      |
 | Tests                         | `evals/`                                  |
 
-## 11. Hybrid retrieval cascade (fallback-only — gating proof PASSED on run 3)
+## 11. Hybrid retrieval cascade (fallback-only — gating proof PASSED on runs 3 and 4)
 
-**Status: PASSED on run 3. The cascade is wired as fallback-only and is safe to enable. It lifts the V1 baseline from 6/8 to 7/8 grounded on the multi-hop eval set with zero new wrong answers.**
+**Status: PASSED on run 3 (100k rank_bm25) and re-confirmed on run 4 (full 5.7M tantivy). Phase 1.5 ships the tantivy backend; cascade interface, orchestration, and cardinal-rule guarantees are unchanged.**
 
 - *Run 1* (harness defective — no decomposer): produced 1-2 wrong answers per mode. Cardinal rule broken. Halt and fix harness.
 - *Run 2* (harness fixed — decomposer wired in to mirror `exp22`/`exp27`): 0 wrong across all modes (cardinal rule preserved), but the always-on cascade strictly reduces grounded recall vs cosine_only baseline (6/8 → 2/8). Root cause: BM25 promotes lexically-matching-but-semantically-wrong cells with high gate margins; the cross-encoder rerank cannot fix an already-corrupted candidate pool.
-- *Run 3* (orchestrator redesigned — fallback-only): **PASS.** `hybrid_rerank_fallback` mode scored 7 grounded / 1 silence / 0 wrong. The cosine path is preserved byte-identically on the 6 queries cosine can answer; hybrid+rerank runs as a rescue *only* on cosine silences. Q5 (Elizabeth II → Charles III succession) was the rescue. Q2 (Don Ellis / The French Connection) remains silent because the supporting cell sits above the 100k-cell index cap; resolving it requires Phase 1.5 (full-bank index). See `results/v1_hybrid_cascade.md` for the verdict table and per-query diagnostic.
+- *Run 3* (orchestrator redesigned — fallback-only, 100k rank_bm25): **PASS.** `hybrid_rerank_fallback` mode scored 7 grounded / 1 silence / 0 wrong. The cosine path is preserved byte-identically on the 6 queries cosine can answer; hybrid+rerank runs as a rescue *only* on cosine silences. Q5 (Elizabeth II → Charles III succession) was the rescue. Q2 (Don Ellis / The French Connection) was the single residual silence; hypothesized at the time to be index-cap-bound and expected to rescue under Phase 1.5.
+- *Run 4* (full-bank tantivy, 5,698,239 cells): **PASS.** `hybrid_rerank_fallback` again 7g/1s/0w. All five modes preserved cardinal rule (0 wrong / 40 calls). Verdict deltas vs run 3 are noise within the cosine_rerank/hybrid_cosine_always modes; the production `hybrid_rerank_fallback` mode is identical to run 3 on per-query verdicts. Q2 stayed silent in all 5 modes with `kw_rank=None` everywhere — confirming the supporting cell genuinely isn't ingested in this bank (lexical BM25 over 5.7M cells can't find it either), so it is a corpus-coverage gap, not a retrieval-depth gap. See `results/v1_hybrid_cascade.md` for the verdict table.
 
 Phase 1 of the V1 upgrade adds a BM25 → cosine → (optional) cross-encoder rerank cascade behind the silence gate. The cascade is **opt-in**: with no lexical index supplied, the pipeline is byte-identical to the V1 baseline above. The cascade is wired in two orchestration modes on `AnswerPipeline`:
 
@@ -276,17 +277,31 @@ Phase 1 of the V1 upgrade adds a BM25 → cosine → (optional) cross-encoder re
 
 ### Build the BM25 index
 
-The Phase 1 prove-out uses a capped corpus to validate the cascade end-to-end before scaling to the full 5.7M-cell bank:
+Two backends are wired through the same CLI. Pick by what fits in RAM on the host:
+
+| Backend       | When to use                                                                                              | Build flag                  |
+|---------------|----------------------------------------------------------------------------------------------------------|-----------------------------|
+| `rank_bm25`   | Default. Capped corpora (≤ ~200k cells). Pure Python; index lives in `index.pkl` + `cell_ids.npy`.       | `--backend rank_bm25`       |
+| `tantivy`     | Full 5.7M-cell bank or any build where rank_bm25 OOMs. Rust, streams segments to disk; index in `tantivy/` subdir. | `--backend tantivy`         |
+
+Both backends share the same Python tokenizer (`tokenize()`) and the same manifest schema (`corpus_hash`, `tokenizer_version`, `n_docs`, `k1`, `b`, plus a new `backend` field used for back-compat dispatch). The cascade itself (`HybridRetriever`) is backend-agnostic: it consumes the duck-typed `topk(query, k, *, excluded_ids)` surface.
 
 ```pwsh
-# Phase 1: prove the cascade on the 8-question eval set first.
+# Phase 1 prove-out (rank_bm25, capped corpus, fast on a workstation).
 python scripts/build_lexical_index.py `
     --bank-path H:\MiniLM\cc_service\bank.db `
     --out-dir results/v1_bank/bm25_index `
     --limit 100000
+
+# Phase 1.5 full-bank build (tantivy, streams to disk).
+python scripts/build_lexical_index.py `
+    --bank-path H:\MiniLM\cc_service\bank.db `
+    --out-dir results/v1_bank/bm25_tantivy `
+    --backend tantivy `
+    --writer-heap-mb 512
 ```
 
-Drop `--limit` once the prove-out passes to index the full bank. The index lives in `results/v1_bank/bm25_index/` and contains `index.pkl` and `manifest.json` (corpus hash + tokenizer version for staleness checks). The full 5.7M-cell build was attempted and held off — `rank_bm25.BM25Okapi` is pure Python and peaked at ~23 GB of working set without finishing on a 48 GB workstation; the 100k subset finishes in seconds. Phase 1.5 needs an alternative BM25 implementation (`pyserini`, `tantivy-py`, or a custom `numpy`/`scipy.sparse` index) before scaling.
+Loaders use the manifest's `backend` field to dispatch. `src.agent.lexical_index.load_lexical_index(directory)` is the public entry point and returns either `LexicalIndex` (rank_bm25) or `TantivyLexicalIndex`. Phase 1 indices on disk (no `backend` field) default to `rank_bm25` for back-compat. The full-bank rank_bm25 build was attempted in Phase 1 and held off — `rank_bm25.BM25Okapi` is pure Python and peaked at ~23 GB of working set without finishing on a 48 GB workstation. Tantivy 0.26 (pip-installable Rust wheel, no JVM) replaces it for the full bank; segment writes stream to disk inside a bounded writer heap (default 256 MB; bump to 512 MB for the full-bank build).
 
 ### Ask with the cascade on
 

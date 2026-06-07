@@ -1,7 +1,7 @@
 {
   "produced_by": "experiments/exp28_hybrid_cascade.py",
   "bank_path": "H:\\MiniLM\\cc_service\\bank.db",
-  "lexical_path": "results\\v1_bank\\bm25_index",
+  "lexical_path": "H:\\ModelDimensions_SLM\\ModelDimensions\\results\\v1_bank\\bm25_tantivy",
   "reranker_model": "cross-encoder/ms-marco-MiniLM-L-6-v2",
   "rerank_margin": 0.5,
   "top_k": 10,
@@ -18,13 +18,13 @@
       "wrong": 0
     },
     "hybrid_cosine_always": {
-      "grounded": 2,
-      "silence": 6,
+      "grounded": 5,
+      "silence": 3,
       "wrong": 0
     },
     "hybrid_rerank_always": {
-      "grounded": 2,
-      "silence": 6,
+      "grounded": 5,
+      "silence": 3,
       "wrong": 0
     },
     "hybrid_rerank_fallback": {
@@ -77,7 +77,7 @@
             "coverage": 0.8,
             "uncited_numerics": []
           },
-          "wall_seconds": 7.190958499908447,
+          "wall_seconds": 5.12207293510437,
           "asked_query": "What language is spoken on St. Helena?"
         },
         {
@@ -115,83 +115,79 @@
             "coverage": 0.7857142857142857,
             "uncited_numerics": []
           },
-          "wall_seconds": 6.730404615402222,
+          "wall_seconds": 5.647932052612305,
           "asked_query": "What language is spoken on St. Helena?"
         },
         {
           "mode": "hybrid_cosine_always",
           "verdict": "silence",
           "silence": true,
-          "silence_reason": "verify: answer entity not colocated with question anchor: ['English']",
-          "answer": "I drafted an answer but could not ground it in memory.",
+          "silence_reason": "gate: margin below threshold (retrieval diffuse)",
+          "answer": "I have no matching memory for that.",
           "keyword_rank": 2,
           "top3": [
             {
-              "cell_id": 48023,
-              "text_snippet": "The country\u2019s official language is Portuguese. Other languages spoken are Forro, a creole spoken by 80% of S. Tom\u00e9 Island`s people; Angolar, spoken mainly on the southeast of S. Tom\u00e9 Island; Lung`i\u00e9, ..."
+              "cell_id": 832252,
+              "text_snippet": "Burkina Faso is a multilingual country. The official language is French, which was introduced during the colonial period. French is the principal language of administrative, political and judicial ins..."
             },
             {
-              "cell_id": 39528,
-              "text_snippet": "Where it is spoken The Portuguese language is the third-most spoken western language (after English and Spanish). There are about 240 million native speakers, including the people of Portugal, Brazil,..."
+              "cell_id": 4717833,
+              "text_snippet": "Languages Kannada is the local language spoken in this city. English is also spoken in the city."
             },
             {
-              "cell_id": 47382,
-              "text_snippet": "Adaptations into regional languages France is a country made up of various ethnicities on which they have historically settled. As such, many regional languages are spoken to this day. These languages..."
+              "cell_id": 3760670,
+              "text_snippet": "There are three languages spoken in the Torres Strait Islands: two indigenous languages and an English-based creole. The indigenous language spoken mainly in the western and central islands is Kalaw L..."
             }
           ],
           "gate": {
-            "fire": true,
-            "margin": 0.025808244943618774,
+            "fire": false,
+            "margin": 0.0005962848663330078,
             "threshold": 0.015,
-            "top1_activation": 0.4013303816318512,
-            "top2_activation": 0.3755221366882324
+            "top1_activation": 0.3890751004219055,
+            "top2_activation": 0.3884788155555725
           },
           "retrieval_stage": "hybrid",
           "rescue": null,
-          "verification": {
-            "grounded": false,
-            "coverage": 0.75,
-            "uncited_numerics": []
-          },
-          "wall_seconds": 5.946871995925903,
+          "verification": null,
+          "wall_seconds": 1.4188003540039062,
           "asked_query": "What language is spoken on St. Helena?"
         },
         {
           "mode": "hybrid_rerank_always",
           "verdict": "silence",
           "silence": true,
-          "silence_reason": "verify: answer entity not colocated with question anchor: ['English', 'Portuguese', 'Greek']",
+          "silence_reason": "verify: answer entity not colocated with question anchor: ['English']",
           "answer": "I drafted an answer but could not ground it in memory.",
-          "keyword_rank": 3,
+          "keyword_rank": 1,
           "top3": [
             {
-              "cell_id": 48023,
-              "text_snippet": "The country\u2019s official language is Portuguese. Other languages spoken are Forro, a creole spoken by 80% of S. Tom\u00e9 Island`s people; Angolar, spoken mainly on the southeast of S. Tom\u00e9 Island; Lung`i\u00e9, ..."
+              "cell_id": 388128,
+              "text_snippet": "While the most common language spoken in the city is English, it is home to a large Somali population. It also has the largest French-speaking population in the United States. But it is second to St. ..."
             },
             {
-              "cell_id": 80351,
-              "text_snippet": "Aeolic Greek was a dialect of the Greek language that was spoken on the island of Lesbos and nearby parts of Asia Minor."
+              "cell_id": 4717833,
+              "text_snippet": "Languages Kannada is the local language spoken in this city. English is also spoken in the city."
             },
             {
-              "cell_id": 42094,
-              "text_snippet": "Languages In the Dominican Republic, only Spanish is spoken, however; there are 3 major languages that are also spoken such as Haitian Creole, Samana English, and the West African Yoruba language know..."
+              "cell_id": 215337,
+              "text_snippet": "Language Spanish Language is the main language spoke in this municipality, in rural zones the Leonese Language might be spoken as well."
             }
           ],
           "gate": {
             "fire": true,
-            "margin": 1.9038848876953125,
+            "margin": 3.628113031387329,
             "threshold": 0.5,
-            "top1_activation": -2.817493438720703,
-            "top2_activation": -4.721378326416016
+            "top1_activation": -0.1888258457183838,
+            "top2_activation": -3.816938877105713
           },
           "retrieval_stage": "hybrid",
           "rescue": null,
           "verification": {
             "grounded": false,
-            "coverage": 0.5,
+            "coverage": 0.7142857142857143,
             "uncited_numerics": []
           },
-          "wall_seconds": 11.01073408126831,
+          "wall_seconds": 4.164979934692383,
           "asked_query": "What language is spoken on St. Helena?"
         },
         {
@@ -229,7 +225,7 @@
             "coverage": 0.8,
             "uncited_numerics": []
           },
-          "wall_seconds": 5.701368093490601,
+          "wall_seconds": 5.649193286895752,
           "asked_query": "What language is spoken on St. Helena?"
         }
       ],
@@ -273,7 +269,7 @@
           "retrieval_stage": null,
           "rescue": null,
           "verification": null,
-          "wall_seconds": 0.3788630962371826,
+          "wall_seconds": 0.42052650451660156,
           "asked_query": "Who composed the music for The French Connection?"
         },
         {
@@ -311,75 +307,83 @@
             "coverage": 0.5,
             "uncited_numerics": []
           },
-          "wall_seconds": 4.62592625617981,
+          "wall_seconds": 4.382064342498779,
           "asked_query": "Who composed the music for The French Connection?"
         },
         {
           "mode": "hybrid_cosine_always",
           "verdict": "silence",
           "silence": true,
-          "silence_reason": "gate: margin below threshold (retrieval diffuse)",
-          "answer": "I have no matching memory for that.",
+          "silence_reason": "verify: answer entity not colocated with question anchor: ['Francis Lai']",
+          "answer": "I drafted an answer but could not ground it in memory.",
           "keyword_rank": null,
           "top3": [
             {
-              "cell_id": 96662,
-              "text_snippet": "In 1751 he went to Paris. The composer Jean-Philippe Rameau was very impressed by him and got him jobs playing the violin and double bass in his private orchestra. He heard a lot of music by German co..."
+              "cell_id": 2296874,
+              "text_snippet": "In music French Connection (album), a 2009 album by Kate Ryan French Connection, a 2009 mixtape by Frenchie French Connection Part 2, a 2010 mixtape by Frenchie"
             },
             {
-              "cell_id": 93110,
-              "text_snippet": "Saint-Saens wrote many concertos, symphonies, sonatas and chamber music. He often uses the style of dance music and creates a happy atmosphere by repeating certain patterns. His music is late Romantic..."
+              "cell_id": 2296873,
+              "text_snippet": "In literature and film The French Connection (book), a 1969 non-fiction book about the drug trafficking scheme The French Connection (film), a 1971 film based on the book French Connection II, the seq..."
             },
             {
-              "cell_id": 81427,
-              "text_snippet": "In later centuries music was used for all types of serious drama. Sometimes large orchestras were used. Many famous composers wrote music to be played by an orchestra during plays. A famous example is..."
+              "cell_id": 2861602,
+              "text_snippet": "Pierre-Francisque Caroubel (1556 \u2013 summer 1611 or 1615) was a French violinist and composer. He is known for his dance music, bransles (he composed \"Le Branle De Montirande\") and galliards."
             }
           ],
           "gate": {
-            "fire": false,
-            "margin": 0.0017731189727783203,
+            "fire": true,
+            "margin": 0.0160830020904541,
             "threshold": 0.015,
-            "top1_activation": 0.26897865533828735,
-            "top2_activation": 0.26720553636550903
+            "top1_activation": 0.3251951336860657,
+            "top2_activation": 0.3091121315956116
           },
           "retrieval_stage": "hybrid",
           "rescue": null,
-          "verification": null,
-          "wall_seconds": 0.11547517776489258,
+          "verification": {
+            "grounded": false,
+            "coverage": 0.5,
+            "uncited_numerics": []
+          },
+          "wall_seconds": 3.5424344539642334,
           "asked_query": "Who composed the music for The French Connection?"
         },
         {
           "mode": "hybrid_rerank_always",
           "verdict": "silence",
           "silence": true,
-          "silence_reason": "gate: margin below threshold (retrieval diffuse)",
-          "answer": "I have no matching memory for that.",
+          "silence_reason": "verify: answer entity not colocated with question anchor: ['Francis Lai']",
+          "answer": "I drafted an answer but could not ground it in memory.",
           "keyword_rank": null,
           "top3": [
             {
-              "cell_id": 96664,
-              "text_snippet": "Gossec wrote a lot of music for the French Revolution. When the Paris Conservatoire was opened in 1795 he became a teacher of composition there."
+              "cell_id": 2296874,
+              "text_snippet": "In music French Connection (album), a 2009 album by Kate Ryan French Connection, a 2009 mixtape by Frenchie French Connection Part 2, a 2010 mixtape by Frenchie"
             },
             {
-              "cell_id": 62900,
-              "text_snippet": "Jean-Philippe Rameau (born Dijon, September ? 1683; died Paris, 12 September 1764) was a French composer. He is famous for his music for harpsichord and for his operas. His most well-known operas are:..."
+              "cell_id": 2861602,
+              "text_snippet": "Pierre-Francisque Caroubel (1556 \u2013 summer 1611 or 1615) was a French violinist and composer. He is known for his dance music, bransles (he composed \"Le Branle De Montirande\") and galliards."
             },
             {
-              "cell_id": 94824,
-              "text_snippet": "Charles Koechlin (pronounce:\u201dKe-klin\u201d with \u201cklin\u201d to rhyme with French \u201cvin\u201d), (born Paris, November 27 1867; died Le Canadel, December 31 1950) was a French composer, teacher and writer on music. He ..."
+              "cell_id": 247910,
+              "text_snippet": "Jean-Baptiste Lully (pronounce: \"Loo-lee\"), (born Florence, 28 November 1632; died Paris, 22 March 1687), was an Italian composer, violinist and dancer who spent most of his life working in the court ..."
             }
           ],
           "gate": {
-            "fire": false,
-            "margin": 0.19608378410339355,
+            "fire": true,
+            "margin": 2.3710684776306152,
             "threshold": 0.5,
-            "top1_activation": 3.981736898422241,
-            "top2_activation": 3.7856531143188477
+            "top1_activation": 6.605810165405273,
+            "top2_activation": 4.234741687774658
           },
           "retrieval_stage": "hybrid",
           "rescue": null,
-          "verification": null,
-          "wall_seconds": 0.14583134651184082,
+          "verification": {
+            "grounded": false,
+            "coverage": 0.5,
+            "uncited_numerics": []
+          },
+          "wall_seconds": 3.2701804637908936,
           "asked_query": "Who composed the music for The French Connection?"
         },
         {
@@ -414,10 +418,10 @@
           "rescue": {
             "hybrid_rescue_attempted": true,
             "hybrid_rescue_outcome": "silence",
-            "hybrid_silence_reason": "gate: margin below threshold (retrieval diffuse)"
+            "hybrid_silence_reason": "verify: answer entity not colocated with question anchor: ['Francis Lai']"
           },
           "verification": null,
-          "wall_seconds": 0.5057032108306885,
+          "wall_seconds": 3.7238008975982666,
           "asked_query": "Who composed the music for The French Connection?"
         }
       ],
@@ -466,7 +470,7 @@
             "coverage": 0.7777777777777778,
             "uncited_numerics": []
           },
-          "wall_seconds": 10.668378114700317,
+          "wall_seconds": 10.331657648086548,
           "asked_query": "In which country was Alfred Nobel, the inventor of dynamite, born?"
         },
         {
@@ -527,15 +531,15 @@
             "coverage": 0.6923076923076923,
             "uncited_numerics": []
           },
-          "wall_seconds": 7.806492805480957,
+          "wall_seconds": 9.411865711212158,
           "asked_query": "In which country was Alfred Nobel, the inventor of dynamite, born?"
         },
         {
           "mode": "hybrid_cosine_always",
-          "verdict": "silence",
-          "silence": true,
-          "silence_reason": "verify: answer entity not colocated with question anchor: ['Sweden']",
-          "answer": "I drafted an answer but could not ground it in memory.",
+          "verdict": "grounded",
+          "silence": false,
+          "silence_reason": "",
+          "answer": "Alfred Nobel, the inventor of dynamite, was born in Sweden. This information is supported by the FACTS [45374] and [782413], which state that Alfred Nobel was a Swedish scientist, engineer, and weapons manufacturer, and that he was born in Stockholm, United Kingdoms of Sweden and Norway on 21 October 1833.",
           "keyword_rank": 1,
           "top3": [
             {
@@ -543,37 +547,37 @@
               "text_snippet": "Alfred Nobel () (October 21, 1833 \u2013 December 10, 1896) was a Swedish scientist, engineer, and weapons manufacturer. He is well known for the invention of dynamite and for creating the Nobel Prize."
             },
             {
-              "cell_id": 46305,
-              "text_snippet": "Dynamite is an explosive invented by Alfred Nobel, the creator of the Nobel Prize. Its main explosive component is nitroglycerin. Nitroglycerin is very sensitive to movement. It explodes very easily w..."
+              "cell_id": 782413,
+              "text_snippet": "Alfred Bernhard Nobel ( , ; 21 October 1833 \u2013 10 December 1896) was a Swedish chemist, engineer, inventor, businessman, and philanthropist. He is known for creating dynamite as well as having bequeath..."
             },
             {
-              "cell_id": 41742,
-              "text_snippet": "The Nobel Peace Prize is one of six awards in the memory of Alfred Nobel, the inventor of dynamite. Every year the organization gives out six awards for the people \"who best benefit mankind through th..."
+              "cell_id": 782425,
+              "text_snippet": "On 3 September 1864, a shed used for preparation of nitroglycerin exploded at the factory in Heleneborg, Stockholm, Sweden, killing five people, including Nobel's younger brother Emil. Fazed by the ac..."
             }
           ],
           "gate": {
             "fire": true,
-            "margin": 0.08842325210571289,
+            "margin": 0.04238039255142212,
             "threshold": 0.015,
             "top1_activation": 0.5169695615768433,
-            "top2_activation": 0.42854630947113037
+            "top2_activation": 0.47458916902542114
           },
           "retrieval_stage": "hybrid",
           "rescue": null,
           "verification": {
-            "grounded": false,
-            "coverage": 0.5,
+            "grounded": true,
+            "coverage": 0.7777777777777778,
             "uncited_numerics": []
           },
-          "wall_seconds": 5.624929904937744,
+          "wall_seconds": 10.76845097541809,
           "asked_query": "In which country was Alfred Nobel, the inventor of dynamite, born?"
         },
         {
           "mode": "hybrid_rerank_always",
           "verdict": "silence",
           "silence": true,
-          "silence_reason": "verify: answer entity not colocated with question anchor: ['Sweden']",
-          "answer": "I drafted an answer but could not ground it in memory.",
+          "silence_reason": "gate: margin below threshold (retrieval diffuse); rescue: supporting_cell_below_floor",
+          "answer": "I have no matching memory for that.",
           "keyword_rank": 1,
           "top3": [
             {
@@ -581,29 +585,52 @@
               "text_snippet": "Alfred Nobel () (October 21, 1833 \u2013 December 10, 1896) was a Swedish scientist, engineer, and weapons manufacturer. He is well known for the invention of dynamite and for creating the Nobel Prize."
             },
             {
-              "cell_id": 46305,
-              "text_snippet": "Dynamite is an explosive invented by Alfred Nobel, the creator of the Nobel Prize. Its main explosive component is nitroglycerin. Nitroglycerin is very sensitive to movement. It explodes very easily w..."
+              "cell_id": 782413,
+              "text_snippet": "Alfred Bernhard Nobel ( , ; 21 October 1833 \u2013 10 December 1896) was a Swedish chemist, engineer, inventor, businessman, and philanthropist. He is known for creating dynamite as well as having bequeath..."
             },
             {
-              "cell_id": 45375,
-              "text_snippet": "He left instructions in his will that his money should create the Nobel Prize after reading an article in a French newspaper that called him the \"merchant of death\" and said that he would be remembere..."
+              "cell_id": 782417,
+              "text_snippet": "Alfred Nobel was born in Stockholm, United Kingdoms of Sweden and Norway on 21 October 1833. He was the third son of Immanuel Nobel (1801\u20131872), an inventor and engineer, and Karolina Andriette Nobel ..."
             }
           ],
           "gate": {
-            "fire": true,
-            "margin": 5.386964559555054,
+            "fire": false,
+            "margin": 0.3322315216064453,
             "threshold": 0.5,
             "top1_activation": 7.59803581237793,
-            "top2_activation": 2.211071252822876
+            "top2_activation": 7.265804290771484
           },
           "retrieval_stage": "hybrid",
-          "rescue": null,
+          "rescue": {
+            "rescue_attempted": true,
+            "rescue_type": "direct_evidence",
+            "normal_gate_passed": false,
+            "margin": 0.3322315216064453,
+            "margin_threshold": 0.5,
+            "activation_floor": 0.4,
+            "rank_window": 3,
+            "stage_e_v2_passed": true,
+            "answer_entity": "Sweden",
+            "question_anchors": [
+              "alfred nobel"
+            ],
+            "supporting_cell_rank": 2,
+            "supporting_cell_id": 782417,
+            "supporting_cell_activation": 0.38491368293762207,
+            "anchors_in_supporting_cell": [
+              "alfred nobel"
+            ],
+            "entity_anchor_colocated": true,
+            "support_cell_cited": true,
+            "decision": "silence",
+            "rescue_rejection_reason": "supporting_cell_below_floor"
+          },
           "verification": {
-            "grounded": false,
-            "coverage": 0.5,
+            "grounded": true,
+            "coverage": 0.6923076923076923,
             "uncited_numerics": []
           },
-          "wall_seconds": 5.4234373569488525,
+          "wall_seconds": 9.211921215057373,
           "asked_query": "In which country was Alfred Nobel, the inventor of dynamite, born?"
         },
         {
@@ -641,7 +668,7 @@
             "coverage": 0.7777777777777778,
             "uncited_numerics": []
           },
-          "wall_seconds": 9.319076299667358,
+          "wall_seconds": 10.801026821136475,
           "asked_query": "In which country was Alfred Nobel, the inventor of dynamite, born?"
         }
       ],
@@ -711,7 +738,7 @@
             "coverage": 0.875,
             "uncited_numerics": []
           },
-          "wall_seconds": 7.418404817581177,
+          "wall_seconds": 8.773147821426392,
           "asked_query": "What is the capital of Canada?"
         },
         {
@@ -772,7 +799,7 @@
             "coverage": 0.8571428571428571,
             "uncited_numerics": []
           },
-          "wall_seconds": 3.8227596282958984,
+          "wall_seconds": 4.478184223175049,
           "asked_query": "What is the capital of Canada?"
         },
         {
@@ -780,7 +807,7 @@
           "verdict": "grounded",
           "silence": false,
           "silence_reason": "",
-          "answer": "The capital of Canada is Ottawa, which is located on the Ottawa River in the eastern part of the province of Ontario, as stated in fact [5912].",
+          "answer": "The capital of Canada is Ottawa, as it is the national capital established by Queen Victoria in 1867 due to strategic reasons (Facts [5912] and [4827533]).",
           "keyword_rank": 2,
           "top3": [
             {
@@ -829,71 +856,48 @@
           },
           "verification": {
             "grounded": true,
-            "coverage": 0.8,
+            "coverage": 0.9,
             "uncited_numerics": []
           },
-          "wall_seconds": 3.957310676574707,
+          "wall_seconds": 5.441352367401123,
           "asked_query": "What is the capital of Canada?"
         },
         {
           "mode": "hybrid_rerank_always",
-          "verdict": "silence",
-          "silence": true,
-          "silence_reason": "gate: margin below threshold (retrieval diffuse); rescue: supporting_cell_below_floor",
-          "answer": "I have no matching memory for that.",
+          "verdict": "grounded",
+          "silence": false,
+          "silence_reason": "",
+          "answer": "The capital of Canada is Ottawa, as it was established by Queen Victoria in 1857 due to strategic reasons, being located in the interior of the Province of Canada and on the border between French and English Canada (Facts [4827533] and [4827589]).",
           "keyword_rank": 1,
           "top3": [
+            {
+              "cell_id": 4827533,
+              "text_snippet": "Montreal was the capital of the Province of Canada from 1844 to 1849, but lost its status when a Tory mob burnt down the Parliament building to protest the passage of the Rebellion Losses Bill. Therea..."
+            },
             {
               "cell_id": 5912,
               "text_snippet": "History Toronto was created in 1793 by John Graves Simcoe as the capital of what was then called \"Upper Canada\". At the time it was called the \"Town of York\" after the Duke of York. The name was chang..."
             },
             {
-              "cell_id": 14446,
-              "text_snippet": "Ontario is a province of Canada. It is in the eastern half of Canada, between Manitoba and Quebec. Ontario has the most people of any province, with 13,150,000 in 2009, and is home to the biggest city..."
-            },
-            {
-              "cell_id": 13377,
-              "text_snippet": "Victoria is the capital city of the province of British Columbia, Canada. It is named after Queen Victoria. Over 350,000 people live in the Victoria area. Many people work for the government or in tou..."
+              "cell_id": 4827589,
+              "text_snippet": "Montreal was referred to as \"Canada's Cultural Capital\" by Monocle magazine. The city is Canada's centre for French-language television productions, radio, theatre, film, multimedia, and print publish..."
             }
           ],
           "gate": {
-            "fire": false,
-            "margin": 0.24824762344360352,
+            "fire": true,
+            "margin": 1.1300373077392578,
             "threshold": 0.5,
-            "top1_activation": 4.58909797668457,
-            "top2_activation": 4.340850353240967
+            "top1_activation": 5.71913480758667,
+            "top2_activation": 4.589097499847412
           },
           "retrieval_stage": "hybrid",
-          "rescue": {
-            "rescue_attempted": true,
-            "rescue_type": "direct_evidence",
-            "normal_gate_passed": false,
-            "margin": 0.24824762344360352,
-            "margin_threshold": 0.5,
-            "activation_floor": 0.4,
-            "rank_window": 3,
-            "stage_e_v2_passed": true,
-            "answer_entity": "Ottawa",
-            "question_anchors": [
-              "canada"
-            ],
-            "supporting_cell_rank": 0,
-            "supporting_cell_id": 5912,
-            "supporting_cell_activation": 0.3913697302341461,
-            "anchors_in_supporting_cell": [
-              "canada"
-            ],
-            "entity_anchor_colocated": true,
-            "support_cell_cited": true,
-            "decision": "silence",
-            "rescue_rejection_reason": "supporting_cell_below_floor"
-          },
+          "rescue": null,
           "verification": {
             "grounded": true,
-            "coverage": 0.8888888888888888,
+            "coverage": 0.9333333333333333,
             "uncited_numerics": []
           },
-          "wall_seconds": 5.940475940704346,
+          "wall_seconds": 8.462974309921265,
           "asked_query": "What is the capital of Canada?"
         },
         {
@@ -953,7 +957,7 @@
             "coverage": 0.875,
             "uncited_numerics": []
           },
-          "wall_seconds": 7.528036594390869,
+          "wall_seconds": 8.245564937591553,
           "asked_query": "What is the capital of Canada?"
         }
       ],
@@ -1025,7 +1029,7 @@
             "coverage": 1.0,
             "uncited_numerics": []
           },
-          "wall_seconds": 3.4433393478393555,
+          "wall_seconds": 3.608133316040039,
           "asked_query": "Who succeeded Queen Elizabeth II as British monarch?"
         },
         {
@@ -1063,60 +1067,68 @@
             "coverage": 1.0,
             "uncited_numerics": []
           },
-          "wall_seconds": 4.627172946929932,
+          "wall_seconds": 4.395077466964722,
           "asked_query": "Who succeeded Queen Elizabeth II as British monarch?"
         },
         {
           "mode": "hybrid_cosine_always",
           "verdict": "silence",
           "silence": true,
-          "silence_reason": "gate: margin below threshold (retrieval diffuse); rescue: no_supporting_cell",
+          "silence_reason": "gate: margin below threshold (retrieval diffuse); rescue: supporting_cell_outside_rank_window",
           "answer": "I have no matching memory for that.",
           "keyword_rank": 1,
           "top3": [
             {
-              "cell_id": 8242,
-              "text_snippet": "Elizabeth II (Elizabeth Alexandra Mary; 21 April 1925 \u2013 8 September 2022) was Head of the Commonwealth and the Queen of the United Kingdom and the other Commonwealth realms from 1952 until her death i..."
+              "cell_id": 2103247,
+              "text_snippet": "Government Monarch Head of State \u2013 Her Majesty Elizabeth II, Queen of the United Kingdom (1952\u20132022)"
             },
             {
-              "cell_id": 8264,
-              "text_snippet": "When Elizabeth became Queen on 6 February 1952, she was officially Queen of the United Kingdom, Canada, Australia, New Zealand, South Africa, Pakistan and Ceylon (now called Sri Lanka). These were the..."
+              "cell_id": 1132947,
+              "text_snippet": "February 6 February \u2013 George VI dies and is succeeded by Elizabeth II as Queen of New Zealand"
             },
             {
-              "cell_id": 8272,
-              "text_snippet": "It was well known that Elizabeth never planned to abdicate, though she took on fewer public engagements as she grew older and Prince Charles took on more of her duties. On September 8, 2022, Queen Eli..."
+              "cell_id": 1755358,
+              "text_snippet": "Elizabeth II died on 8 September 2022. She was the longest serving monarch and was succeeded by her son, Charles III. The coronation of Charles III and Camilla took place on 6 May 2023."
             }
           ],
           "gate": {
             "fire": false,
-            "margin": 0.00516846776008606,
+            "margin": 0.010896831750869751,
             "threshold": 0.015,
-            "top1_activation": 0.463007390499115,
-            "top2_activation": 0.45783892273902893
+            "top1_activation": 0.49777862429618835,
+            "top2_activation": 0.4868817925453186
           },
           "retrieval_stage": "hybrid",
           "rescue": {
             "rescue_attempted": true,
             "rescue_type": "direct_evidence",
             "normal_gate_passed": false,
-            "margin": 0.00516846776008606,
+            "margin": 0.010896831750869751,
             "margin_threshold": 0.015,
             "activation_floor": 0.4,
             "rank_window": 3,
             "stage_e_v2_passed": true,
-            "decision": "silence",
-            "rescue_rejection_reason": "no_supporting_cell",
-            "answer_entity": "Prince Charles",
+            "answer_entity": "King Charles III",
             "question_anchors": [
               "elizabeth ii"
-            ]
+            ],
+            "supporting_cell_rank": 3,
+            "supporting_cell_id": 2895018,
+            "supporting_cell_activation": 0.42335426807403564,
+            "anchors_in_supporting_cell": [
+              "elizabeth ii"
+            ],
+            "entity_anchor_colocated": true,
+            "support_cell_cited": true,
+            "decision": "silence",
+            "rescue_rejection_reason": "supporting_cell_outside_rank_window"
           },
           "verification": {
             "grounded": true,
             "coverage": 1.0,
             "uncited_numerics": []
           },
-          "wall_seconds": 4.340406894683838,
+          "wall_seconds": 4.139197826385498,
           "asked_query": "Who succeeded Queen Elizabeth II as British monarch?"
         },
         {
@@ -1124,28 +1136,28 @@
           "verdict": "grounded",
           "silence": false,
           "silence_reason": "",
-          "answer": "Prince Charles succeeded Queen Elizabeth II as the British monarch [8272], [8242], [8252].",
+          "answer": "Charles III succeeded Queen Elizabeth II as the British monarch [1755358], [8272], [5467417], [1132947], [2895018], [1831878].",
           "keyword_rank": 1,
           "top3": [
+            {
+              "cell_id": 1755358,
+              "text_snippet": "Elizabeth II died on 8 September 2022. She was the longest serving monarch and was succeeded by her son, Charles III. The coronation of Charles III and Camilla took place on 6 May 2023."
+            },
             {
               "cell_id": 8272,
               "text_snippet": "It was well known that Elizabeth never planned to abdicate, though she took on fewer public engagements as she grew older and Prince Charles took on more of her duties. On September 8, 2022, Queen Eli..."
             },
             {
-              "cell_id": 8242,
-              "text_snippet": "Elizabeth II (Elizabeth Alexandra Mary; 21 April 1925 \u2013 8 September 2022) was Head of the Commonwealth and the Queen of the United Kingdom and the other Commonwealth realms from 1952 until her death i..."
-            },
-            {
-              "cell_id": 8303,
-              "text_snippet": "By the end of her reign, Elizabeth II was: Queen of Antigua and Barbuda Queen of Australia Queen of The Bahamas Queen of Belize Queen of Canada Queen of Grenada Queen of Jamaica Queen of New Zealand Q..."
+              "cell_id": 5467417,
+              "text_snippet": "Both of these versions were written before the death of Elizabeth II in 2022. The current monarch is Charles III, the successor to Elizabeth II."
             }
           ],
           "gate": {
             "fire": true,
-            "margin": 0.623908519744873,
+            "margin": 0.5068564414978027,
             "threshold": 0.5,
-            "top1_activation": 6.85385274887085,
-            "top2_activation": 6.229944229125977
+            "top1_activation": 7.360709190368652,
+            "top2_activation": 6.85385274887085
           },
           "retrieval_stage": "hybrid",
           "rescue": null,
@@ -1154,7 +1166,7 @@
             "coverage": 1.0,
             "uncited_numerics": []
           },
-          "wall_seconds": 3.917877197265625,
+          "wall_seconds": 6.341250658035278,
           "asked_query": "Who succeeded Queen Elizabeth II as British monarch?"
         },
         {
@@ -1162,28 +1174,28 @@
           "verdict": "grounded",
           "silence": false,
           "silence_reason": "",
-          "answer": "Prince Charles succeeded Queen Elizabeth II as the British monarch [8272], [8242], [8252].",
+          "answer": "Charles III succeeded Queen Elizabeth II as the British monarch [1755358], [8272], [5467417], [1132947], [2895018], [1831878].",
           "keyword_rank": 1,
           "top3": [
+            {
+              "cell_id": 1755358,
+              "text_snippet": "Elizabeth II died on 8 September 2022. She was the longest serving monarch and was succeeded by her son, Charles III. The coronation of Charles III and Camilla took place on 6 May 2023."
+            },
             {
               "cell_id": 8272,
               "text_snippet": "It was well known that Elizabeth never planned to abdicate, though she took on fewer public engagements as she grew older and Prince Charles took on more of her duties. On September 8, 2022, Queen Eli..."
             },
             {
-              "cell_id": 8242,
-              "text_snippet": "Elizabeth II (Elizabeth Alexandra Mary; 21 April 1925 \u2013 8 September 2022) was Head of the Commonwealth and the Queen of the United Kingdom and the other Commonwealth realms from 1952 until her death i..."
-            },
-            {
-              "cell_id": 8303,
-              "text_snippet": "By the end of her reign, Elizabeth II was: Queen of Antigua and Barbuda Queen of Australia Queen of The Bahamas Queen of Belize Queen of Canada Queen of Grenada Queen of Jamaica Queen of New Zealand Q..."
+              "cell_id": 5467417,
+              "text_snippet": "Both of these versions were written before the death of Elizabeth II in 2022. The current monarch is Charles III, the successor to Elizabeth II."
             }
           ],
           "gate": {
             "fire": true,
-            "margin": 0.623908519744873,
+            "margin": 0.5068564414978027,
             "threshold": 0.5,
-            "top1_activation": 6.85385274887085,
-            "top2_activation": 6.229944229125977
+            "top1_activation": 7.360709190368652,
+            "top2_activation": 6.85385274887085
           },
           "retrieval_stage": "hybrid",
           "rescue": {
@@ -1195,7 +1207,7 @@
             "coverage": 1.0,
             "uncited_numerics": []
           },
-          "wall_seconds": 7.860375165939331,
+          "wall_seconds": 10.311779737472534,
           "asked_query": "Who succeeded Queen Elizabeth II as British monarch?"
         }
       ],
@@ -1265,7 +1277,7 @@
             "coverage": 1.0,
             "uncited_numerics": []
           },
-          "wall_seconds": 6.1871337890625,
+          "wall_seconds": 6.227449178695679,
           "asked_query": "What is the highest mountain in Canada?"
         },
         {
@@ -1303,83 +1315,105 @@
             "coverage": 1.0,
             "uncited_numerics": []
           },
-          "wall_seconds": 6.2188098430633545,
+          "wall_seconds": 5.23864221572876,
           "asked_query": "What is the highest mountain in Canada?"
         },
         {
           "mode": "hybrid_cosine_always",
-          "verdict": "silence",
-          "silence": true,
-          "silence_reason": "gate: margin below threshold (retrieval diffuse); verify: coverage below threshold (answer drifted from cells)",
-          "answer": "I have no matching memory for that.",
-          "keyword_rank": null,
+          "verdict": "grounded",
+          "silence": false,
+          "silence_reason": "",
+          "answer": "The highest mountain in Canada is Mount Logan, which is the second-highest mountain in North America after Denali (Mount McKinley) [357181]. It is located in Kluane National Park and Reserve in southwestern Yukon [357181].",
+          "keyword_rank": 1,
           "top3": [
             {
-              "cell_id": 78687,
-              "text_snippet": "The individual mountains average around 3,000 ft (900 m) in height. The highest is Mt. Mitchell in North Carolina (6,684 ft or 2,037m). Mt. Mitchell is also the highest point in the United States east..."
+              "cell_id": 357181,
+              "text_snippet": "Mount Logan is the highest mountain in Canada. It is the second-highest mountain in North America, after Denali (Mount McKinley). The mountain was named after Sir William Edmond Logan. He was a Canadi..."
             },
             {
-              "cell_id": 10370,
-              "text_snippet": "The \"tallest\" mountain in the world is Mauna Loa, in Hawaii. The \"height\" of a mountain is measured from sea level, but the \"tallness\" of a mountain is measured from its base, even if under water. The..."
+              "cell_id": 468970,
+              "text_snippet": "The highest mountain in the province is in the northern part. The mountain is tall."
             },
             {
-              "cell_id": 91105,
-              "text_snippet": "Altitude and size The mountains are not very tall and are often called hills. The highest is Cross Fell in eastern Cumbria, at . Other main mountain peaks include Mickle Fell , Whernside , Ingleboroug..."
+              "cell_id": 2729403,
+              "text_snippet": "Most mountain peaks of Canada lie in the west, specifically in British Columbia, Alberta, and the Yukon. Mountains can be found all over British Columbia while those in Alberta are mainly situated on ..."
             }
           ],
           "gate": {
             "fire": false,
-            "margin": 3.141164779663086e-05,
+            "margin": 0.0025396347045898438,
             "threshold": 0.015,
-            "top1_activation": 0.4129830598831177,
-            "top2_activation": 0.41295164823532104
+            "top1_activation": 0.4617217183113098,
+            "top2_activation": 0.45918208360671997
           },
           "retrieval_stage": "hybrid",
-          "rescue": null,
+          "rescue": {
+            "rescue_attempted": true,
+            "rescue_type": "direct_evidence",
+            "normal_gate_passed": false,
+            "margin": 0.0025396347045898438,
+            "margin_threshold": 0.015,
+            "activation_floor": 0.4,
+            "rank_window": 3,
+            "stage_e_v2_passed": true,
+            "answer_entity": "Mount Logan",
+            "question_anchors": [
+              "canada"
+            ],
+            "supporting_cell_rank": 0,
+            "supporting_cell_id": 357181,
+            "supporting_cell_activation": 0.4617217183113098,
+            "anchors_in_supporting_cell": [
+              "canada"
+            ],
+            "entity_anchor_colocated": true,
+            "support_cell_cited": true,
+            "decision": "answer_rescued"
+          },
           "verification": {
-            "grounded": false,
-            "coverage": 0.4666666666666667,
+            "grounded": true,
+            "coverage": 1.0,
             "uncited_numerics": []
           },
-          "wall_seconds": 6.570186376571655,
+          "wall_seconds": 6.6888298988342285,
           "asked_query": "What is the highest mountain in Canada?"
         },
         {
           "mode": "hybrid_rerank_always",
-          "verdict": "silence",
-          "silence": true,
-          "silence_reason": "verify: answer entity not colocated with question anchor: ['Mount McKinley', 'Alaska', 'USA']",
-          "answer": "I drafted an answer but could not ground it in memory.",
-          "keyword_rank": null,
+          "verdict": "grounded",
+          "silence": false,
+          "silence_reason": "",
+          "answer": "The highest mountain in Canada is Mount Logan, which is the second-highest mountain in North America after Denali (Mount McKinley) [357181]. It is located in Kluane National Park and Reserve in southwestern Yukon [357181].",
+          "keyword_rank": 1,
           "top3": [
             {
-              "cell_id": 10370,
-              "text_snippet": "The \"tallest\" mountain in the world is Mauna Loa, in Hawaii. The \"height\" of a mountain is measured from sea level, but the \"tallness\" of a mountain is measured from its base, even if under water. The..."
+              "cell_id": 357181,
+              "text_snippet": "Mount Logan is the highest mountain in Canada. It is the second-highest mountain in North America, after Denali (Mount McKinley). The mountain was named after Sir William Edmond Logan. He was a Canadi..."
             },
             {
-              "cell_id": 25832,
-              "text_snippet": "The Rocky Mountains (often called The Rockies) are a range of mountains in the western United States and Canada. They stretch from the northernmost part of British Columbia, in western Canada, to New ..."
+              "cell_id": 364579,
+              "text_snippet": "King Peak (or Mount King) is the fourth highest mountain in Canada. It is also the ninth highest peak in North America. It is located just west of Mount Logan, and is considered a one of the outlying ..."
             },
             {
-              "cell_id": 70587,
-              "text_snippet": "The highest mountain in the region is La Meta (its eastern summit) (), in the Isernia province, with an altitude of ."
+              "cell_id": 2640431,
+              "text_snippet": "McArthur Peak is a peak in the Saint Elias Mountains of Yukon, Canada. The peak, 13th highest in Canada, sits 11 km NE of Mount Logan, the highest mountain in Canada. A secondary peak two kilometres t..."
             }
           ],
           "gate": {
             "fire": true,
-            "margin": 0.5186388492584229,
+            "margin": 1.3156886100769043,
             "threshold": 0.5,
-            "top1_activation": 3.9892642498016357,
-            "top2_activation": 3.470625400543213
+            "top1_activation": 8.988865852355957,
+            "top2_activation": 7.673177242279053
           },
           "retrieval_stage": "hybrid",
           "rescue": null,
           "verification": {
-            "grounded": false,
-            "coverage": 0.8333333333333334,
+            "grounded": true,
+            "coverage": 1.0,
             "uncited_numerics": []
           },
-          "wall_seconds": 4.03061580657959,
+          "wall_seconds": 6.818868398666382,
           "asked_query": "What is the highest mountain in Canada?"
         },
         {
@@ -1439,7 +1473,7 @@
             "coverage": 1.0,
             "uncited_numerics": []
           },
-          "wall_seconds": 6.235263824462891,
+          "wall_seconds": 6.099554777145386,
           "asked_query": "What is the highest mountain in Canada?"
         }
       ],
@@ -1488,7 +1522,7 @@
             "coverage": 1.0,
             "uncited_numerics": []
           },
-          "wall_seconds": 3.4519569873809814,
+          "wall_seconds": 3.3215813636779785,
           "asked_query": "What religion was Sigmund Freud raised in?"
         },
         {
@@ -1526,83 +1560,83 @@
             "coverage": 0.9411764705882353,
             "uncited_numerics": []
           },
-          "wall_seconds": 9.044331789016724,
+          "wall_seconds": 8.028033256530762,
           "asked_query": "What religion was Sigmund Freud raised in?"
         },
         {
           "mode": "hybrid_cosine_always",
-          "verdict": "silence",
-          "silence": true,
-          "silence_reason": "verify: answer entity not colocated with question anchor: ['Jewish']",
-          "answer": "I drafted an answer but could not ground it in memory.",
-          "keyword_rank": 2,
+          "verdict": "grounded",
+          "silence": false,
+          "silence_reason": "",
+          "answer": "Sigmund Freud was raised in a heavily Roman Catholic town, but he was born to Jewish parents (Fact 404320).",
+          "keyword_rank": 1,
           "top3": [
+            {
+              "cell_id": 404320,
+              "text_snippet": "Sigmund Freud was born to Jewish parents in a heavily Roman Catholic town. Freud desired to understand religion and spirituality and deals with the nature of religious beliefs in many of his books and..."
+            },
             {
               "cell_id": 47425,
               "text_snippet": "Sigmund Freud (Moravia, 6 May 1856 \u2013 London, 23 September 1939) was an Austrian neurologist (a person who treats the nervous system). He invented the treatment of mental illness and neurosis by means ..."
             },
             {
-              "cell_id": 47428,
-              "text_snippet": "Freud lived in Austria in the 1930s. After the Anschluss, Germany and Austria were combined. Because he was Jewish, he received a visit from the Gestapo. Freud and his family did not feel safe anymore..."
-            },
-            {
-              "cell_id": 70892,
-              "text_snippet": "Sigmund Freud The best known psychiatrist is Sigmund Freud, a medical doctor who was trained in neurology. He became certain that hidden thoughts in the brain (which he called the unconscious) could c..."
+              "cell_id": 1708707,
+              "text_snippet": "Freud He has examined Sigmund Freud, addressing the question of what role, if any, was played by Freud's Jewish origins in his composition of the psychoanalytic corpus. Gilman's thesis concerning this..."
             }
           ],
           "gate": {
             "fire": true,
-            "margin": 0.03870251774787903,
+            "margin": 0.0914977490901947,
             "threshold": 0.015,
-            "top1_activation": 0.41080501675605774,
-            "top2_activation": 0.3721024990081787
+            "top1_activation": 0.5023027658462524,
+            "top2_activation": 0.41080501675605774
           },
           "retrieval_stage": "hybrid",
           "rescue": null,
           "verification": {
-            "grounded": false,
-            "coverage": 1.0,
+            "grounded": true,
+            "coverage": 0.875,
             "uncited_numerics": []
           },
-          "wall_seconds": 2.500976085662842,
+          "wall_seconds": 3.7285144329071045,
           "asked_query": "What religion was Sigmund Freud raised in?"
         },
         {
           "mode": "hybrid_rerank_always",
-          "verdict": "silence",
-          "silence": true,
-          "silence_reason": "verify: answer entity not colocated with question anchor: ['Jewish']",
-          "answer": "I drafted an answer but could not ground it in memory.",
-          "keyword_rank": 2,
+          "verdict": "grounded",
+          "silence": false,
+          "silence_reason": "",
+          "answer": "Sigmund Freud was raised in a heavily Roman Catholic town, but he was born to Jewish parents [404320].",
+          "keyword_rank": 1,
           "top3": [
+            {
+              "cell_id": 404320,
+              "text_snippet": "Sigmund Freud was born to Jewish parents in a heavily Roman Catholic town. Freud desired to understand religion and spirituality and deals with the nature of religious beliefs in many of his books and..."
+            },
+            {
+              "cell_id": 3232216,
+              "text_snippet": "Medicine Sigmund Freud (1856\u20131939), neurologist, founder of psychoanalysis; born in P\u0159\u00edbor (Freiberg), Moravia Carl Koller (1857\u20131944), ophthalmologist Pavol Steiner (1908\u20131969), Olympic water polo pl..."
+            },
             {
               "cell_id": 47425,
               "text_snippet": "Sigmund Freud (Moravia, 6 May 1856 \u2013 London, 23 September 1939) was an Austrian neurologist (a person who treats the nervous system). He invented the treatment of mental illness and neurosis by means ..."
-            },
-            {
-              "cell_id": 47428,
-              "text_snippet": "Freud lived in Austria in the 1930s. After the Anschluss, Germany and Austria were combined. Because he was Jewish, he received a visit from the Gestapo. Freud and his family did not feel safe anymore..."
-            },
-            {
-              "cell_id": 70892,
-              "text_snippet": "Sigmund Freud The best known psychiatrist is Sigmund Freud, a medical doctor who was trained in neurology. He became certain that hidden thoughts in the brain (which he called the unconscious) could c..."
             }
           ],
           "gate": {
             "fire": true,
-            "margin": 1.0600903034210205,
+            "margin": 4.545466899871826,
             "threshold": 0.5,
-            "top1_activation": 2.1028730869293213,
-            "top2_activation": 1.0427827835083008
+            "top1_activation": 6.717833995819092,
+            "top2_activation": 2.1723670959472656
           },
           "retrieval_stage": "hybrid",
           "rescue": null,
           "verification": {
-            "grounded": false,
+            "grounded": true,
             "coverage": 1.0,
             "uncited_numerics": []
           },
-          "wall_seconds": 2.678206443786621,
+          "wall_seconds": 3.5450053215026855,
           "asked_query": "What religion was Sigmund Freud raised in?"
         },
         {
@@ -1640,7 +1674,7 @@
             "coverage": 1.0,
             "uncited_numerics": []
           },
-          "wall_seconds": 3.526817798614502,
+          "wall_seconds": 3.239621877670288,
           "asked_query": "What religion was Sigmund Freud raised in?"
         }
       ],
@@ -1688,7 +1722,7 @@
             "coverage": 1.0,
             "uncited_numerics": []
           },
-          "wall_seconds": 3.5005643367767334,
+          "wall_seconds": 2.847015619277954,
           "asked_query": "In what city was Ernest Hemingway born?"
         },
         {
@@ -1726,7 +1760,7 @@
             "coverage": 1.0,
             "uncited_numerics": []
           },
-          "wall_seconds": 4.099170684814453,
+          "wall_seconds": 3.914778232574463,
           "asked_query": "In what city was Ernest Hemingway born?"
         },
         {
@@ -1734,7 +1768,7 @@
           "verdict": "grounded",
           "silence": false,
           "silence_reason": "",
-          "answer": "Ernest Hemingway was born in Oak Park, Illinois, near the midwestern city of Chicago [35716].",
+          "answer": "Ernest Hemingway was born in Oak Park, Illinois. [35716]",
           "keyword_rank": 1,
           "top3": [
             {
@@ -1742,20 +1776,20 @@
               "text_snippet": "Ernest Hemingway was born in 1899. He grew up in Oak Park, Illinois, near the midwestern city of Chicago. He was the second child in a family of six. His father was a doctor. His mother was a painter ..."
             },
             {
-              "cell_id": 35720,
-              "text_snippet": "Ernest found a job with the Kansas City Star newspaper in Kansas City, Missouri. He reported news that happened at the hospital, police headquarters, and the railroad station. One reporter said: \"Hemi..."
+              "cell_id": 4139887,
+              "text_snippet": "See also Birthplace of Ernest Hemingway Ernest and Mary Hemingway House Ernest Hemingway Cottage"
             },
             {
-              "cell_id": 35730,
-              "text_snippet": "Paris was cold and grey when Hemingway and his new wife arrived in 1921. They lived in one of the poorer parts of the city. Their rooms were small and they did not have water from pipes. But the Toron..."
+              "cell_id": 4139888,
+              "text_snippet": "\"Writings of Ernest Hemingway\", broadcast from the Ernest Hemingway House from C-SPAN's American Writers"
             }
           ],
           "gate": {
             "fire": true,
-            "margin": 0.10012060403823853,
+            "margin": 0.06830388307571411,
             "threshold": 0.015,
             "top1_activation": 0.43274927139282227,
-            "top2_activation": 0.33262866735458374
+            "top2_activation": 0.36444538831710815
           },
           "retrieval_stage": "hybrid",
           "rescue": null,
@@ -1764,7 +1798,7 @@
             "coverage": 1.0,
             "uncited_numerics": []
           },
-          "wall_seconds": 3.205915689468384,
+          "wall_seconds": 2.547430992126465,
           "asked_query": "In what city was Ernest Hemingway born?"
         },
         {
@@ -1780,20 +1814,20 @@
               "text_snippet": "Ernest Hemingway was born in 1899. He grew up in Oak Park, Illinois, near the midwestern city of Chicago. He was the second child in a family of six. His father was a doctor. His mother was a painter ..."
             },
             {
-              "cell_id": 35720,
-              "text_snippet": "Ernest found a job with the Kansas City Star newspaper in Kansas City, Missouri. He reported news that happened at the hospital, police headquarters, and the railroad station. One reporter said: \"Hemi..."
+              "cell_id": 2571858,
+              "text_snippet": "Early life and family Hemingway was born in Oak Park, Illinois, to Clarence Edmonds Hemingway, a physician, and Grace Hall Hemingway, a musician. He was the youngest of six siblings, the others being ..."
             },
             {
-              "cell_id": 35745,
-              "text_snippet": "At twenty-five, Hemingway was living in Paris. He was a famous writer. But the end of his first marriage made him want to leave the place where he had first become famous. Much later he said, \"the cit..."
+              "cell_id": 4950811,
+              "text_snippet": "Shortly before Ernest Hemingway was born, the Hemingway family first traveled to northern Michigan in 1898 and settled in Walloon Lake (then known as Tolcatt). The family bought several plots of land ..."
             }
           ],
           "gate": {
             "fire": true,
-            "margin": 4.926025867462158,
+            "margin": 1.873748779296875,
             "threshold": 0.5,
             "top1_activation": 9.452690124511719,
-            "top2_activation": 4.5266642570495605
+            "top2_activation": 7.578941345214844
           },
           "retrieval_stage": "hybrid",
           "rescue": null,
@@ -1802,7 +1836,7 @@
             "coverage": 1.0,
             "uncited_numerics": []
           },
-          "wall_seconds": 3.1376755237579346,
+          "wall_seconds": 3.625992774963379,
           "asked_query": "In what city was Ernest Hemingway born?"
         },
         {
@@ -1840,7 +1874,7 @@
             "coverage": 1.0,
             "uncited_numerics": []
           },
-          "wall_seconds": 3.0557093620300293,
+          "wall_seconds": 2.964902639389038,
           "asked_query": "In what city was Ernest Hemingway born?"
         }
       ],
