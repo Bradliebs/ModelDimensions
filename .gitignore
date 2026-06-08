@@ -38,6 +38,7 @@ results/loadtest*.json
 # scripts/sample_bank_embeddings.py with --seed 0)
 results/bank_fit_emb.npy
 results/bank_eval_emb.npy
+results/bank_eval_emb_zca.npy
 
 # RetroGPT training checkpoints and run artefacts (large binary state)
 out-retro-*/
