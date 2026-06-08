@@ -1,0 +1,67 @@
+{
+  "block_size": 256,
+  "candidates": [
+    {
+      "disjointness_risk": "low",
+      "estimated_tokens": 80000000,
+      "license": "Apache-2.0",
+      "name": "OpenAssistant Conversations v2 (en)",
+      "notes": "High-quality multi-turn instruction/conversation data. Too small alone (~80M tok) but anchors the 'reading skill' surface."
+    },
+    {
+      "disjointness_risk": "low",
+      "estimated_tokens": 3000000000,
+      "license": "permissive (per-repo)",
+      "name": "The Stack v2 dedup (permissive subset, 1% sample)",
+      "notes": "Permissively licensed code, sampled at 1% from the dedup pool. Useful as 'symbolic reading' material; cannot leak Wikipedia factual content."
+    },
+    {
+      "disjointness_risk": "medium",
+      "estimated_tokens": 4500000000,
+      "license": "ODC-By 1.0",
+      "name": "RedPajama v2 (sample, English, head bucket)",
+      "notes": "Web text, deduplicated. MAY contain Wikipedia copies in the wild; require disjointness verification at paragraph SHA level before use. Filter URLs containing wikipedia.org."
+    },
+    {
+      "disjointness_risk": "medium",
+      "estimated_tokens": 500000000,
+      "license": "ODC-By 1.0",
+      "name": "C4 cleaned-en (slice)",
+      "notes": "Cleaned Common Crawl. Same Wikipedia-mirror caveat as RedPajama. Useful as filler if the others come up short."
+    }
+  ],
+  "candidates_total_tokens": 8080000000,
+  "chinchilla_tokens": 8080000000,
+  "compute_estimates": [
+    {
+      "device": "a100_80gb_bf16",
+      "dollars_high": 103.43434343434345,
+      "dollars_low": 50.5679012345679,
+      "hours_high": 41.37373737373738,
+      "hours_low": 20.22716049382716,
+      "throughput_high_tps": 45000,
+      "throughput_low_tps": 22000
+    },
+    {
+      "device": "h100_80gb_bf16",
+      "dollars_high": 91.02222222222223,
+      "dollars_low": 47.90643274853801,
+      "hours_high": 18.204444444444444,
+      "hours_low": 9.581286549707603,
+      "throughput_high_tps": 95000,
+      "throughput_low_tps": 50000
+    }
+  ],
+  "coverage_ratio_presented_to_chinchilla": 0.40554455445544557,
+  "coverage_ratio_unique_to_candidates": 0.9900990099009901,
+  "effective_batch_size": 32,
+  "iters": 400000,
+  "n_params": 404000000,
+  "notes": [
+    "unique_tokens_target 8,000,000,000 is below the Chinchilla optimum of 8,080,000,000 tokens for 404,000,000 params; expect a small loss penalty.",
+    "presented_tokens 3,276,800,000 is below the unique-token target 8,000,000,000; the model will see less than one epoch. Increase iters or effective_batch to cover the corpus."
+  ],
+  "presentations_per_unique_token": 0.4096,
+  "presented_tokens": 3276800000,
+  "unique_tokens_target": 8000000000
+}

@@ -506,3 +506,29 @@ Whether ABTT *recovers retrieval recall on real MiniLM* is an empirical question
 - Production bank decisions should be made on a fit fitted with `N >> D` (the 5.7M-cell bank fits ~6M memories into 384 dims, so the small-N pathology does not apply at all). Whether ABTT helps or hurts at that scale is a separate experiment that would require a deliberate rebuild — not justified by current measured failure modes.
 - Rerun exp30 with a larger reference corpus (e.g. a 5k-memory subsample of the production bank) before any further claim about ABTT's behaviour in the live regime.
 
+## 15. Knowledge-Free Reader scaling diagnostics
+
+Six additive CLIs gate-check the "Reader, not memoriser" claim end-to-end.
+None modify the bank, the model, or any V1 release artifact. Conceptual
+doc: [READING_ENGINE_SCALING.md](READING_ENGINE_SCALING.md). All exit 0 on
+pass and 2 on gate failure.
+
+```pwsh
+# Compute and data plan for the 8B-token disjoint training run
+.venv\Scripts\python.exe scripts\plan_chinchilla_scaling.py --out-json reports\chinchilla_scaling_plan.json --out-md reports\chinchilla_scaling_plan.md
+
+# Corpus disjointness vs the production bank (gate 0a; hard)
+.venv\Scripts\python.exe scripts\verify_corpus_disjointness.py --bank H:\MiniLM\cc_service\bank.db --corpus path\to\shard.jsonl --out-json reports\disjointness_shard.json
+
+# Reading-engine acceptance gates (ignorance, semantic gap, loss ceiling)
+.venv\Scripts\python.exe scripts\run_acceptance_tests.py --losses results\heldout_losses.json --out-json reports\acceptance.json
+
+# Layer attribution (gate 4; dominant CCA layer >= 0.50 of benefit)
+.venv\Scripts\python.exe scripts\measure_layer_attribution.py --losses results\layer_attribution_losses.json --out-json reports\layer_attribution.json
+
+# Binding at production-bank scale (gate 5; m=8 success >= 0.92)
+.venv\Scripts\python.exe scripts\calibrate_binding_at_scale.py --embeddings results\bank_embeddings_sample.npy --m 4 --m 6 --m 8 --trials 200 --distractors 5000 --out-json reports\binding_calibration.json
+
+# ZCA whitening verification (gate 6; effective dim >= 0.95 on held-out)
+.venv\Scripts\python.exe scripts\verify_zca_isotropy.py --fit-embeddings results\bank_fit_emb.npy --eval-embeddings results\bank_eval_emb.npy --out-json reports\zca_verification.json
+```
