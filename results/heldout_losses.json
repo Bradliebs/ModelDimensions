@@ -1,0 +1,16 @@
+{
+  "_meta": {
+    "batch_size": 8,
+    "ckpt": "H:\\MiniLM\\nanogpt\\out-retro-bank\\ckpt_best.pt",
+    "ckpt_iter": 13000,
+    "ckpt_val_with": 3.604496788978577,
+    "ckpt_val_without": 3.827940356731415,
+    "elapsed_seconds": 10.063108444213867,
+    "model_params_millions": 55.290368,
+    "n_batches": 100,
+    "seed": 42
+  },
+  "none": 4.423075966835022,
+  "random": 4.414773225784302,
+  "real": 4.244490945339203
+}
