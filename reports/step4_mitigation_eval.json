@@ -1,0 +1,33 @@
+{
+  "baseline": {
+    "run_threshold": 1.01,
+    "reference_cutoff": 0.5,
+    "total_chunks": 20,
+    "low_info_total": 20,
+    "low_info_retrieved": 18,
+    "low_info_top1": {
+      "Hangul: ㄱ ㄲ ㄴ ㄷ ㄸ ㄹ ㅁ ㅂ ㅃ ㅅ ㅆ ㅇ ㅈ ㅉ ㅊ ㅋ ㅌ ㅍ ㅎ ㅏ ㅐ ㅑ ㅒ ㅓ ㅔ ㅕ ㅖ ㅗ ㅘ ㅙ ㅚ ㅛ ㅜ ㅝ ㅞ ㅟ ㅠ ㅡ ㅢ ㅣ": 15,
+      "General relativity is a theory of space and time. The theory was published by Albert Einstein in 1915.": 1,
+      "Artificial intelligence (AI) is the ability of a computer program or a machine to think and learn. It is a field of stud...": 1,
+      "Computers in bioinformatics Chemists have developed ways to understand the shape and behavior of small molecules, using ...": 1
+    },
+    "hi_info_total": 0,
+    "hi_info_retrieved": 0,
+    "hi_info_top1": {}
+  },
+  "mitigated": {
+    "run_threshold": 0.5,
+    "reference_cutoff": 0.5,
+    "total_chunks": 20,
+    "low_info_total": 20,
+    "low_info_retrieved": 0,
+    "low_info_top1": {},
+    "hi_info_total": 0,
+    "hi_info_retrieved": 0,
+    "hi_info_top1": {}
+  },
+  "inputs": {
+    "baseline_json": "H:\\ModelDimensions_SLM\\ModelDimensions\\reports\\live_generation_smoke_baseline.json",
+    "mitigated_json": "H:\\ModelDimensions_SLM\\ModelDimensions\\reports\\live_generation_smoke_mitigated.json"
+  }
+}

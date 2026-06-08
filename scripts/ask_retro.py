@@ -69,6 +69,11 @@ DTYPE = (
 )
 SEED = 1337
 EOT_TOKEN = 50256
+# Tokens that carry no semantic content for the encoder. 0 is GPT-2 "!" and
+# is what generate() uses to LEFT-pad short prompts; EOT_TOKEN appears once
+# the model emits end-of-text. A chunk dominated by these tokens encodes to
+# a low-info attractor in MiniLM space (see reports/step4_summary.md).
+LOW_INFO_TOKENS = frozenset({0, EOT_TOKEN})
 
 PROMPTS = [
     "The theory of general relativity describes",
@@ -87,17 +92,38 @@ def query_bank(client: httpx.Client, text: str, top_k: int = 2) -> list[dict]:
 
 def retrieve_neighbors(
     client: httpx.Client,
+    chunk_tokens: list[list[int]],
     chunks_text: list[str],
     enc: tiktoken.Encoding,
     n_neighbors: int,
     neighbor_len: int,
-) -> tuple[torch.Tensor, list[list[dict]]]:
-    """Return (neighbor tensor shape (1,K,n_neighbors,neighbor_len), per-chunk hit metadata)."""
-    K = len(chunks_text)
+    skip_low_info_fraction: float = 0.5,
+) -> tuple[torch.Tensor, list[list[dict]], list[dict]]:
+    """Retrieve neighbors per chunk, skipping low-info chunks.
+
+    A chunk is "low-info" when at least ``skip_low_info_fraction`` of its
+    tokens are in :data:`LOW_INFO_TOKENS`. For those chunks the neighbor
+    slot stays at the all-EOT default (i.e., CCA sees no signal for that
+    chunk) instead of polluting CCA with the encoder's attractor on a
+    pad-only string.
+
+    Returns ``(neighbor tensor (1,K,n_neighbors,neighbor_len), per-chunk
+    hit metadata, per-chunk skip telemetry)``. Skip telemetry has one entry
+    per chunk: ``{"low_info_fraction": float, "skipped": bool}``.
+    """
+    K = len(chunk_tokens)
+    assert len(chunks_text) == K, "chunk_tokens and chunks_text must align"
     nbrs = np.full((1, K, n_neighbors, neighbor_len), EOT_TOKEN, dtype=np.int64)
     hits_meta: list[list[dict]] = []
-    for ci, chunk_text in enumerate(chunks_text):
-        if not chunk_text.strip():
+    skip_log: list[dict] = []
+    for ci in range(K):
+        tokens = chunk_tokens[ci]
+        chunk_text = chunks_text[ci]
+        n_low = sum(1 for t in tokens if t in LOW_INFO_TOKENS)
+        low_frac = (n_low / len(tokens)) if tokens else 1.0
+        skipped = (low_frac >= skip_low_info_fraction) or (not chunk_text.strip())
+        skip_log.append({"low_info_fraction": low_frac, "skipped": skipped})
+        if skipped:
             hits_meta.append([])
             continue
         hits = query_bank(client, chunk_text, top_k=n_neighbors)
@@ -115,7 +141,7 @@ def retrieve_neighbors(
                 "source_text_preview": (source[:120] + "...") if len(source) > 120 else source,
             })
         hits_meta.append(chunk_meta)
-    return torch.from_numpy(nbrs).to(DEVICE), hits_meta
+    return torch.from_numpy(nbrs).to(DEVICE), hits_meta, skip_log
 
 
 @torch.no_grad()
@@ -128,8 +154,19 @@ def generate(
     temperature: float,
     top_k: int,
     use_retrieval: bool,
-) -> tuple[str, list[list[dict]]]:
-    """Generate text. Re-retrieves neighbors only when crossing a chunk boundary."""
+    skip_low_info_fraction: float = 0.5,
+) -> tuple[str, list[dict], list[dict]]:
+    """Generate text. Re-retrieves neighbors only when crossing a chunk boundary.
+
+    Returns ``(continuation_text, first_boundary_snapshot, retrieval_log)``:
+    - ``first_boundary_snapshot``: same shape as before (kept for the
+      human-facing markdown report).
+    - ``retrieval_log``: one entry per chunk-boundary crossing, each
+      containing per-chunk skip telemetry and the top-1 source preview
+      per chunk. Used by scripts/eval_pad_attractor.py to compute the
+      pad-attractor metric across every chunk seen, not just the first
+      boundary.
+    """
     model.eval()
     config = model.config
     chunk_size = config.chunk_size
@@ -142,7 +179,8 @@ def generate(
 
     seq = list(prompt_ids)
     generated_ids: list[int] = []
-    all_hits: list[list[dict]] = []
+    all_hits: list[dict] = []
+    retrieval_log: list[dict] = []
     cached_neighbors: torch.Tensor | None = None
     last_chunk_idx = -1
 
@@ -152,7 +190,7 @@ def generate(
         else torch.amp.autocast(device_type="cpu", enabled=False)
     )
 
-    for _ in range(max_new_tokens):
+    for step in range(max_new_tokens):
         window = seq[-block_size:]
         if len(window) < block_size:
             window = [0] * (block_size - len(window)) + window
@@ -163,17 +201,39 @@ def generate(
             assert client is not None
             current_chunk = len(seq) // chunk_size
             if cached_neighbors is None or current_chunk != last_chunk_idx:
-                chunks_text = [
-                    enc.decode(window[ci * chunk_size : (ci + 1) * chunk_size])
+                chunk_tokens = [
+                    window[ci * chunk_size : (ci + 1) * chunk_size]
                     for ci in range(K)
                 ]
-                cached_neighbors, hits_meta = retrieve_neighbors(
-                    client, chunks_text, enc, config.n_neighbors, config.neighbor_len
+                chunks_text = [enc.decode(ct) for ct in chunk_tokens]
+                cached_neighbors, hits_meta, skip_log = retrieve_neighbors(
+                    client, chunk_tokens, chunks_text, enc,
+                    config.n_neighbors, config.neighbor_len,
+                    skip_low_info_fraction=skip_low_info_fraction,
                 )
                 last_chunk_idx = current_chunk
-                # Record the retrieval that drove the FIRST chunk-boundary
-                # crossing only (otherwise we get one record per chunk * len/chunk
-                # which floods the report).
+                # Full per-chunk telemetry for every boundary crossing.
+                # top1 preview is None when the chunk was skipped.
+                per_chunk = []
+                for ci in range(K):
+                    sl = skip_log[ci]
+                    chunk_meta = hits_meta[ci]
+                    top1 = (
+                        chunk_meta[0]["source_text_preview"]
+                        if chunk_meta else None
+                    )
+                    per_chunk.append({
+                        "chunk_idx": ci,
+                        "low_info_fraction": sl["low_info_fraction"],
+                        "skipped": sl["skipped"],
+                        "top1_source_preview": top1,
+                    })
+                retrieval_log.append({
+                    "step": step,
+                    "current_chunk": current_chunk,
+                    "per_chunk": per_chunk,
+                })
+                # Compact snapshot for the markdown report (first crossing only).
                 if not all_hits:
                     all_hits.append({"chunks_text": chunks_text, "hits": hits_meta})
             neighbors = cached_neighbors
@@ -192,7 +252,7 @@ def generate(
         if next_id == enc.eot_token:
             break
 
-    return enc.decode(generated_ids), all_hits
+    return enc.decode(generated_ids), all_hits, retrieval_log
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -207,6 +267,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--seed", type=int, default=SEED)
     parser.add_argument("--prompts", nargs="*", default=None,
                         help="override the default prompt set")
+    parser.add_argument(
+        "--skip-low-info-fraction", type=float, default=0.5,
+        help=(
+            "Skip bank retrieval for any chunk where this fraction or more "
+            "of tokens are in {0, EOT_TOKEN}. Set to 1.01 to disable the "
+            "mitigation (reproduces the original pad-chunk attractor)."
+        ),
+    )
     args = parser.parse_args(argv)
 
     if not args.ckpt.exists():
@@ -264,21 +332,23 @@ def main(argv: list[str] | None = None) -> int:
 
         torch.manual_seed(args.seed)
         t0 = time.time()
-        no_text, _ = generate(
+        no_text, _, _ = generate(
             model, enc, None, prompt,
             max_new_tokens=args.max_tokens,
             temperature=args.temperature, top_k=args.top_k,
             use_retrieval=False,
+            skip_low_info_fraction=args.skip_low_info_fraction,
         )
         dt_no = time.time() - t0
 
         torch.manual_seed(args.seed)
         t0 = time.time()
-        ret_text, hits_meta = generate(
+        ret_text, hits_meta, retrieval_log = generate(
             model, enc, client, prompt,
             max_new_tokens=args.max_tokens,
             temperature=args.temperature, top_k=args.top_k,
             use_retrieval=True,
+            skip_low_info_fraction=args.skip_low_info_fraction,
         )
         dt_ret = time.time() - t0
 
@@ -295,6 +365,7 @@ def main(argv: list[str] | None = None) -> int:
                 "continuation": ret_text,
                 "elapsed_sec": dt_ret,
                 "first_chunk_retrieval": hits_meta,
+                "retrieval_log": retrieval_log,
             },
         })
 
@@ -336,6 +407,7 @@ def main(argv: list[str] | None = None) -> int:
             "temperature": args.temperature,
             "top_k": args.top_k,
             "seed": args.seed,
+            "skip_low_info_fraction": args.skip_low_info_fraction,
             "device": DEVICE,
             "dtype": str(DTYPE),
             "elapsed_sec_total": elapsed,
@@ -371,6 +443,8 @@ def main(argv: list[str] | None = None) -> int:
         f"- Device: {DEVICE} / {DTYPE}",
         f"- Max new tokens: {args.max_tokens}, temperature: {args.temperature}, "
         f"top_k: {args.top_k}, seed: {args.seed}",
+        f"- skip_low_info_fraction: {args.skip_low_info_fraction} "
+        f"({'mitigation ON' if args.skip_low_info_fraction <= 1.0 else 'mitigation OFF (baseline)'})",
         f"- Total elapsed: {elapsed:.1f}s for {len(results)} prompts",
         "",
         "## What this is (and is not)",
@@ -405,10 +479,27 @@ def main(argv: list[str] | None = None) -> int:
             entry = rec["with_retrieval"]["first_chunk_retrieval"][0]
             md.append("First-chunk retrieval:")
             md.append("")
+            first_boundary = (
+                rec["with_retrieval"].get("retrieval_log") or [{}]
+            )[0]
+            per_chunk_skip = {
+                pc["chunk_idx"]: pc
+                for pc in first_boundary.get("per_chunk", [])
+            }
             for ci, chunk_hits in enumerate(entry.get("hits", [])):
+                skip_info = per_chunk_skip.get(ci, {})
+                low_frac = skip_info.get("low_info_fraction", 0.0)
+                if skip_info.get("skipped"):
+                    md.append(
+                        f"- chunk {ci}: SKIPPED (low_info_fraction="
+                        f"{low_frac:.2f} \u2265 threshold)"
+                    )
+                    continue
                 if not chunk_hits:
                     continue
-                md.append(f"- chunk {ci}:")
+                md.append(
+                    f"- chunk {ci} (low_info_fraction={low_frac:.2f}):"
+                )
                 for hit in chunk_hits:
                     act = hit.get("activation")
                     act_str = f"{act:.3f}" if isinstance(act, (int, float)) else "?"

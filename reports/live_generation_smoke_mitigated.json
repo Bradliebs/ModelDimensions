@@ -1,0 +1,339 @@
+{
+  "results": [
+    {
+      "prompt": "The theory of general relativity describes",
+      "without_retrieval": {
+        "continuation": " the end of the future.<|endoftext|>",
+        "elapsed_sec": 0.3340001106262207
+      },
+      "with_retrieval": {
+        "continuation": "!!!!<|endoftext|>",
+        "elapsed_sec": 0.052002668380737305,
+        "first_chunk_retrieval": [
+          {
+            "chunks_text": [
+              "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!",
+              "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!",
+              "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!",
+              "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!The theory of general relativity describes"
+            ],
+            "hits": [
+              [],
+              [],
+              [],
+              []
+            ]
+          }
+        ],
+        "retrieval_log": [
+          {
+            "step": 0,
+            "current_chunk": 0,
+            "per_chunk": [
+              {
+                "chunk_idx": 0,
+                "low_info_fraction": 1.0,
+                "skipped": true,
+                "top1_source_preview": null
+              },
+              {
+                "chunk_idx": 1,
+                "low_info_fraction": 1.0,
+                "skipped": true,
+                "top1_source_preview": null
+              },
+              {
+                "chunk_idx": 2,
+                "low_info_fraction": 1.0,
+                "skipped": true,
+                "top1_source_preview": null
+              },
+              {
+                "chunk_idx": 3,
+                "low_info_fraction": 0.90625,
+                "skipped": true,
+                "top1_source_preview": null
+              }
+            ]
+          }
+        ],
+        "coarse_overlap_word_count": 0,
+        "coarse_overlap_words_sample": []
+      }
+    },
+    {
+      "prompt": "Machine learning is a branch of artificial intelligence that",
+      "without_retrieval": {
+        "continuation": " is in the Dark Age.<|endoftext|>",
+        "elapsed_sec": 0.06574726104736328
+      },
+      "with_retrieval": {
+        "continuation": " is a part of the people they have?!<|endoftext|>",
+        "elapsed_sec": 0.11657834053039551,
+        "first_chunk_retrieval": [
+          {
+            "chunks_text": [
+              "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!",
+              "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!",
+              "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!",
+              "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!Machine learning is a branch of artificial intelligence that"
+            ],
+            "hits": [
+              [],
+              [],
+              [],
+              []
+            ]
+          }
+        ],
+        "retrieval_log": [
+          {
+            "step": 0,
+            "current_chunk": 0,
+            "per_chunk": [
+              {
+                "chunk_idx": 0,
+                "low_info_fraction": 1.0,
+                "skipped": true,
+                "top1_source_preview": null
+              },
+              {
+                "chunk_idx": 1,
+                "low_info_fraction": 1.0,
+                "skipped": true,
+                "top1_source_preview": null
+              },
+              {
+                "chunk_idx": 2,
+                "low_info_fraction": 1.0,
+                "skipped": true,
+                "top1_source_preview": null
+              },
+              {
+                "chunk_idx": 3,
+                "low_info_fraction": 0.859375,
+                "skipped": true,
+                "top1_source_preview": null
+              }
+            ]
+          }
+        ],
+        "coarse_overlap_word_count": 0,
+        "coarse_overlap_words_sample": []
+      }
+    },
+    {
+      "prompt": "The French Revolution began in 1789 when",
+      "without_retrieval": {
+        "continuation": " the end of the 20th century created the new new new 20th century that is a unique way.<|endoftext|>",
+        "elapsed_sec": 0.19150757789611816
+      },
+      "with_retrieval": {
+        "continuation": " you are you to get to get your Het get so much to make it. He can make a lot of things, or work he got the lot to try. His good will be for people who have the lot.<|endoftext|>",
+        "elapsed_sec": 0.7689995765686035,
+        "first_chunk_retrieval": [
+          {
+            "chunks_text": [
+              "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!",
+              "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!",
+              "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!",
+              "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!The French Revolution began in 1789 when"
+            ],
+            "hits": [
+              [],
+              [],
+              [],
+              []
+            ]
+          }
+        ],
+        "retrieval_log": [
+          {
+            "step": 0,
+            "current_chunk": 0,
+            "per_chunk": [
+              {
+                "chunk_idx": 0,
+                "low_info_fraction": 1.0,
+                "skipped": true,
+                "top1_source_preview": null
+              },
+              {
+                "chunk_idx": 1,
+                "low_info_fraction": 1.0,
+                "skipped": true,
+                "top1_source_preview": null
+              },
+              {
+                "chunk_idx": 2,
+                "low_info_fraction": 1.0,
+                "skipped": true,
+                "top1_source_preview": null
+              },
+              {
+                "chunk_idx": 3,
+                "low_info_fraction": 0.875,
+                "skipped": true,
+                "top1_source_preview": null
+              }
+            ]
+          }
+        ],
+        "coarse_overlap_word_count": 0,
+        "coarse_overlap_words_sample": []
+      }
+    },
+    {
+      "prompt": "In computer science, a hash table is",
+      "without_retrieval": {
+        "continuation": " from any room to make a book to the universe for the first time in the universe.<|endoftext|>",
+        "elapsed_sec": 0.16017842292785645
+      },
+      "with_retrieval": {
+        "continuation": "!!!!!!<|endoftext|>",
+        "elapsed_sec": 0.08571171760559082,
+        "first_chunk_retrieval": [
+          {
+            "chunks_text": [
+              "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!",
+              "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!",
+              "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!",
+              "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!In computer science, a hash table is"
+            ],
+            "hits": [
+              [],
+              [],
+              [],
+              []
+            ]
+          }
+        ],
+        "retrieval_log": [
+          {
+            "step": 0,
+            "current_chunk": 0,
+            "per_chunk": [
+              {
+                "chunk_idx": 0,
+                "low_info_fraction": 1.0,
+                "skipped": true,
+                "top1_source_preview": null
+              },
+              {
+                "chunk_idx": 1,
+                "low_info_fraction": 1.0,
+                "skipped": true,
+                "top1_source_preview": null
+              },
+              {
+                "chunk_idx": 2,
+                "low_info_fraction": 1.0,
+                "skipped": true,
+                "top1_source_preview": null
+              },
+              {
+                "chunk_idx": 3,
+                "low_info_fraction": 0.875,
+                "skipped": true,
+                "top1_source_preview": null
+              }
+            ]
+          }
+        ],
+        "coarse_overlap_word_count": 0,
+        "coarse_overlap_words_sample": []
+      }
+    },
+    {
+      "prompt": "The Great Wall of China was built",
+      "without_retrieval": {
+        "continuation": ".<|endoftext|>",
+        "elapsed_sec": 0.01659226417541504
+      },
+      "with_retrieval": {
+        "continuation": ".<|endoftext|>",
+        "elapsed_sec": 0.0822908878326416,
+        "first_chunk_retrieval": [
+          {
+            "chunks_text": [
+              "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!",
+              "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!",
+              "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!",
+              "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!The Great Wall of China was built"
+            ],
+            "hits": [
+              [],
+              [],
+              [],
+              []
+            ]
+          }
+        ],
+        "retrieval_log": [
+          {
+            "step": 0,
+            "current_chunk": 0,
+            "per_chunk": [
+              {
+                "chunk_idx": 0,
+                "low_info_fraction": 1.0,
+                "skipped": true,
+                "top1_source_preview": null
+              },
+              {
+                "chunk_idx": 1,
+                "low_info_fraction": 1.0,
+                "skipped": true,
+                "top1_source_preview": null
+              },
+              {
+                "chunk_idx": 2,
+                "low_info_fraction": 1.0,
+                "skipped": true,
+                "top1_source_preview": null
+              },
+              {
+                "chunk_idx": 3,
+                "low_info_fraction": 0.890625,
+                "skipped": true,
+                "top1_source_preview": null
+              }
+            ]
+          }
+        ],
+        "coarse_overlap_word_count": 0,
+        "coarse_overlap_words_sample": []
+      }
+    }
+  ],
+  "meta": {
+    "experiment": "live_generation_smoke",
+    "ckpt_path": "H:\\MiniLM\\nanogpt\\out-retro-bank\\ckpt_best.pt",
+    "ckpt_params_million": 55.290368,
+    "service_url": "http://127.0.0.1:8765",
+    "bank_info": {
+      "db_path": "H:\\MiniLM\\cc_service\\bank_subset_50k.db",
+      "encoder_model": "all-MiniLM-L6-v2",
+      "dim": 384,
+      "initialized": true,
+      "n_cells": 50000,
+      "whitening_fitted_at": 1779540161.4391255,
+      "whitening_reference_n": 2000
+    },
+    "encoder_match": true,
+    "max_new_tokens": 80,
+    "temperature": 0.8,
+    "top_k": 40,
+    "seed": 1337,
+    "skip_low_info_fraction": 0.5,
+    "device": "cuda",
+    "dtype": "torch.bfloat16",
+    "elapsed_sec_total": 1.90370512008667,
+    "caveats": [
+      "55M debug ckpt, not the 404M roadmap target.",
+      "Inference bank is the 5.7M cc_service production bank, not the cell_tokens.npy the model trained against. Encoder identity matches (all-MiniLM-L6-v2, dim 384) so retrieval is semantically meaningful, but source-text distribution differs from training.",
+      "first_chunk_retrieval shows only the chunks at the FIRST chunk-boundary crossing (one snapshot per prompt) to keep the report compact.",
+      "coarse_overlap_word_count is a crude grounding proxy, not a verifier."
+    ]
+  }
+}
