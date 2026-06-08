@@ -1,0 +1,34 @@
+{
+  "effective_dim_pass": true,
+  "effective_dim_target": 0.95,
+  "n_eval_samples": 20000,
+  "n_fit_samples": 20000,
+  "notes": [
+    "fit and eval samples share size; consider supplying a held-out eval slice to avoid optimistic measurements."
+  ],
+  "pairwise_cos_max": 0.05,
+  "pairwise_cos_pass": true,
+  "passed": true,
+  "raw_report": {
+    "abs_mean_pairwise_cosine": 0.05017554387450218,
+    "dim": 384,
+    "effective_dim_fraction": 0.6303520997365316,
+    "mean_norm": 1.0,
+    "mean_pairwise_cosine": 0.00895475409924984,
+    "n": 20000,
+    "participation_ratio": 242.05520629882812,
+    "std_norm": 3.7165779787073916e-08,
+    "std_pairwise_cosine": 0.06399189680814743
+  },
+  "whitened_report": {
+    "abs_mean_pairwise_cosine": 0.040460601449012756,
+    "dim": 384,
+    "effective_dim_fraction": 0.9550283749898275,
+    "mean_norm": 19.66826629638672,
+    "mean_pairwise_cosine": 3.9150603697635233e-05,
+    "n": 20000,
+    "participation_ratio": 366.73089599609375,
+    "std_norm": 1.1055450439453125,
+    "std_pairwise_cosine": 0.05183232203125954
+  }
+}

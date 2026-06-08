@@ -34,6 +34,11 @@ results/v1_bank/bm25_tantivy/
 # Local load-test scratch outputs
 results/loadtest*.json
 
+# Bank embedding samples for diagnostics (~30 MB each; reproducible from
+# scripts/sample_bank_embeddings.py with --seed 0)
+results/bank_fit_emb.npy
+results/bank_eval_emb.npy
+
 # RetroGPT training checkpoints and run artefacts (large binary state)
 out-retro-*/
 src/retro/data/**/*.bin
