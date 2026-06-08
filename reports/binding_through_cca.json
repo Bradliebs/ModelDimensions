@@ -1,0 +1,115 @@
+{
+  "_meta": {
+    "block_size": 256,
+    "chunk_size": 64,
+    "ckpt": "H:\\MiniLM\\nanogpt\\out-retro-bank\\ckpt_best.pt",
+    "ckpt_iter": 13000,
+    "elapsed_seconds": 0.8195173740386963,
+    "inconclusive_single_benefit_threshold": 0.05,
+    "model_params_millions": 55.290368,
+    "n_facts_bound": 6,
+    "n_facts_distractor": 6,
+    "n_neighbors": 2,
+    "neighbor_len": 64,
+    "pass_ratio_threshold": 0.5,
+    "seed": 42
+  },
+  "bound_benefit_over_distractor": 0.3730468153953552,
+  "overall_extraction_ratio": 0.4847715336966371,
+  "overall_nll_per_token": {
+    "bound": 7.081054657697678,
+    "distractor": 7.454101473093033,
+    "none": 7.434570223093033,
+    "single": 6.684570282697678
+  },
+  "per_probe": [
+    {
+      "answer": " Zorath",
+      "extraction_ratio": 0.6830358073419581,
+      "fact": "Mordwin capital: Zorath",
+      "fact_index": 0,
+      "n_answer_tokens": 3,
+      "nll_per_token": {
+        "bound": 4.432291507720947,
+        "distractor": 5.229166507720947,
+        "none": 4.979166507720947,
+        "single": 4.0625
+      },
+      "prefix": "In the kingdom of Mordwin, the capital is the city of"
+    },
+    {
+      "answer": " Tellaris",
+      "extraction_ratio": 1.5454545454545454,
+      "fact": "Sapphire lake: Tellaris",
+      "fact_index": 1,
+      "n_answer_tokens": 2,
+      "nll_per_token": {
+        "bound": 9.96875,
+        "distractor": 10.5,
+        "none": 9.875,
+        "single": 10.15625
+      },
+      "prefix": "The lake renowned for its sapphire water is named"
+    },
+    {
+      "answer": " Riftwood",
+      "extraction_ratio": -0.18181818181818182,
+      "fact": "Druid sacred forest: Riftwood",
+      "fact_index": 2,
+      "n_answer_tokens": 2,
+      "nll_per_token": {
+        "bound": 9.234375,
+        "distractor": 9.171875,
+        "none": 9.03125,
+        "single": 8.828125
+      },
+      "prefix": "The druids honor the sacred forest known as"
+    },
+    {
+      "answer": " Brennix",
+      "extraction_ratio": -0.2598871780654131,
+      "fact": "Telnar minted coins: Brennix",
+      "fact_index": 3,
+      "n_answer_tokens": 3,
+      "nll_per_token": {
+        "bound": 6.921875,
+        "distractor": 6.682291507720947,
+        "none": 6.890625,
+        "single": 5.760416507720947
+      },
+      "prefix": "The official coins minted in Telnar are called"
+    },
+    {
+      "answer": " Korvath",
+      "extraction_ratio": 0.8141027597280649,
+      "fact": "Ninety-meter watchtower: Korvath",
+      "fact_index": 4,
+      "n_answer_tokens": 3,
+      "nll_per_token": {
+        "bound": 6.994791507720947,
+        "distractor": 7.65625,
+        "none": 7.354166507720947,
+        "single": 6.84375
+      },
+      "prefix": "The ninety-meter watchtower on the cliff is named"
+    },
+    {
+      "answer": " Daelin",
+      "extraction_ratio": 0.6153843198942853,
+      "fact": "Ferroglass forging town: Daelin",
+      "fact_index": 5,
+      "n_answer_tokens": 3,
+      "nll_per_token": {
+        "bound": 6.614583492279053,
+        "distractor": 7.072916507720947,
+        "none": 7.822916507720947,
+        "single": 6.328125
+      },
+      "prefix": "The town renowned for forging ferroglass is"
+    }
+  ],
+  "single_benefit_over_distractor": 0.7695311903953552,
+  "single_benefit_over_none": 0.7499999403953552,
+  "verdict": "FAIL",
+  "verdict_reason": "CCA extracts only 48.5% of per-fact signal from a bound m=6 cell (< 50%)."
+}
