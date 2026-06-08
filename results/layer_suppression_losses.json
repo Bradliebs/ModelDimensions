@@ -1,0 +1,24 @@
+{
+  "_meta": {
+    "batch_size": 8,
+    "cca_layers": [
+      1,
+      3,
+      5,
+      7
+    ],
+    "ckpt": "H:\\MiniLM\\nanogpt\\out-retro-bank\\ckpt_best.pt",
+    "ckpt_iter": 13000,
+    "elapsed_seconds": 11.501784324645996,
+    "n_batches": 100,
+    "seed": 42
+  },
+  "loss_real_full": 4.236557688713074,
+  "loss_real_with_layer_suppressed": {
+    "1": 4.258184921741486,
+    "3": 4.2540249919891355,
+    "5": 4.300535762310028,
+    "7": 4.251430821418762
+  },
+  "loss_without": 4.4131916856765745
+}

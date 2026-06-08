@@ -1,0 +1,38 @@
+{
+  "contributions": [
+    {
+      "delta_vs_full_real": 0.021627233028412185,
+      "layer_index": 1,
+      "share_of_total_benefit": 0.12244094228859673,
+      "suppressed_loss_real": 4.258184921741486
+    },
+    {
+      "delta_vs_full_real": 0.01746730327606194,
+      "layer_index": 3,
+      "share_of_total_benefit": 0.09888981496394111,
+      "suppressed_loss_real": 4.2540249919891355
+    },
+    {
+      "delta_vs_full_real": 0.06397807359695484,
+      "layer_index": 5,
+      "share_of_total_benefit": 0.3622070195817121,
+      "suppressed_loss_real": 4.300535762310028
+    },
+    {
+      "delta_vs_full_real": 0.014873132705688796,
+      "layer_index": 7,
+      "share_of_total_benefit": 0.08420311469689572,
+      "suppressed_loss_real": 4.251430821418762
+    }
+  ],
+  "dominant_layer_index": 5,
+  "dominant_layer_passes": false,
+  "dominant_layer_share": 0.3622070195817121,
+  "dominant_share_target": 0.5,
+  "full_benefit_nats": 0.1766339969635009,
+  "losses": {
+    "real_full": 4.236557688713074,
+    "without": 4.4131916856765745
+  },
+  "notes": []
+}
