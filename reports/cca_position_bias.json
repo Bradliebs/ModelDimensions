@@ -1,0 +1,561 @@
+{
+  "verdict": "NO_POSITION_BIAS",
+  "verdict_reason": "no clear position effect: end-vs-middle gap = +0.133 (< 0.2). ends mean=0.691, middles mean=0.558. exp31's per-probe variation is likely fact-specific rather than position-driven.",
+  "overall_nll_per_token": {
+    "none": 7.434570223093033,
+    "single": 6.888671860098839,
+    "bound": 7.0782877405484514,
+    "distractor": 7.454101473093033
+  },
+  "overall_extraction_ratio": 0.6646516629266822,
+  "per_position_mean_ratio": {
+    "0": 0.6962408566481884,
+    "1": 0.6314608315745901,
+    "2": 0.559929572966024,
+    "3": 0.5562309557465401,
+    "4": 0.6798092560563509,
+    "5": 0.6858624140059281
+  },
+  "per_position_std_ratio": {
+    "0": 0.6000283291953983,
+    "1": 0.6270432058828271,
+    "2": 0.7203887351692105,
+    "3": 0.9377221190730688,
+    "4": 0.9586992415148661,
+    "5": 0.9338504589956427
+  },
+  "per_position_n": {
+    "0": 6,
+    "1": 6,
+    "2": 6,
+    "3": 6,
+    "4": 6,
+    "5": 6
+  },
+  "per_probe": [
+    {
+      "fact_index": 0,
+      "fact": "Mordwin capital: Zorath",
+      "position": 0,
+      "answer": " Zorath",
+      "n_answer_tokens": 3,
+      "nll_per_token": {
+        "none": 4.979166507720947,
+        "single": 4.0625,
+        "bound": 4.432291507720947,
+        "distractor": 5.229166507720947
+      },
+      "extraction_ratio": 0.6830358073419581
+    },
+    {
+      "fact_index": 0,
+      "fact": "Mordwin capital: Zorath",
+      "position": 1,
+      "answer": " Zorath",
+      "n_answer_tokens": 3,
+      "nll_per_token": {
+        "none": 4.979166507720947,
+        "single": 4.213541507720947,
+        "bound": 4.510416507720947,
+        "distractor": 5.229166507720947
+      },
+      "extraction_ratio": 0.7076923076923077
+    },
+    {
+      "fact_index": 0,
+      "fact": "Mordwin capital: Zorath",
+      "position": 2,
+      "answer": " Zorath",
+      "n_answer_tokens": 3,
+      "nll_per_token": {
+        "none": 4.979166507720947,
+        "single": 4.333333492279053,
+        "bound": 4.65625,
+        "distractor": 5.229166507720947
+      },
+      "extraction_ratio": 0.639534933235677
+    },
+    {
+      "fact_index": 0,
+      "fact": "Mordwin capital: Zorath",
+      "position": 3,
+      "answer": " Zorath",
+      "n_answer_tokens": 3,
+      "nll_per_token": {
+        "none": 4.979166507720947,
+        "single": 4.395833492279053,
+        "bound": 4.755208492279053,
+        "distractor": 5.229166507720947
+      },
+      "extraction_ratio": 0.5687498354911177
+    },
+    {
+      "fact_index": 0,
+      "fact": "Mordwin capital: Zorath",
+      "position": 4,
+      "answer": " Zorath",
+      "n_answer_tokens": 3,
+      "nll_per_token": {
+        "none": 4.979166507720947,
+        "single": 4.395833492279053,
+        "bound": 4.760416507720947,
+        "distractor": 5.229166507720947
+      },
+      "extraction_ratio": 0.562500214576803
+    },
+    {
+      "fact_index": 0,
+      "fact": "Mordwin capital: Zorath",
+      "position": 5,
+      "answer": " Zorath",
+      "n_answer_tokens": 3,
+      "nll_per_token": {
+        "none": 4.979166507720947,
+        "single": 4.526041507720947,
+        "bound": 4.755208492279053,
+        "distractor": 5.229166507720947
+      },
+      "extraction_ratio": 0.6740736219618055
+    },
+    {
+      "fact_index": 1,
+      "fact": "Sapphire lake: Tellaris",
+      "position": 0,
+      "answer": " Tellaris",
+      "n_answer_tokens": 2,
+      "nll_per_token": {
+        "none": 9.875,
+        "single": 10.15625,
+        "bound": 9.9375,
+        "distractor": 10.5
+      },
+      "extraction_ratio": 1.6363636363636365
+    },
+    {
+      "fact_index": 1,
+      "fact": "Sapphire lake: Tellaris",
+      "position": 1,
+      "answer": " Tellaris",
+      "n_answer_tokens": 2,
+      "nll_per_token": {
+        "none": 9.875,
+        "single": 10.09375,
+        "bound": 9.96875,
+        "distractor": 10.5
+      },
+      "extraction_ratio": 1.3076923076923077
+    },
+    {
+      "fact_index": 1,
+      "fact": "Sapphire lake: Tellaris",
+      "position": 2,
+      "answer": " Tellaris",
+      "n_answer_tokens": 2,
+      "nll_per_token": {
+        "none": 9.875,
+        "single": 10.09375,
+        "bound": 9.96875,
+        "distractor": 10.5
+      },
+      "extraction_ratio": 1.3076923076923077
+    },
+    {
+      "fact_index": 1,
+      "fact": "Sapphire lake: Tellaris",
+      "position": 3,
+      "answer": " Tellaris",
+      "n_answer_tokens": 2,
+      "nll_per_token": {
+        "none": 9.875,
+        "single": 10.09375,
+        "bound": 9.9375,
+        "distractor": 10.5
+      },
+      "extraction_ratio": 1.3846153846153846
+    },
+    {
+      "fact_index": 1,
+      "fact": "Sapphire lake: Tellaris",
+      "position": 4,
+      "answer": " Tellaris",
+      "n_answer_tokens": 2,
+      "nll_per_token": {
+        "none": 9.875,
+        "single": 10.09375,
+        "bound": 9.9375,
+        "distractor": 10.5
+      },
+      "extraction_ratio": 1.3846153846153846
+    },
+    {
+      "fact_index": 1,
+      "fact": "Sapphire lake: Tellaris",
+      "position": 5,
+      "answer": " Tellaris",
+      "n_answer_tokens": 2,
+      "nll_per_token": {
+        "none": 9.875,
+        "single": 10.09375,
+        "bound": 9.90625,
+        "distractor": 10.5
+      },
+      "extraction_ratio": 1.4615384615384615
+    },
+    {
+      "fact_index": 2,
+      "fact": "Druid sacred forest: Riftwood",
+      "position": 0,
+      "answer": " Riftwood",
+      "n_answer_tokens": 2,
+      "nll_per_token": {
+        "none": 9.03125,
+        "single": 8.828125,
+        "bound": 9.203125,
+        "distractor": 9.171875
+      },
+      "extraction_ratio": -0.09090909090909091
+    },
+    {
+      "fact_index": 2,
+      "fact": "Druid sacred forest: Riftwood",
+      "position": 1,
+      "answer": " Riftwood",
+      "n_answer_tokens": 2,
+      "nll_per_token": {
+        "none": 9.03125,
+        "single": 8.921875,
+        "bound": 9.21875,
+        "distractor": 9.171875
+      },
+      "extraction_ratio": -0.1875
+    },
+    {
+      "fact_index": 2,
+      "fact": "Druid sacred forest: Riftwood",
+      "position": 2,
+      "answer": " Riftwood",
+      "n_answer_tokens": 2,
+      "nll_per_token": {
+        "none": 9.03125,
+        "single": 8.9375,
+        "bound": 9.234375,
+        "distractor": 9.171875
+      },
+      "extraction_ratio": -0.26666666666666666
+    },
+    {
+      "fact_index": 2,
+      "fact": "Druid sacred forest: Riftwood",
+      "position": 3,
+      "answer": " Riftwood",
+      "n_answer_tokens": 2,
+      "nll_per_token": {
+        "none": 9.03125,
+        "single": 8.984375,
+        "bound": 9.296875,
+        "distractor": 9.171875
+      },
+      "extraction_ratio": -0.6666666666666666
+    },
+    {
+      "fact_index": 2,
+      "fact": "Druid sacred forest: Riftwood",
+      "position": 4,
+      "answer": " Riftwood",
+      "n_answer_tokens": 2,
+      "nll_per_token": {
+        "none": 9.03125,
+        "single": 8.96875,
+        "bound": 9.234375,
+        "distractor": 9.171875
+      },
+      "extraction_ratio": -0.3076923076923077
+    },
+    {
+      "fact_index": 2,
+      "fact": "Druid sacred forest: Riftwood",
+      "position": 5,
+      "answer": " Riftwood",
+      "n_answer_tokens": 2,
+      "nll_per_token": {
+        "none": 9.03125,
+        "single": 9.015625,
+        "bound": 9.203125,
+        "distractor": 9.171875
+      },
+      "extraction_ratio": -0.2
+    },
+    {
+      "fact_index": 3,
+      "fact": "Telnar minted coins: Brennix",
+      "position": 0,
+      "answer": " Brennix",
+      "n_answer_tokens": 3,
+      "nll_per_token": {
+        "none": 6.890625,
+        "single": 5.760416507720947,
+        "bound": 6.484375,
+        "distractor": 6.682291507720947
+      },
+      "extraction_ratio": 0.21468909312102755
+    },
+    {
+      "fact_index": 3,
+      "fact": "Telnar minted coins: Brennix",
+      "position": 1,
+      "answer": " Brennix",
+      "n_answer_tokens": 3,
+      "nll_per_token": {
+        "none": 6.890625,
+        "single": 5.989583492279053,
+        "bound": 6.744791507720947,
+        "distractor": 6.682291507720947
+      },
+      "extraction_ratio": -0.09022560531529261
+    },
+    {
+      "fact_index": 3,
+      "fact": "Telnar minted coins: Brennix",
+      "position": 2,
+      "answer": " Brennix",
+      "n_answer_tokens": 3,
+      "nll_per_token": {
+        "none": 6.890625,
+        "single": 6.057291507720947,
+        "bound": 6.911458492279053,
+        "distractor": 6.682291507720947
+      },
+      "extraction_ratio": -0.36666717529296877
+    },
+    {
+      "fact_index": 3,
+      "fact": "Telnar minted coins: Brennix",
+      "position": 3,
+      "answer": " Brennix",
+      "n_answer_tokens": 3,
+      "nll_per_token": {
+        "none": 6.890625,
+        "single": 6.213541507720947,
+        "bound": 6.921875,
+        "distractor": 6.682291507720947
+      },
+      "extraction_ratio": -0.5111114501953125
+    },
+    {
+      "fact_index": 3,
+      "fact": "Telnar minted coins: Brennix",
+      "position": 4,
+      "answer": " Brennix",
+      "n_answer_tokens": 3,
+      "nll_per_token": {
+        "none": 6.890625,
+        "single": 6.260416507720947,
+        "bound": 6.901041507720947,
+        "distractor": 6.682291507720947
+      },
+      "extraction_ratio": -0.5185185185185185
+    },
+    {
+      "fact_index": 3,
+      "fact": "Telnar minted coins: Brennix",
+      "position": 5,
+      "answer": " Brennix",
+      "n_answer_tokens": 3,
+      "nll_per_token": {
+        "none": 6.890625,
+        "single": 6.260416507720947,
+        "bound": 6.953125,
+        "distractor": 6.682291507720947
+      },
+      "extraction_ratio": -0.6419756854021991
+    },
+    {
+      "fact_index": 4,
+      "fact": "Ninety-meter watchtower: Korvath",
+      "position": 0,
+      "answer": " Korvath",
+      "n_answer_tokens": 3,
+      "nll_per_token": {
+        "none": 7.354166507720947,
+        "single": 6.84375,
+        "bound": 6.90625,
+        "distractor": 7.65625
+      },
+      "extraction_ratio": 0.9230769230769231
+    },
+    {
+      "fact_index": 4,
+      "fact": "Ninety-meter watchtower: Korvath",
+      "position": 1,
+      "answer": " Korvath",
+      "n_answer_tokens": 3,
+      "nll_per_token": {
+        "none": 7.354166507720947,
+        "single": 6.9375,
+        "bound": 6.932291507720947,
+        "distractor": 7.65625
+      },
+      "extraction_ratio": 1.0072465979534646
+    },
+    {
+      "fact_index": 4,
+      "fact": "Ninety-meter watchtower: Korvath",
+      "position": 2,
+      "answer": " Korvath",
+      "n_answer_tokens": 3,
+      "nll_per_token": {
+        "none": 7.354166507720947,
+        "single": 7.09375,
+        "bound": 6.984375,
+        "distractor": 7.65625
+      },
+      "extraction_ratio": 1.1944444444444444
+    },
+    {
+      "fact_index": 4,
+      "fact": "Ninety-meter watchtower: Korvath",
+      "position": 3,
+      "answer": " Korvath",
+      "n_answer_tokens": 3,
+      "nll_per_token": {
+        "none": 7.354166507720947,
+        "single": 7.192708492279053,
+        "bound": 7.010416507720947,
+        "distractor": 7.65625
+      },
+      "extraction_ratio": 1.3932592476008547
+    },
+    {
+      "fact_index": 4,
+      "fact": "Ninety-meter watchtower: Korvath",
+      "position": 4,
+      "answer": " Korvath",
+      "n_answer_tokens": 3,
+      "nll_per_token": {
+        "none": 7.354166507720947,
+        "single": 7.3125,
+        "bound": 6.994791507720947,
+        "distractor": 7.65625
+      },
+      "extraction_ratio": 1.9242428866299717
+    },
+    {
+      "fact_index": 4,
+      "fact": "Ninety-meter watchtower: Korvath",
+      "position": 5,
+      "answer": " Korvath",
+      "n_answer_tokens": 3,
+      "nll_per_token": {
+        "none": 7.354166507720947,
+        "single": 7.265625,
+        "bound": 6.994791507720947,
+        "distractor": 7.65625
+      },
+      "extraction_ratio": 1.693333740234375
+    },
+    {
+      "fact_index": 5,
+      "fact": "Ferroglass forging town: Daelin",
+      "position": 0,
+      "answer": " Daelin",
+      "n_answer_tokens": 3,
+      "nll_per_token": {
+        "none": 7.822916507720947,
+        "single": 6.328125,
+        "bound": 6.46875,
+        "distractor": 7.072916507720947
+      },
+      "extraction_ratio": 0.8111887708946752
+    },
+    {
+      "fact_index": 5,
+      "fact": "Ferroglass forging town: Daelin",
+      "position": 1,
+      "answer": " Daelin",
+      "n_answer_tokens": 3,
+      "nll_per_token": {
+        "none": 7.822916507720947,
+        "single": 6.479166507720947,
+        "bound": 6.453125,
+        "distractor": 7.072916507720947
+      },
+      "extraction_ratio": 1.0438593814247532
+    },
+    {
+      "fact_index": 5,
+      "fact": "Ferroglass forging town: Daelin",
+      "position": 2,
+      "answer": " Daelin",
+      "n_answer_tokens": 3,
+      "nll_per_token": {
+        "none": 7.822916507720947,
+        "single": 6.442708492279053,
+        "bound": 6.536458492279053,
+        "distractor": 7.072916507720947
+      },
+      "extraction_ratio": 0.8512395943833504
+    },
+    {
+      "fact_index": 5,
+      "fact": "Ferroglass forging town: Daelin",
+      "position": 3,
+      "answer": " Daelin",
+      "n_answer_tokens": 3,
+      "nll_per_token": {
+        "none": 7.822916507720947,
+        "single": 6.609375,
+        "bound": 6.53125,
+        "distractor": 7.072916507720947
+      },
+      "extraction_ratio": 1.168539383633863
+    },
+    {
+      "fact_index": 5,
+      "fact": "Ferroglass forging town: Daelin",
+      "position": 4,
+      "answer": " Daelin",
+      "n_answer_tokens": 3,
+      "nll_per_token": {
+        "none": 7.822916507720947,
+        "single": 6.609375,
+        "bound": 6.59375,
+        "distractor": 7.072916507720947
+      },
+      "extraction_ratio": 1.0337078767267727
+    },
+    {
+      "fact_index": 5,
+      "fact": "Ferroglass forging town: Daelin",
+      "position": 5,
+      "answer": " Daelin",
+      "n_answer_tokens": 3,
+      "nll_per_token": {
+        "none": 7.822916507720947,
+        "single": 6.666666507720947,
+        "bound": 6.614583492279053,
+        "distractor": 7.072916507720947
+      },
+      "extraction_ratio": 1.128204345703125
+    }
+  ],
+  "meta": {
+    "experiment": "exp32_cca_position_bias",
+    "ckpt_path": "H:\\MiniLM\\nanogpt\\out-retro-bank\\ckpt_best.pt",
+    "ckpt_params_million": 55.290368,
+    "n_facts": 6,
+    "n_positions": 6,
+    "n_probes": 36,
+    "pass_ratio": 0.5,
+    "bias_thresholds": {
+      "end_min": 0.5,
+      "middle_max": 0.3,
+      "partial_gap": 0.2
+    },
+    "block_size": 256,
+    "chunk_size": 64,
+    "neighbor_len": 64,
+    "n_neighbors": 2,
+    "seed": 42,
+    "elapsed_sec": 1.702543020248413
+  }
+}
