@@ -1,0 +1,378 @@
+{
+  "results": [
+    {
+      "prompt": "The theory of general relativity describes",
+      "without_retrieval": {
+        "continuation": " the end of the future.<|endoftext|>",
+        "elapsed_sec": 0.36020517349243164
+      },
+      "with_retrieval": {
+        "continuation": " the time of the future.<|endoftext|>",
+        "elapsed_sec": 0.16044402122497559,
+        "first_chunk_retrieval": [
+          {
+            "chunks_text": [
+              "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!",
+              "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!",
+              "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!",
+              "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!The theory of general relativity describes"
+            ],
+            "hits": [
+              [
+                {
+                  "rank": 0,
+                  "activation": 0.49774378538131714,
+                  "source_text_preview": "Hangul: ㄱ ㄲ ㄴ ㄷ ㄸ ㄹ ㅁ ㅂ ㅃ ㅅ ㅆ ㅇ ㅈ ㅉ ㅊ ㅋ ㅌ ㅍ ㅎ ㅏ ㅐ ㅑ ㅒ ㅓ ㅔ ㅕ ㅖ ㅗ ㅘ ㅙ ㅚ ㅛ ㅜ ㅝ ㅞ ㅟ ㅠ ㅡ ㅢ ㅣ"
+                },
+                {
+                  "rank": 1,
+                  "activation": 0.48326992988586426,
+                  "source_text_preview": "Bopomofo: ㄅ ㄆ ㄇ ㄈ ㄉ ㄊ ㄋ ㄌ ㄍ ㄎ ㄏ ㄐ ㄑ ㄒ ㄓ ㄔ ㄕ ㄖ ㄗ ㄘ ㄙ ㄚ ㄛ ㄜ ㄝ ㄞ ㄟ ㄠ ㄡ ㄢ ㄣ ㄤ ㄥ ㄦ ㄧ ㄨ ㄩ ㄭ"
+                }
+              ],
+              [
+                {
+                  "rank": 0,
+                  "activation": 0.49774378538131714,
+                  "source_text_preview": "Hangul: ㄱ ㄲ ㄴ ㄷ ㄸ ㄹ ㅁ ㅂ ㅃ ㅅ ㅆ ㅇ ㅈ ㅉ ㅊ ㅋ ㅌ ㅍ ㅎ ㅏ ㅐ ㅑ ㅒ ㅓ ㅔ ㅕ ㅖ ㅗ ㅘ ㅙ ㅚ ㅛ ㅜ ㅝ ㅞ ㅟ ㅠ ㅡ ㅢ ㅣ"
+                },
+                {
+                  "rank": 1,
+                  "activation": 0.48326992988586426,
+                  "source_text_preview": "Bopomofo: ㄅ ㄆ ㄇ ㄈ ㄉ ㄊ ㄋ ㄌ ㄍ ㄎ ㄏ ㄐ ㄑ ㄒ ㄓ ㄔ ㄕ ㄖ ㄗ ㄘ ㄙ ㄚ ㄛ ㄜ ㄝ ㄞ ㄟ ㄠ ㄡ ㄢ ㄣ ㄤ ㄥ ㄦ ㄧ ㄨ ㄩ ㄭ"
+                }
+              ],
+              [
+                {
+                  "rank": 0,
+                  "activation": 0.49774378538131714,
+                  "source_text_preview": "Hangul: ㄱ ㄲ ㄴ ㄷ ㄸ ㄹ ㅁ ㅂ ㅃ ㅅ ㅆ ㅇ ㅈ ㅉ ㅊ ㅋ ㅌ ㅍ ㅎ ㅏ ㅐ ㅑ ㅒ ㅓ ㅔ ㅕ ㅖ ㅗ ㅘ ㅙ ㅚ ㅛ ㅜ ㅝ ㅞ ㅟ ㅠ ㅡ ㅢ ㅣ"
+                },
+                {
+                  "rank": 1,
+                  "activation": 0.48326992988586426,
+                  "source_text_preview": "Bopomofo: ㄅ ㄆ ㄇ ㄈ ㄉ ㄊ ㄋ ㄌ ㄍ ㄎ ㄏ ㄐ ㄑ ㄒ ㄓ ㄔ ㄕ ㄖ ㄗ ㄘ ㄙ ㄚ ㄛ ㄜ ㄝ ㄞ ㄟ ㄠ ㄡ ㄢ ㄣ ㄤ ㄥ ㄦ ㄧ ㄨ ㄩ ㄭ"
+                }
+              ],
+              [
+                {
+                  "rank": 0,
+                  "activation": 0.7205324172973633,
+                  "source_text_preview": "General relativity is a theory of space and time. The theory was published by Albert Einstein in 1915."
+                },
+                {
+                  "rank": 1,
+                  "activation": 0.6394952535629272,
+                  "source_text_preview": "The General Theory of Relativity was published in 1915, ten years after the special theory of relativity was created. Ei..."
+                }
+              ]
+            ]
+          }
+        ],
+        "coarse_overlap_word_count": 0,
+        "coarse_overlap_words_sample": []
+      }
+    },
+    {
+      "prompt": "Machine learning is a branch of artificial intelligence that",
+      "without_retrieval": {
+        "continuation": " is in the Dark Age.<|endoftext|>",
+        "elapsed_sec": 0.0708153247833252
+      },
+      "with_retrieval": {
+        "continuation": " is in some ways. They can have a different kind so like a person that is a person.<|endoftext|>",
+        "elapsed_sec": 0.41800665855407715,
+        "first_chunk_retrieval": [
+          {
+            "chunks_text": [
+              "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!",
+              "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!",
+              "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!",
+              "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!Machine learning is a branch of artificial intelligence that"
+            ],
+            "hits": [
+              [
+                {
+                  "rank": 0,
+                  "activation": 0.49774378538131714,
+                  "source_text_preview": "Hangul: ㄱ ㄲ ㄴ ㄷ ㄸ ㄹ ㅁ ㅂ ㅃ ㅅ ㅆ ㅇ ㅈ ㅉ ㅊ ㅋ ㅌ ㅍ ㅎ ㅏ ㅐ ㅑ ㅒ ㅓ ㅔ ㅕ ㅖ ㅗ ㅘ ㅙ ㅚ ㅛ ㅜ ㅝ ㅞ ㅟ ㅠ ㅡ ㅢ ㅣ"
+                },
+                {
+                  "rank": 1,
+                  "activation": 0.48326992988586426,
+                  "source_text_preview": "Bopomofo: ㄅ ㄆ ㄇ ㄈ ㄉ ㄊ ㄋ ㄌ ㄍ ㄎ ㄏ ㄐ ㄑ ㄒ ㄓ ㄔ ㄕ ㄖ ㄗ ㄘ ㄙ ㄚ ㄛ ㄜ ㄝ ㄞ ㄟ ㄠ ㄡ ㄢ ㄣ ㄤ ㄥ ㄦ ㄧ ㄨ ㄩ ㄭ"
+                }
+              ],
+              [
+                {
+                  "rank": 0,
+                  "activation": 0.49774378538131714,
+                  "source_text_preview": "Hangul: ㄱ ㄲ ㄴ ㄷ ㄸ ㄹ ㅁ ㅂ ㅃ ㅅ ㅆ ㅇ ㅈ ㅉ ㅊ ㅋ ㅌ ㅍ ㅎ ㅏ ㅐ ㅑ ㅒ ㅓ ㅔ ㅕ ㅖ ㅗ ㅘ ㅙ ㅚ ㅛ ㅜ ㅝ ㅞ ㅟ ㅠ ㅡ ㅢ ㅣ"
+                },
+                {
+                  "rank": 1,
+                  "activation": 0.48326992988586426,
+                  "source_text_preview": "Bopomofo: ㄅ ㄆ ㄇ ㄈ ㄉ ㄊ ㄋ ㄌ ㄍ ㄎ ㄏ ㄐ ㄑ ㄒ ㄓ ㄔ ㄕ ㄖ ㄗ ㄘ ㄙ ㄚ ㄛ ㄜ ㄝ ㄞ ㄟ ㄠ ㄡ ㄢ ㄣ ㄤ ㄥ ㄦ ㄧ ㄨ ㄩ ㄭ"
+                }
+              ],
+              [
+                {
+                  "rank": 0,
+                  "activation": 0.49774378538131714,
+                  "source_text_preview": "Hangul: ㄱ ㄲ ㄴ ㄷ ㄸ ㄹ ㅁ ㅂ ㅃ ㅅ ㅆ ㅇ ㅈ ㅉ ㅊ ㅋ ㅌ ㅍ ㅎ ㅏ ㅐ ㅑ ㅒ ㅓ ㅔ ㅕ ㅖ ㅗ ㅘ ㅙ ㅚ ㅛ ㅜ ㅝ ㅞ ㅟ ㅠ ㅡ ㅢ ㅣ"
+                },
+                {
+                  "rank": 1,
+                  "activation": 0.48326992988586426,
+                  "source_text_preview": "Bopomofo: ㄅ ㄆ ㄇ ㄈ ㄉ ㄊ ㄋ ㄌ ㄍ ㄎ ㄏ ㄐ ㄑ ㄒ ㄓ ㄔ ㄕ ㄖ ㄗ ㄘ ㄙ ㄚ ㄛ ㄜ ㄝ ㄞ ㄟ ㄠ ㄡ ㄢ ㄣ ㄤ ㄥ ㄦ ㄧ ㄨ ㄩ ㄭ"
+                }
+              ],
+              [
+                {
+                  "rank": 0,
+                  "activation": 0.48005545139312744,
+                  "source_text_preview": "Artificial intelligence (AI) is the ability of a computer program or a machine to think and learn. It is a field of stud..."
+                },
+                {
+                  "rank": 1,
+                  "activation": 0.4359881281852722,
+                  "source_text_preview": "In general use, the term \"artificial intelligence\" means a programme which mimics human cognition. At least some of the ..."
+                }
+              ]
+            ]
+          }
+        ],
+        "coarse_overlap_word_count": 1,
+        "coarse_overlap_words_sample": [
+          "some"
+        ]
+      }
+    },
+    {
+      "prompt": "The French Revolution began in 1789 when",
+      "without_retrieval": {
+        "continuation": " the end of the 20th century created the new new new 20th century that is a unique way.<|endoftext|>",
+        "elapsed_sec": 0.24877095222473145
+      },
+      "with_retrieval": {
+        "continuation": " you are you to get to get to?!<|endoftext|>",
+        "elapsed_sec": 0.2777597904205322,
+        "first_chunk_retrieval": [
+          {
+            "chunks_text": [
+              "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!",
+              "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!",
+              "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!",
+              "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!The French Revolution began in 1789 when"
+            ],
+            "hits": [
+              [
+                {
+                  "rank": 0,
+                  "activation": 0.49774378538131714,
+                  "source_text_preview": "Hangul: ㄱ ㄲ ㄴ ㄷ ㄸ ㄹ ㅁ ㅂ ㅃ ㅅ ㅆ ㅇ ㅈ ㅉ ㅊ ㅋ ㅌ ㅍ ㅎ ㅏ ㅐ ㅑ ㅒ ㅓ ㅔ ㅕ ㅖ ㅗ ㅘ ㅙ ㅚ ㅛ ㅜ ㅝ ㅞ ㅟ ㅠ ㅡ ㅢ ㅣ"
+                },
+                {
+                  "rank": 1,
+                  "activation": 0.48326992988586426,
+                  "source_text_preview": "Bopomofo: ㄅ ㄆ ㄇ ㄈ ㄉ ㄊ ㄋ ㄌ ㄍ ㄎ ㄏ ㄐ ㄑ ㄒ ㄓ ㄔ ㄕ ㄖ ㄗ ㄘ ㄙ ㄚ ㄛ ㄜ ㄝ ㄞ ㄟ ㄠ ㄡ ㄢ ㄣ ㄤ ㄥ ㄦ ㄧ ㄨ ㄩ ㄭ"
+                }
+              ],
+              [
+                {
+                  "rank": 0,
+                  "activation": 0.49774378538131714,
+                  "source_text_preview": "Hangul: ㄱ ㄲ ㄴ ㄷ ㄸ ㄹ ㅁ ㅂ ㅃ ㅅ ㅆ ㅇ ㅈ ㅉ ㅊ ㅋ ㅌ ㅍ ㅎ ㅏ ㅐ ㅑ ㅒ ㅓ ㅔ ㅕ ㅖ ㅗ ㅘ ㅙ ㅚ ㅛ ㅜ ㅝ ㅞ ㅟ ㅠ ㅡ ㅢ ㅣ"
+                },
+                {
+                  "rank": 1,
+                  "activation": 0.48326992988586426,
+                  "source_text_preview": "Bopomofo: ㄅ ㄆ ㄇ ㄈ ㄉ ㄊ ㄋ ㄌ ㄍ ㄎ ㄏ ㄐ ㄑ ㄒ ㄓ ㄔ ㄕ ㄖ ㄗ ㄘ ㄙ ㄚ ㄛ ㄜ ㄝ ㄞ ㄟ ㄠ ㄡ ㄢ ㄣ ㄤ ㄥ ㄦ ㄧ ㄨ ㄩ ㄭ"
+                }
+              ],
+              [
+                {
+                  "rank": 0,
+                  "activation": 0.49774378538131714,
+                  "source_text_preview": "Hangul: ㄱ ㄲ ㄴ ㄷ ㄸ ㄹ ㅁ ㅂ ㅃ ㅅ ㅆ ㅇ ㅈ ㅉ ㅊ ㅋ ㅌ ㅍ ㅎ ㅏ ㅐ ㅑ ㅒ ㅓ ㅔ ㅕ ㅖ ㅗ ㅘ ㅙ ㅚ ㅛ ㅜ ㅝ ㅞ ㅟ ㅠ ㅡ ㅢ ㅣ"
+                },
+                {
+                  "rank": 1,
+                  "activation": 0.48326992988586426,
+                  "source_text_preview": "Bopomofo: ㄅ ㄆ ㄇ ㄈ ㄉ ㄊ ㄋ ㄌ ㄍ ㄎ ㄏ ㄐ ㄑ ㄒ ㄓ ㄔ ㄕ ㄖ ㄗ ㄘ ㄙ ㄚ ㄛ ㄜ ㄝ ㄞ ㄟ ㄠ ㄡ ㄢ ㄣ ㄤ ㄥ ㄦ ㄧ ㄨ ㄩ ㄭ"
+                }
+              ],
+              []
+            ]
+          }
+        ],
+        "coarse_overlap_word_count": 0,
+        "coarse_overlap_words_sample": []
+      }
+    },
+    {
+      "prompt": "In computer science, a hash table is",
+      "without_retrieval": {
+        "continuation": " from any room to make a book to the universe for the first time in the universe.<|endoftext|>",
+        "elapsed_sec": 0.20195984840393066
+      },
+      "with_retrieval": {
+        "continuation": ".<|endoftext|>",
+        "elapsed_sec": 0.09394216537475586,
+        "first_chunk_retrieval": [
+          {
+            "chunks_text": [
+              "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!",
+              "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!",
+              "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!",
+              "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!In computer science, a hash table is"
+            ],
+            "hits": [
+              [
+                {
+                  "rank": 0,
+                  "activation": 0.49774378538131714,
+                  "source_text_preview": "Hangul: ㄱ ㄲ ㄴ ㄷ ㄸ ㄹ ㅁ ㅂ ㅃ ㅅ ㅆ ㅇ ㅈ ㅉ ㅊ ㅋ ㅌ ㅍ ㅎ ㅏ ㅐ ㅑ ㅒ ㅓ ㅔ ㅕ ㅖ ㅗ ㅘ ㅙ ㅚ ㅛ ㅜ ㅝ ㅞ ㅟ ㅠ ㅡ ㅢ ㅣ"
+                },
+                {
+                  "rank": 1,
+                  "activation": 0.48326992988586426,
+                  "source_text_preview": "Bopomofo: ㄅ ㄆ ㄇ ㄈ ㄉ ㄊ ㄋ ㄌ ㄍ ㄎ ㄏ ㄐ ㄑ ㄒ ㄓ ㄔ ㄕ ㄖ ㄗ ㄘ ㄙ ㄚ ㄛ ㄜ ㄝ ㄞ ㄟ ㄠ ㄡ ㄢ ㄣ ㄤ ㄥ ㄦ ㄧ ㄨ ㄩ ㄭ"
+                }
+              ],
+              [
+                {
+                  "rank": 0,
+                  "activation": 0.49774378538131714,
+                  "source_text_preview": "Hangul: ㄱ ㄲ ㄴ ㄷ ㄸ ㄹ ㅁ ㅂ ㅃ ㅅ ㅆ ㅇ ㅈ ㅉ ㅊ ㅋ ㅌ ㅍ ㅎ ㅏ ㅐ ㅑ ㅒ ㅓ ㅔ ㅕ ㅖ ㅗ ㅘ ㅙ ㅚ ㅛ ㅜ ㅝ ㅞ ㅟ ㅠ ㅡ ㅢ ㅣ"
+                },
+                {
+                  "rank": 1,
+                  "activation": 0.48326992988586426,
+                  "source_text_preview": "Bopomofo: ㄅ ㄆ ㄇ ㄈ ㄉ ㄊ ㄋ ㄌ ㄍ ㄎ ㄏ ㄐ ㄑ ㄒ ㄓ ㄔ ㄕ ㄖ ㄗ ㄘ ㄙ ㄚ ㄛ ㄜ ㄝ ㄞ ㄟ ㄠ ㄡ ㄢ ㄣ ㄤ ㄥ ㄦ ㄧ ㄨ ㄩ ㄭ"
+                }
+              ],
+              [
+                {
+                  "rank": 0,
+                  "activation": 0.49774378538131714,
+                  "source_text_preview": "Hangul: ㄱ ㄲ ㄴ ㄷ ㄸ ㄹ ㅁ ㅂ ㅃ ㅅ ㅆ ㅇ ㅈ ㅉ ㅊ ㅋ ㅌ ㅍ ㅎ ㅏ ㅐ ㅑ ㅒ ㅓ ㅔ ㅕ ㅖ ㅗ ㅘ ㅙ ㅚ ㅛ ㅜ ㅝ ㅞ ㅟ ㅠ ㅡ ㅢ ㅣ"
+                },
+                {
+                  "rank": 1,
+                  "activation": 0.48326992988586426,
+                  "source_text_preview": "Bopomofo: ㄅ ㄆ ㄇ ㄈ ㄉ ㄊ ㄋ ㄌ ㄍ ㄎ ㄏ ㄐ ㄑ ㄒ ㄓ ㄔ ㄕ ㄖ ㄗ ㄘ ㄙ ㄚ ㄛ ㄜ ㄝ ㄞ ㄟ ㄠ ㄡ ㄢ ㄣ ㄤ ㄥ ㄦ ㄧ ㄨ ㄩ ㄭ"
+                }
+              ],
+              [
+                {
+                  "rank": 0,
+                  "activation": 0.334298312664032,
+                  "source_text_preview": "Computers in bioinformatics Chemists have developed ways to understand the shape and behavior of small molecules, using ..."
+                },
+                {
+                  "rank": 1,
+                  "activation": 0.30753207206726074,
+                  "source_text_preview": "There are computational random number generators, generating large amounts of sufficiently random numbers. Before then, ..."
+                }
+              ]
+            ]
+          }
+        ],
+        "coarse_overlap_word_count": 0,
+        "coarse_overlap_words_sample": []
+      }
+    },
+    {
+      "prompt": "The Great Wall of China was built",
+      "without_retrieval": {
+        "continuation": ".<|endoftext|>",
+        "elapsed_sec": 0.021321535110473633
+      },
+      "with_retrieval": {
+        "continuation": ".<|endoftext|>",
+        "elapsed_sec": 0.09501338005065918,
+        "first_chunk_retrieval": [
+          {
+            "chunks_text": [
+              "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!",
+              "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!",
+              "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!",
+              "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!The Great Wall of China was built"
+            ],
+            "hits": [
+              [
+                {
+                  "rank": 0,
+                  "activation": 0.49774378538131714,
+                  "source_text_preview": "Hangul: ㄱ ㄲ ㄴ ㄷ ㄸ ㄹ ㅁ ㅂ ㅃ ㅅ ㅆ ㅇ ㅈ ㅉ ㅊ ㅋ ㅌ ㅍ ㅎ ㅏ ㅐ ㅑ ㅒ ㅓ ㅔ ㅕ ㅖ ㅗ ㅘ ㅙ ㅚ ㅛ ㅜ ㅝ ㅞ ㅟ ㅠ ㅡ ㅢ ㅣ"
+                },
+                {
+                  "rank": 1,
+                  "activation": 0.48326992988586426,
+                  "source_text_preview": "Bopomofo: ㄅ ㄆ ㄇ ㄈ ㄉ ㄊ ㄋ ㄌ ㄍ ㄎ ㄏ ㄐ ㄑ ㄒ ㄓ ㄔ ㄕ ㄖ ㄗ ㄘ ㄙ ㄚ ㄛ ㄜ ㄝ ㄞ ㄟ ㄠ ㄡ ㄢ ㄣ ㄤ ㄥ ㄦ ㄧ ㄨ ㄩ ㄭ"
+                }
+              ],
+              [
+                {
+                  "rank": 0,
+                  "activation": 0.49774378538131714,
+                  "source_text_preview": "Hangul: ㄱ ㄲ ㄴ ㄷ ㄸ ㄹ ㅁ ㅂ ㅃ ㅅ ㅆ ㅇ ㅈ ㅉ ㅊ ㅋ ㅌ ㅍ ㅎ ㅏ ㅐ ㅑ ㅒ ㅓ ㅔ ㅕ ㅖ ㅗ ㅘ ㅙ ㅚ ㅛ ㅜ ㅝ ㅞ ㅟ ㅠ ㅡ ㅢ ㅣ"
+                },
+                {
+                  "rank": 1,
+                  "activation": 0.48326992988586426,
+                  "source_text_preview": "Bopomofo: ㄅ ㄆ ㄇ ㄈ ㄉ ㄊ ㄋ ㄌ ㄍ ㄎ ㄏ ㄐ ㄑ ㄒ ㄓ ㄔ ㄕ ㄖ ㄗ ㄘ ㄙ ㄚ ㄛ ㄜ ㄝ ㄞ ㄟ ㄠ ㄡ ㄢ ㄣ ㄤ ㄥ ㄦ ㄧ ㄨ ㄩ ㄭ"
+                }
+              ],
+              [
+                {
+                  "rank": 0,
+                  "activation": 0.49774378538131714,
+                  "source_text_preview": "Hangul: ㄱ ㄲ ㄴ ㄷ ㄸ ㄹ ㅁ ㅂ ㅃ ㅅ ㅆ ㅇ ㅈ ㅉ ㅊ ㅋ ㅌ ㅍ ㅎ ㅏ ㅐ ㅑ ㅒ ㅓ ㅔ ㅕ ㅖ ㅗ ㅘ ㅙ ㅚ ㅛ ㅜ ㅝ ㅞ ㅟ ㅠ ㅡ ㅢ ㅣ"
+                },
+                {
+                  "rank": 1,
+                  "activation": 0.48326992988586426,
+                  "source_text_preview": "Bopomofo: ㄅ ㄆ ㄇ ㄈ ㄉ ㄊ ㄋ ㄌ ㄍ ㄎ ㄏ ㄐ ㄑ ㄒ ㄓ ㄔ ㄕ ㄖ ㄗ ㄘ ㄙ ㄚ ㄛ ㄜ ㄝ ㄞ ㄟ ㄠ ㄡ ㄢ ㄣ ㄤ ㄥ ㄦ ㄧ ㄨ ㄩ ㄭ"
+                }
+              ],
+              []
+            ]
+          }
+        ],
+        "coarse_overlap_word_count": 0,
+        "coarse_overlap_words_sample": []
+      }
+    }
+  ],
+  "meta": {
+    "experiment": "live_generation_smoke",
+    "ckpt_path": "H:\\MiniLM\\nanogpt\\out-retro-bank\\ckpt_best.pt",
+    "ckpt_params_million": 55.290368,
+    "service_url": "http://127.0.0.1:8765",
+    "bank_info": {
+      "db_path": "H:\\MiniLM\\cc_service\\bank_subset_50k.db",
+      "encoder_model": "all-MiniLM-L6-v2",
+      "dim": 384,
+      "initialized": true,
+      "n_cells": 50000,
+      "whitening_fitted_at": 1779540161.4391255,
+      "whitening_reference_n": 2000
+    },
+    "encoder_match": true,
+    "max_new_tokens": 80,
+    "temperature": 0.8,
+    "top_k": 40,
+    "seed": 1337,
+    "device": "cuda",
+    "dtype": "torch.bfloat16",
+    "elapsed_sec_total": 1.9832451343536377,
+    "caveats": [
+      "55M debug ckpt, not the 404M roadmap target.",
+      "Inference bank is the 5.7M cc_service production bank, not the cell_tokens.npy the model trained against. Encoder identity matches (all-MiniLM-L6-v2, dim 384) so retrieval is semantically meaningful, but source-text distribution differs from training.",
+      "first_chunk_retrieval shows only the chunks at the FIRST chunk-boundary crossing (one snapshot per prompt) to keep the report compact.",
+      "coarse_overlap_word_count is a crude grounding proxy, not a verifier."
+    ]
+  }
+}
